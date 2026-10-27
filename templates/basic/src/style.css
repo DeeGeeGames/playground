@@ -1,0 +1,9 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #10171d; color: #eef1e7; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1040px; margin: auto; padding: 24px; }
+a { color: #b8e08c; }
+p { color: #b3c0ba; line-height: 1.6; }
+#game { width: 100%; aspect-ratio: 16 / 9; touch-action: none; overflow: hidden; }
+#game canvas { display: block; }
+#error { color: #ffb6b6; }
