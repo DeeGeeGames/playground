@@ -11,6 +11,15 @@ export interface Experiment {
 // Add a game folder, then add its link here. Tooling discovers pages itself.
 export const experiments: readonly Experiment[] = [
 	{
+		title: 'Dreadwake',
+		thumbnail: './games/dreadwake/preview.png',
+		thumbnailAlt: 'Dreadwake prototype: an isometric capital ship firing both six-gun broadside batteries.',
+		href: './games/dreadwake/',
+		description: 'Command a lumbering capital ship. Carry momentum through slow turns, line up six-gun broadsides, and brace against incoming volleys.',
+		controls: 'Keyboard · Touch',
+		category: 'Isometric capital combat prototype',
+	},
+	{
 		title: 'Iron Wake',
 		thumbnail: './images/iron-wake.webp',
 		thumbnailAlt: 'Iron Wake gameplay: an armored mech defending a relay on an isometric battlefield.',
