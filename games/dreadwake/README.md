@@ -15,7 +15,7 @@ are created in code, with no external assets or network services.
 | --- | --- | --- |
 | Adjust persistent throttle | Hold W/S or up/down | Hold +/− |
 | Set neutral; coast to a stop | X | Neutral |
-| Turn | Click open space to set heading; A/D or left/right cancels it | Hold turn arrows |
+| Turn | Right-click to set heading; A/D or left/right cancels it | Hold turn arrows |
 | Port / starboard broadside | Hold Q/E | Hold either array; simultaneous touches supported |
 | Armor lock | Hold Space | Hold Armor lock |
 | Aegis shield pulse | Tap F | Tap Aegis pulse |
@@ -29,8 +29,8 @@ are created in code, with no external assets or network services.
 
 Throttle stays set after release, including reverse (limited to 35%). Full thrust
 is 86 world units/second. The drive takes several seconds to answer; velocity lags
-behind heading through a turn. Click heading orders retain the selected bearing until manual steering, pause, or restart. Turn rate builds to 13.8 degrees/second over two
-seconds and unwinds gradually. Neutral changes the engine order without cancelling
+behind heading through a turn. Right-click heading orders retain the selected bearing until manual steering, pause, or restart. Turn rate builds to 13.8 degrees/second over two
+seconds and unwinds gradually. A cyan dashed line and arrow show the ordered bearing while the order is active. Right-clicking also works over hostiles without changing the priority target. Left-clicking only selects or clears targets. Neutral changes the engine order without cancelling
 momentum. The HUD reports signed forward speed separately from commanded throttle.
 
 Each array fires six 58-damage rounds, 0.14 seconds apart, and reloads independently

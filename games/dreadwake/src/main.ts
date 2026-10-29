@@ -103,17 +103,23 @@ const shutdown = await mountGame('game', async function (container) {
 		event.preventDefault();
 		zoom = zoomForWheel(zoom, event, canvas.getBoundingClientRect().height);
 	}, { ...options, passive: false });
+	canvas.addEventListener('contextmenu', function (event) {
+		if (playable()) event.preventDefault();
+	}, options);
 	canvas.addEventListener('pointerdown', function (event) {
-		if (!playable() || event.button !== 0) return;
+		if (!playable() || (event.button !== 0 && event.button !== 2)) return;
 		const rect = canvas.getBoundingClientRect();
 		const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
 		const camera = cameraFor(rect.width, rect.height, state.player, zoom);
-		const target = pickShip(point, camera, state.enemies);
-		if (!target && event.pointerType === 'mouse') {
+		if (event.button === 2 && event.pointerType === 'mouse') {
+			event.preventDefault();
 			const world = screenToWorld(point, camera, 20);
 			if (distance(world, state.player) > 1) heading = Math.atan2(world.y - state.player.y, world.x - state.player.x);
+		} else if (event.button === 0) {
+			const target = pickShip(point, camera, state.enemies);
+			designateTarget(state, target?.id);
 		}
-		designateTarget(state, target?.id); canvas.focus({ preventScroll: true });
+		canvas.focus({ preventScroll: true });
 	}, options);
 	const hud = function () {
 		const p = state.player; const speed = Math.hypot(p.vx, p.vy);
@@ -170,7 +176,7 @@ const shutdown = await mountGame('game', async function (container) {
 		}
 		const { width, height } = canvas.getBoundingClientRect(); const dpr = Math.min(devicePixelRatio, 2);
 		if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
-		ctx.setTransform(dpr, 0, 0, dpr, 0, 0); render(ctx, width, height, state, reducedMotion.matches, !running, zoom); hud();
+		ctx.setTransform(dpr, 0, 0, dpr, 0, 0); render(ctx, width, height, state, reducedMotion.matches, !running, zoom, heading); hud();
 		frame = requestAnimationFrame(tick);
 	};
 	syncPanels(); frame = requestAnimationFrame(tick);

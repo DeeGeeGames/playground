@@ -32,9 +32,24 @@ const drawRadar = function (ctx: CanvasRenderingContext2D, width: number, state:
 		{ x: x + Math.cos(direction - 2.5) * 5, y: y + Math.sin(direction - 2.5) * 5 }], '#b0ddd4');
 	label(ctx, 'TACTICAL / 900 M', { x, y: y + 85 }, '#718b99', 8);
 };
+const drawHeading = function (ctx: CanvasRenderingContext2D, camera: Camera, player: Ship, heading: number) {
+	const origin = worldToScreen(player, camera, 20);
+	const projected = worldToScreen({ x: player.x + Math.cos(heading), y: player.y + Math.sin(heading) }, camera, 20);
+	const direction = Math.atan2(projected.y - origin.y, projected.x - origin.x);
+	const length = Math.min(camera.width * 0.32, camera.height * 0.28, Math.max(110, 240 * camera.scale));
+	const at = { x: origin.x + Math.cos(direction) * length, y: origin.y + Math.sin(direction) * length };
+	ctx.save();
+	ctx.setLineDash([5, 7]); ctx.lineWidth = 1.5;
+	line(ctx, origin, at, '#90e8ecb3'); ctx.setLineDash([]);
+	polygon(ctx, [0, 2.5, -2.5].map(function (offset) {
+		return { x: at.x + Math.cos(direction + offset) * 10, y: at.y + Math.sin(direction + offset) * 10 };
+	}), '#90e8ec', '#102735');
+	label(ctx, 'SET HEADING', { x: at.x, y: at.y - 18 }, '#90e8ec', 9);
+	ctx.restore();
+};
 export const createRenderer = function () {
 	const backdrop = createBackdrop();
-	return function (ctx: CanvasRenderingContext2D, width: number, height: number, state: State, reducedMotion: boolean, briefing = false, zoom = 1) {
+	return function (ctx: CanvasRenderingContext2D, width: number, height: number, state: State, reducedMotion: boolean, briefing = false, zoom = 1, heading?: number) {
 		if (width <= 0 || height <= 0) return;
 		const camera = cameraFor(width, height, state.player, zoom);
 		backdrop(ctx, width, height, camera);
@@ -98,6 +113,7 @@ export const createRenderer = function () {
 				}
 			}
 		}
+		if (heading !== undefined) drawHeading(ctx, camera, p, heading);
 		for (const shell of state.shells) {
 			const at = worldToScreen(shell, camera, 22);
 			const tail = worldToScreen({ x: shell.x - shell.vx * 0.085, y: shell.y - shell.vy * 0.085 }, camera, 22);
