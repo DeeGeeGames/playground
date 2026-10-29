@@ -1,7 +1,8 @@
 import { ARENA, distance, type EnemyKind, type Point, type State } from './simulation';
 import { cameraFor, project, worldToScreen } from './projection';
+import { createGait, legJoints, mechScale, type Gaits, type WalkerGait } from './gait';
 
-export interface RenderOptions { reducedMotion: boolean; showRadar: boolean }
+export interface RenderOptions { reducedMotion: boolean; showRadar: boolean; gaits: Gaits }
 interface Palette { top: string; side: string; edge: string }
 const steel = { top: '#546879', side: '#293948', edge: '#7d91a0' };
 const dark = { top: '#263744', side: '#16232e', edge: '#415464' };
@@ -75,32 +76,30 @@ export const render = function (ctx: CanvasRenderingContext2D, width: number, he
 		box(salvage, 17, 17, 5 + Math.sin(state.time * 2) * 2, 12, { top: color, side: '#2c666b', edge: '#c6eee2' });
 		const at = project(salvage, 30); ctx.font = '10px monospace'; ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.fillText(salvage.kind === 'repair' ? '+' : '❄', at.x, at.y);
 	}
-	const mech = function (at: Point, hull: number, turret: number, player: boolean, hp: number, maxHp: number, moving: boolean, kind: EnemyKind = 'striker') {
-		const palette = player ? steel : enemies[kind]; const size = kind === 'scout' && !player ? 0.8 : kind === 'siege' ? 1.15 : 1;
+	const mech = function (at: Point, turret: number, player: boolean, hp: number, maxHp: number, gait: WalkerGait, kind: EnemyKind = 'striker') {
+		const hull = gait.body.angle;
+		const palette = player ? steel : enemies[kind]; const size = player ? 1 : mechScale(kind);
 		disc(at, 35 * size, '#050d1455');
-		const stride = moving ? Math.sin(state.time * (player ? 6 : 8)) * 9 : 0;
 		// Rear-set knees and forward ankles keep the digitigrade silhouette visible
 		// even at rest. Each rigid segment follows its projected joint endpoints.
 		const limb = function (a: Point, az: number, b: Point, bz: number, width: number, color: string) {
 			const from = project(a, az); const to = project(b, bz);
 			const length = Math.hypot(to.x - from.x, to.y - from.y);
+			if (length < 0.001) return;
 			const nx = -(to.y - from.y) / length * width / 2;
 			const ny = (to.x - from.x) / length * width / 2;
 			path([{ x: from.x + nx, y: from.y + ny }, { x: to.x + nx, y: to.y + ny }, { x: to.x - nx, y: to.y - ny }, { x: from.x - nx, y: from.y - ny }], color, palette.edge);
 		};
-		const feet = [-1, 1].map(function (side) { return { side, at: local(at, (7 + stride * side) * size, side * 23 * size, hull) }; }).sort(function (a, b) { return a.at.x + a.at.y - b.at.x - b.at.y; });
-		for (const foot of feet) {
-			const lift = moving ? Math.max(0, stride * foot.side) * 0.5 : 0;
-			const hip = local(at, -2 * size, foot.side * 18 * size, hull);
-			const knee = local(at, (-23 + stride * foot.side * 0.3) * size, foot.side * 24 * size, hull);
-			const ankle = local(foot.at, -5 * size, 0, hull);
-			box(foot.at, 38 * size, 18 * size, lift, 7 * size, dark, hull);
-			for (const toe of [-1, 1]) box(local(foot.at, 15 * size, toe * 6 * size, hull), 15 * size, 6 * size, lift, 5 * size, palette, hull);
-			limb(hip, 48 * size, knee, 30 * size + lift, 12 * size, dark.side);
-			limb(knee, 30 * size + lift, ankle, 10 * size + lift, 14 * size, palette.top);
-			limb(local(knee, 5 * size, 0, hull), 29 * size + lift, ankle, 13 * size + lift, 3 * size, steel.edge);
-			box(knee, 14 * size, 17 * size, 26 * size + lift, 9 * size, dark, hull);
-			box(ankle, 13 * size, 14 * size, 7 * size + lift, 9 * size, palette, hull);
+		const feet = gait.feet.map(function (foot, index) { return { foot, index }; }).sort(function (a, b) { return a.foot.x + a.foot.y - b.foot.x - b.foot.y; });
+		for (const { foot, index } of feet) {
+			const { hip, knee, ankle } = legJoints({ ...at, angle: hull }, foot, index === 0 ? 0 : 1, size);
+			box(foot, 38 * size, 18 * size, foot.lift, 7 * size, dark, foot.angle);
+			for (const toe of [-1, 1]) box(local(foot, 15 * size, toe * 6 * size, foot.angle), 15 * size, 6 * size, foot.lift, 5 * size, palette, foot.angle);
+			limb(hip, hip.z, knee, knee.z, 12 * size, dark.side);
+			limb(knee, knee.z, ankle, ankle.z, 14 * size, palette.top);
+			limb(local(knee, 5 * size, 0, hull), knee.z - size, ankle, ankle.z + 3 * size, 3 * size, steel.edge);
+			box(knee, 14 * size, 17 * size, knee.z - 4 * size, 9 * size, dark, hull);
+			box(ankle, 13 * size, 14 * size, ankle.z - 3 * size, 9 * size, palette, foot.angle);
 		}
 		box(at, 25 * size, 37 * size, 45 * size, 12 * size, dark, hull);
 		box(local(at, -5 * size, 0, turret), 35 * size, 41 * size, 54 * size, 20 * size, palette, turret);
@@ -127,7 +126,7 @@ export const render = function (ctx: CanvasRenderingContext2D, width: number, he
 		}
 	};
 	const things: { depth: number; draw: () => void }[] = state.enemies.map(function (enemy) {
-		return { depth: enemy.x + enemy.y, draw: function () { mech(enemy, enemy.angle, enemy.angle, false, enemy.hp, enemy.maxHp, true, enemy.kind); } };
+		return { depth: enemy.x + enemy.y, draw: function () { mech(enemy, enemy.angle, false, enemy.hp, enemy.maxHp, options.gaits.enemies.get(enemy.id) ?? createGait(enemy, mechScale(enemy.kind)), enemy.kind); } };
 	});
 	things.push({ depth: relay.x + relay.y, draw: function () {
 		box(relay, 90, 90, 0, 12, dark); box(relay, 55, 55, 12, 25, steel); box(relay, 18, 18, 37, 90, dark);
@@ -135,7 +134,7 @@ export const render = function (ctx: CanvasRenderingContext2D, width: number, he
 		const beacon = project(relay, 145); ctx.fillStyle = '#c4ffed'; ctx.shadowColor = '#81ffdd'; ctx.shadowBlur = 15; ctx.beginPath(); ctx.arc(beacon.x, beacon.y, 4, 0, TAU); ctx.fill(); ctx.shadowBlur = 0;
 		const label = project(relay, 165); ctx.font = '10px monospace'; ctx.fillStyle = '#b6d6d2'; ctx.textAlign = 'center'; ctx.fillText('RELAY 09', label.x, label.y);
 	} });
-	things.push({ depth: state.player.x + state.player.y, draw: function () { mech(state.player, state.player.angle, state.player.turret, true, state.player.hp, 100, Math.abs(state.player.speed) > 5); } });
+	things.push({ depth: state.player.x + state.player.y, draw: function () { mech(state.player, state.player.turret, true, state.player.hp, 100, options.gaits.player); } });
 	things.sort(function (a, b) { return a.depth - b.depth; }).forEach(function (thing) { thing.draw(); });
 	if (state.beam) {
 		ctx.shadowColor = '#67f5f6'; ctx.shadowBlur = 20;

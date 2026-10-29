@@ -1,6 +1,7 @@
 import { mountGame } from '../../../shared/lifecycle';
 import { createState, distance, step, type Controls, type State } from './simulation';
 import { render } from './render';
+import { advanceGaits, createGaits } from './gait';
 import { cameraFor, screenToWorld, worldToScreen } from './projection';
 import { createAudio } from './audio';
 
@@ -36,7 +37,7 @@ const shutdown = await mountGame('game', async function (container) {
 	let selectedWeapon: 'cannon' | 'laser' | 'missile' = 'cannon';
 	const mousePointers = new Set<number>();
 	let mousePressed = false;
-	let state = createState(); let running = false; let paused = false; let muted = false;
+	let state = createState(); let gaits = createGaits(state); let running = false; let paused = false; let muted = false;
 	let aim = { x: 900, y: 450 }; let pointer: { x: number; y: number } | undefined;
 	let frame = 0; let previous = 0; let accumulator = 0; let lastOutcome: State['outcome'] = 'playing';
 	let message = ''; let messageUntil = 0; let terminalUntil = 0; let audioAvailable = true;
@@ -57,7 +58,7 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.pauseButton.setAttribute('aria-disabled', String(!running || state.outcome !== 'playing'));
 	};
 	const start = function () {
-		state = createState(); selectedWeapon = 'cannon'; running = true; paused = false; lastOutcome = 'playing';
+		state = createState(); gaits = createGaits(state); selectedWeapon = 'cannon'; running = true; paused = false; lastOutcome = 'playing';
 		aim = { x: 900, y: 450 }; pointer = undefined; message = 'SYSTEMS ONLINE / DEFEND RELAY 09'; messageUntil = 4;
 		resetInput(); accumulator = 0; terminalUntil = 0; syncMenu(); canvas.focus({ preventScroll: true }); unlockSound();
 	};
@@ -163,7 +164,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (running && !paused && !document.hidden && state.outcome === 'playing') {
 			accumulator += elapsed;
 			while (accumulator >= 1 / 60 && state.outcome === 'playing') {
-				step(state, makeInput(), 1 / 60); pending.clear(); mousePressed = false; accumulator -= 1 / 60;
+				step(state, makeInput(), 1 / 60); gaits = advanceGaits(gaits, state); pending.clear(); mousePressed = false; accumulator -= 1 / 60;
 				audio.update({ speed: state.player.speed, laser: !!state.beam, heat: state.player.heat, active: true }); audio.play(state.events);
 				if (state.events.includes('pickup')) { message = 'SALVAGE RECOVERED'; messageUntil = state.time + 2.5; }
 				if (state.events.includes('wave')) { message = state.wave === 1 ? 'HOSTILE SIGNALS / CHECK TACTICAL RADAR' : 'ARMOR REPAIRED / COOLANT RESUPPLIED'; messageUntil = state.time + 4; }
@@ -178,7 +179,7 @@ const shutdown = await mountGame('game', async function (container) {
 		}
 		const engaged = running && !paused && !document.hidden && (state.outcome === 'playing' || now < terminalUntil);
 		audio.update({ speed: state.outcome === 'playing' ? state.player.speed : 0, laser: state.outcome === 'playing' && !!state.beam, heat: state.player.heat, active: engaged });
-		render(ctx, width, height, state, aim, { reducedMotion: reducedMotion.matches, showRadar: width > 700 && height > 520 }); updateHud();
+		render(ctx, width, height, state, aim, { reducedMotion: reducedMotion.matches, showRadar: width > 700 && height > 520, gaits }); updateHud();
 		frame = requestAnimationFrame(tick);
 	};
 	syncMenu(); frame = requestAnimationFrame(tick);
