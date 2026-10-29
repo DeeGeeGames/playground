@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Iron Wake · Mech prototype</title><link rel="stylesheet" href="./src/style.css"></head>
+<body>
+<header><a href="../../">← Experiments</a><strong>IRON WAKE <small>HEAVY COMBAT PROTOTYPE</small></strong><button id="pause">Pause · Esc</button></header>
+<main id="game">
+<canvas aria-label="Top-down mech battlefield. Keyboard controls are described below."></canvas>
+<div id="hud"><span id="status" role="status"></span><span id="telemetry"></span></div>
+<section id="brief"><span class="eyebrow">RELAY DEFENSE / SECTOR 09</span><h1>80 tons.<br>Three ways to fire.</h1><p>Pilot a lumbering siege mech. Protect the relay through three waves. Keep moving, manage your heat, and bring every weapon to bear.</p><div class="brief-controls"><p><b>W / S</b> Forward / reverse<br><b>A / D</b> Turn the hull<br><b>Mouse</b> Aim the turret</p><p><b>Hold click / Space</b> Cannons<br><b>Hold E</b> Laser<br><b>Q</b> Homing missile salvo</p></div><button id="start">Deploy mech →</button><p class="hint">Keyboard + mouse recommended. Touch controls available below.</p></section>
+<div id="result" hidden><h1 id="result-title"></h1><p id="result-copy"></p><button id="restart">Deploy again →</button></div>
+<p id="error" hidden></p>
+</main>
+<footer><span><b>DRIVE</b> W/S · A/D &nbsp; <b>AIM</b> Mouse / tap field</span><span><b>CANNON</b> Click / Space &nbsp; <b>LASER</b> E &nbsp; <b>MISSILES</b> Q</span></footer>
+<nav id="touch" aria-label="Touch cockpit controls"><div><button data-control="forward">▲</button><button data-control="left">↶</button><button data-control="back">▼</button><button data-control="right">↷</button></div><div><button data-control="cannon">Cannon</button><button data-control="laser">Laser</button><button data-control="missile">Missiles</button></div></nav>
+<script type="module" src="./src/main.ts"></script>
+</body></html>
