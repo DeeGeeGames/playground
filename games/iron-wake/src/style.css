@@ -865,3 +865,8 @@ p {
 		font-size:10px
 	}
 }
+
+.weapon.selected {
+	outline: 2px solid var(--cyan);
+	outline-offset: -2px;
+}

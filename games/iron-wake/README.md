@@ -15,13 +15,16 @@ turret. There are no licensed assets, characters, or audio samples.
 | Neutral (slow with inertia) | X | Neutral |
 | Turn hull | A/D or left/right | Turn arrows |
 | Aim turret | Mouse | Tap battlefield |
-| Cannon | Hold click / Space | Hold Cannon |
+| Select mouse weapon | Wheel down: next / up: previous (wraps) | — |
+| Fire selected weapon | Hold left click | — |
+| Cannon | Space | Hold Cannon |
 | Laser | Hold E | Hold Laser |
 | Homing missile salvo | Q | Missiles |
 | Coolant purge | V | Coolant |
 | Pause / controls | Esc / Pause | Pause |
 
-Weapons can also be operated by holding their cockpit buttons on desktop.
+Mouse selection starts on cannon each deployment and is outlined in cyan. Wheel
+selection applies over the battlefield during play. Weapons can also be operated by holding their cockpit buttons on desktop.
 Throttle stays set when released. The HUD distinguishes commanded throttle from
 actual signed speed; reverse is slower. Pause and focus loss freeze movement
 without discarding throttle. Deployments start in neutral.
