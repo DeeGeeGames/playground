@@ -21,6 +21,7 @@ are created in code, with no external assets or network services.
 | Aegis shield pulse | Tap F | Tap Aegis pulse |
 | Designate priority target | Click a hostile; R cycles | Tap a hostile |
 | Clear priority target | Click empty space, Clear, or cycle past the last target | Tap empty space |
+| Zoom in / out | Mouse wheel up / down over the battlefield | — |
 | Pause / controls | Escape | Pause |
 | Mute / unmute | Sound button | Sound button |
 
@@ -68,6 +69,12 @@ camera shake. Focus loss and tab hiding pause simulation, silence audio, and cle
 held inputs while preserving throttle. The lifecycle disposer releases listeners,
 audio nodes, and animation. Only the workspace lifecycle helper is shared; no new
 dependency or ECS change is involved.
+
+Mouse wheel zoom stays centered on the cruiser, from 0.5× to 2.5× the responsive
+default view. It preserves target picking and resets on restart. Zoom only responds
+over the battlefield during play; Ctrl/Command-wheel retains browser zoom. Firing
+arcs remain part of weapon acquisition, with solution rings and array-panel feedback
+instead of cone overlays.
 
 Layered synthesized Web Audio provides engine/sub-drive hum, rail discharge, filtered
 impact/explosion noise, shield activation and hits, incoming alerts, contact changes,

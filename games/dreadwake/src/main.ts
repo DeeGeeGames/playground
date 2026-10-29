@@ -1,7 +1,7 @@
 import { mountGame } from '../../../shared/lifecycle';
 import { createState, cycleTarget, designateTarget, distance, MAX_HULL, RELOAD, SHIELD_COOLDOWN, step, targetFor, type Controls } from './simulation';
 import { createRenderer } from './render';
-import { cameraFor, pickShip } from './projection';
+import { cameraFor, pickShip, zoomForWheel } from './projection';
 import { createAudio } from './audio';
 
 const element = function (id: string): HTMLElement {
@@ -35,7 +35,7 @@ const shutdown = await mountGame('game', async function (container) {
 		starboard: { label: element('starboard-state'), fill: element('starboard-fill'), target: element('starboard-target') },
 	};
 	let state = createState(); let running = false; let paused = false; let muted = false;
-	let frame = 0; let previous = 0; let accumulator = 0;
+	let frame = 0; let previous = 0; let accumulator = 0; let zoom = 1;
 	const clearInput = function () {
 		keys.clear(); pending.clear(); state.shield.held = false;
 		for (const button of buttons) for (const id of pointers.keys()) if (button.hasPointerCapture(id)) button.releasePointerCapture(id);
@@ -55,7 +55,7 @@ const shutdown = await mountGame('game', async function (container) {
 		for (const control of [ui.cycle, ui.clear]) if (control instanceof HTMLButtonElement) control.disabled = !playable();
 	};
 	const start = function () {
-		state = createState(); running = true; paused = false; accumulator = 0; clearInput(); syncPanels(); canvas.focus({ preventScroll: true }); unlock();
+		state = createState(); running = true; paused = false; accumulator = 0; zoom = 1; clearInput(); syncPanels(); canvas.focus({ preventScroll: true }); unlock();
 	};
 	const pause = function (value: boolean) {
 		if (!running || state.outcome !== 'playing') return;
@@ -97,10 +97,15 @@ const shutdown = await mountGame('game', async function (container) {
 	}
 	ui.cycle.addEventListener('click', function () { if (playable()) { cycleTarget(state); canvas.focus({ preventScroll: true }); } }, options);
 	ui.clear.addEventListener('click', function () { if (playable()) { designateTarget(state, undefined); canvas.focus({ preventScroll: true }); } }, options);
+	canvas.addEventListener('wheel', function (event) {
+		if (!playable() || event.ctrlKey || event.metaKey) return;
+		event.preventDefault();
+		zoom = zoomForWheel(zoom, event, canvas.getBoundingClientRect().height);
+	}, { ...options, passive: false });
 	canvas.addEventListener('pointerdown', function (event) {
 		if (!playable() || event.button !== 0) return;
 		const rect = canvas.getBoundingClientRect();
-		const target = pickShip({ x: event.clientX - rect.left, y: event.clientY - rect.top }, cameraFor(rect.width, rect.height, state.player), state.enemies);
+		const target = pickShip({ x: event.clientX - rect.left, y: event.clientY - rect.top }, cameraFor(rect.width, rect.height, state.player, zoom), state.enemies);
 		designateTarget(state, target?.id); canvas.focus({ preventScroll: true });
 	}, options);
 	const hud = function () {
@@ -157,7 +162,7 @@ const shutdown = await mountGame('game', async function (container) {
 		}
 		const { width, height } = canvas.getBoundingClientRect(); const dpr = Math.min(devicePixelRatio, 2);
 		if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
-		ctx.setTransform(dpr, 0, 0, dpr, 0, 0); render(ctx, width, height, state, reducedMotion.matches, !running); hud();
+		ctx.setTransform(dpr, 0, 0, dpr, 0, 0); render(ctx, width, height, state, reducedMotion.matches, !running, zoom); hud();
 		frame = requestAnimationFrame(tick);
 	};
 	syncPanels(); frame = requestAnimationFrame(tick);

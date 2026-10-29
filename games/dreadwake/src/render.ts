@@ -1,4 +1,4 @@
-import { ARC, RANGE, clamp, distance, sideAngle, targetFor, type Point, type Ship, type Side, type State } from './simulation';
+import { clamp, distance, targetFor, type Point, type Ship, type Side, type State } from './simulation';
 import { cameraFor, worldToScreen, type Camera } from './projection';
 import { drawStarship, polygon, line } from './ship-art';
 import { createBackdrop } from './backdrop';
@@ -9,26 +9,11 @@ const ring = function (ctx: CanvasRenderingContext2D, at: Point, radius: number,
 const label = function (ctx: CanvasRenderingContext2D, value: string, at: Point, color: string, size = 10) {
 	ctx.font = `500 ${size}px ui-monospace, monospace`; ctx.textAlign = 'center'; ctx.fillStyle = color; ctx.fillText(value, at.x, at.y);
 };
-const drawArc = function (ctx: CanvasRenderingContext2D, camera: Camera, state: State, side: Side) {
-	const p = state.player; const angle = sideAngle(p, side); const target = targetFor(state, side);
-	const ready = state.batteries[side].reload === 0 && !p.braced;
-	const origin = worldToScreen(p, camera);
-	const points = Array.from({ length: 25 }, function (_, i) {
-		const direction = angle - ARC + ARC * 2 * i / 24;
-		return worldToScreen({ x: p.x + Math.cos(direction) * RANGE, y: p.y + Math.sin(direction) * RANGE }, camera);
-	});
-	polygon(ctx, [origin, ...points], target && ready ? '#d6b8790c' : '#7db8bf05');
-	ctx.setLineDash([3, 8]);
-	const first = points[0]; const last = points[points.length - 1];
-	if (first && last) { line(ctx, origin, first, ready ? '#96c4bf38' : '#96c4bf18'); line(ctx, origin, last, ready ? '#96c4bf38' : '#96c4bf18'); }
-	ctx.beginPath(); for (const [i, point] of points.entries()) { if (i === 0) ctx.moveTo(point.x, point.y); else ctx.lineTo(point.x, point.y); }
-	ctx.strokeStyle = target && ready ? '#eacb8960' : '#96c4bf25'; ctx.stroke(); ctx.setLineDash([]);
-	if (target) {
-		const at = worldToScreen(target, camera); const r = target.length * camera.scale * 0.7;
-		ring(ctx, at, r, ready ? '#eacb8980' : '#85a9ae50');
-	}
-	const tag = worldToScreen({ x: p.x + Math.cos(angle) * 230, y: p.y + Math.sin(angle) * 230 }, camera);
-	label(ctx, `${side === 'port' ? 'Q / PORT' : 'E / STBD'}`, tag, ready ? '#9dbfbaaa' : '#61778188', 9);
+const drawFiringSolution = function (ctx: CanvasRenderingContext2D, camera: Camera, state: State, side: Side) {
+	const target = targetFor(state, side); if (!target) return;
+	const ready = state.batteries[side].reload === 0 && !state.player.braced;
+	const at = worldToScreen(target, camera); const r = target.length * camera.scale * 0.7;
+	ring(ctx, at, r, ready ? '#eacb8980' : '#85a9ae50');
 };
 const drawRadar = function (ctx: CanvasRenderingContext2D, width: number, state: State) {
 	if (width < 720) return;
@@ -49,9 +34,9 @@ const drawRadar = function (ctx: CanvasRenderingContext2D, width: number, state:
 };
 export const createRenderer = function () {
 	const backdrop = createBackdrop();
-	return function (ctx: CanvasRenderingContext2D, width: number, height: number, state: State, reducedMotion: boolean, briefing = false) {
+	return function (ctx: CanvasRenderingContext2D, width: number, height: number, state: State, reducedMotion: boolean, briefing = false, zoom = 1) {
 		if (width <= 0 || height <= 0) return;
-		const camera = cameraFor(width, height, state.player);
+		const camera = cameraFor(width, height, state.player, zoom);
 		backdrop(ctx, width, height, camera);
 		if (briefing) {
 			if (width > 900) {
@@ -75,7 +60,7 @@ export const createRenderer = function () {
 			const r = (8 + i % 4 * 8) * camera.scale;
 			polygon(ctx, [{ x: at.x - r, y: at.y }, { x: at.x, y: at.y - r * 0.4 }, { x: at.x + r * 0.7, y: at.y + r * 0.3 }, { x: at.x, y: at.y + r * 0.6 }], '#172938', '#29404c');
 		}
-		drawArc(ctx, camera, state, 'port'); drawArc(ctx, camera, state, 'starboard');
+		drawFiringSolution(ctx, camera, state, 'port'); drawFiringSolution(ctx, camera, state, 'starboard');
 		// Course prediction deliberately preserves current velocity instead of snapping to the bow.
 		for (let i = 1; i < 10; i++) {
 			const at = worldToScreen({ x: p.x + p.vx * i * 0.5, y: p.y + p.vy * i * 0.5 }, camera);

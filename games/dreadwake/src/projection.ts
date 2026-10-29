@@ -4,8 +4,12 @@ export interface Camera { center: Point; scale: number; width: number; height: n
 export const project = function (point: Point, elevation = 0): Point {
 	return { x: (point.x - point.y) * Math.sqrt(3) / 2, y: (point.x + point.y) / 2 - elevation };
 };
-export const cameraFor = function (width: number, height: number, center: Point): Camera {
-	return { center: project(center), scale: Math.max(0.34, Math.min(1.4, width / 1200, (height - 130) / 700)), width, height };
+export const zoomForWheel = function (zoom: number, event: Pick<WheelEvent, 'deltaY' | 'deltaMode'>, pageHeight: number): number {
+	const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? pageHeight : 1;
+	return Math.max(0.5, Math.min(2.5, zoom * Math.exp(-event.deltaY * unit * 0.0015)));
+};
+export const cameraFor = function (width: number, height: number, center: Point, zoom = 1): Camera {
+	return { center: project(center), scale: Math.max(0.34, Math.min(1.4, width / 1200, (height - 130) / 700)) * zoom, width, height };
 };
 export const worldToScreen = function (point: Point, camera: Camera, elevation = 0): Point {
 	const at = project(point, elevation);
