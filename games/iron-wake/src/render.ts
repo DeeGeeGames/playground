@@ -102,13 +102,9 @@ export const render = function (ctx: CanvasRenderingContext2D, width: number, he
 			box(ankle, 13 * size, 14 * size, ankle.z - 3 * size, 9 * size, palette, foot.angle);
 		}
 		box(at, 25 * size, 37 * size, 45 * size, 12 * size, dark, hull);
-		box(local(at, -5 * size, 0, turret), 35 * size, 41 * size, 54 * size, 20 * size, palette, turret);
-		// Long, low cockpit projects between the two raised weapon pods.
-		box(local(at, 17 * size, 0, turret), 34 * size, 27 * size, 53 * size, 16 * size, palette, turret);
-		box(local(at, 29 * size, 0, turret), 10 * size, 23 * size, 64 * size, 6 * size, { top: player ? '#9fe5e7' : '#ffae7e', side: '#255b6d', edge: '#c4fcf4' }, turret);
 		// The fixed isometric view looks toward the origin from positive X/Y.
 		const frontFacesCamera = Math.cos(turret) + Math.sin(turret) > 1e-10;
-		for (const side of [-1, 1]) {
+		const drawArm = function (side: -1 | 1) {
 			const shoulder = local(at, -7 * size, side * 33 * size, turret);
 			box(shoulder, 26 * size, 18 * size, 49 * size, 16 * size, palette, turret);
 			box(local(shoulder, 22 * size, 0, turret), 35 * size, 8 * size, 51 * size, 8 * size, dark, turret);
@@ -120,7 +116,16 @@ export const render = function (ctx: CanvasRenderingContext2D, width: number, he
 				const b = local(shoulder, 7 * size, (offset + 2) * size, turret);
 				path([project(a, z * size), project(b, z * size), project(b, (z + 4) * size), project(a, (z + 4) * size)], dark.side, dark.edge);
 			}
-		}
+		};
+		// The arms sit outside the cockpit's side bounds. Draw the far arm
+		// behind it and the near arm in front as the turret changes heading.
+		const farSide = Math.cos(turret) - Math.sin(turret) >= 0 ? -1 : 1;
+		drawArm(farSide);
+		box(local(at, -5 * size, 0, turret), 35 * size, 41 * size, 54 * size, 20 * size, palette, turret);
+		// Long, low cockpit projects between the two raised weapon pods.
+		box(local(at, 17 * size, 0, turret), 34 * size, 27 * size, 53 * size, 16 * size, palette, turret);
+		box(local(at, 29 * size, 0, turret), 10 * size, 23 * size, 64 * size, 6 * size, { top: player ? '#9fe5e7' : '#ffae7e', side: '#255b6d', edge: '#c4fcf4' }, turret);
+		drawArm(farSide === -1 ? 1 : -1);
 
 		if (player && state.player.heat > 60) {
 			const vent = project(local(at, -23, 0, hull), 70 + (state.time * 25) % 24);
