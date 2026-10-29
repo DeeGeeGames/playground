@@ -4,25 +4,31 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 		<meta name="description" content="Small games, unfinished ideas, and playable experiments from DeeGee Games." />
-		<meta name="theme-color" content="#10171d" />
+		<meta name="theme-color" content="#111119" />
 		<title>Experiments · DeeGee Games</title>
 		<link rel="stylesheet" href="./src/styles.css" />
 	</head>
 	<body>
-		<main>
-			<header>
-				<a class="studio" href="https://deegeegames.com">DeeGee Games<span aria-hidden="true"> / </span><span>Experiments</span></a>
-				<p class="eyebrow introduction">The workbench</p>
-				<h1>Ideas you can play.</h1>
-				<p class="lede">Small games and works in progress. A place to try something, see how it feels, and keep the interesting bits.</p>
+		<a class="skip-link" href="#experiments-heading">Skip to experiments</a>
+		<div class="site">
+			<header class="site-header">
+				<a class="brand" href="https://deegeegames.com" aria-label="DeeGee Games home"><img src="./public/images/deegee-games.svg" alt="DeeGee Games" width="2985" height="960" /></a>
+				<p class="studio-note">Independent. Open source.</p>
 			</header>
-			<section aria-labelledby="experiments-heading">
-				<div class="section-heading"><h2 id="experiments-heading">On the bench</h2><span>Always in progress</span></div>
-				<ul id="experiments"></ul>
-				<noscript>Enable JavaScript to see and play the experiments. <a href="./games/power-up/">Open Power Up</a>.</noscript>
-			</section>
-			<footer><span>DeeGee Games</span><a href="https://github.com/DeeGeeGames/playground">View source ↗</a></footer>
-		</main>
+			<main>
+				<div class="intro">
+					<p class="eyebrow">The workbench</p>
+					<h1>Ideas you can <span>play.</span></h1>
+					<p class="intro-description">Small games and works in progress.<br>Try something. See how it feels.</p>
+				</div>
+				<section class="collection" aria-labelledby="experiments-heading">
+					<div class="collection-heading"><h2 id="experiments-heading" tabindex="-1">Our experiments</h2><p>Always in progress</p></div>
+					<ul class="game-grid" id="experiments"></ul>
+					<noscript>Enable JavaScript to see and play the experiments. <a href="./games/iron-wake/">Open Iron Wake</a> · <a href="./games/power-up/">Open Power Up</a>.</noscript>
+				</section>
+			</main>
+			<footer class="site-footer"><p>© DeeGee Games</p><a href="https://github.com/DeeGeeGames/playground">Explore the code ↗</a></footer>
+		</div>
 		<script type="module" src="./src/main.ts"></script>
 	</body>
 </html>
