@@ -33,11 +33,14 @@ const shutdown = await mountGame('game', async function (container) {
 	element('start').addEventListener('click', start, options);
 	element('restart').addEventListener('click', start, options);
 	pauseButton.addEventListener('click', pause, options);
-	const codes = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'Escape'];
+	const codes = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyE', 'KeyQ', 'KeyX', 'Escape'];
 	window.addEventListener('keydown', function (event) {
 		if (!codes.includes(event.code) || event.target instanceof HTMLButtonElement && event.code === 'Space') return;
 		event.preventDefault(); if (event.code === 'Escape') { if (!event.repeat) pause(); return; }
 		keys.add(event.code);
+		if (event.code === 'KeyX') pending.add('stop');
+		if (event.code === 'KeyW' || event.code === 'ArrowUp') pending.add('forward');
+		if (event.code === 'KeyS' || event.code === 'ArrowDown') pending.add('back');
 		if (event.code === 'KeyQ') pending.add('missile');
 		if (event.code === 'KeyE') pending.add('laser');
 		if (event.code === 'Space') pending.add('cannon');
@@ -62,7 +65,7 @@ const shutdown = await mountGame('game', async function (container) {
 		button.addEventListener('pointerdown', function (event) {
 			const control = button.dataset['control']; if (!control) return;
 			event.preventDefault(); button.setPointerCapture(event.pointerId); held.set(event.pointerId, control);
-			if (['cannon', 'laser', 'missile'].includes(control)) pending.add(control);
+			if (['forward', 'back', 'stop', 'cannon', 'laser', 'missile'].includes(control)) pending.add(control);
 		}, options);
 		button.addEventListener('lostpointercapture', release, options);
 	}
@@ -75,13 +78,13 @@ const shutdown = await mountGame('game', async function (container) {
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 		const camera = cameraFor(width, height, state);
 		if (pointer) aim = { x: pointer.x / camera.scale + camera.x, y: pointer.y / camera.scale + camera.y };
-		const input: Controls = { drive: Number(active('forward', 'KeyW', 'ArrowUp')) - Number(active('back', 'KeyS', 'ArrowDown')), turn: Number(active('right', 'KeyD', 'ArrowRight')) - Number(active('left', 'KeyA', 'ArrowLeft')), aim, cannon: pointerDown || active('cannon', 'Space'), laser: active('laser', 'KeyE'), missile: active('missile', 'KeyQ') };
+		const input: Controls = { drive: Number(active('forward', 'KeyW', 'ArrowUp')) - Number(active('back', 'KeyS', 'ArrowDown')), stop: active('stop', 'KeyX'), turn: Number(active('right', 'KeyD', 'ArrowRight')) - Number(active('left', 'KeyA', 'ArrowLeft')), aim, cannon: pointerDown || active('cannon', 'Space'), laser: active('laser', 'KeyE'), missile: active('missile', 'KeyQ') };
 		if (running && !paused) {
 			accumulator += elapsed;
 			while (accumulator >= 1 / 60) { step(state, input, 1 / 60); pending.clear(); accumulator -= 1 / 60; }
 		}
 		render(ctx, width, height, state, aim);
-		status.textContent = `${paused ? 'PAUSED / RESUME TO CONTINUE' : !running ? 'AWAITING DEPLOYMENT' : state.intermission > 0 ? 'SECTOR CLEAR / REPAIRING +20 ARMOR' : `WAVE 0${state.wave} / 03 · ${state.enemies.length} HOSTILES`}\nARMOR ${Math.max(0, Math.ceil(state.player.hp))}%  /  RELAY ${Math.max(0, state.relay)}%`;
+		status.textContent = `${paused ? 'PAUSED / RESUME TO CONTINUE' : !running ? 'AWAITING DEPLOYMENT' : state.intermission > 0 ? 'SECTOR CLEAR / REPAIRING +20 ARMOR' : `WAVE 0${state.wave} / 03 · ${state.enemies.length} HOSTILES`}\nARMOR ${Math.max(0, Math.ceil(state.player.hp))}%  /  RELAY ${Math.max(0, state.relay)}%\nTHROTTLE ${state.player.throttle < -0.005 ? 'REV' : state.player.throttle > 0.005 ? 'FWD' : 'NEUTRAL'} ${Math.round(Math.abs(state.player.throttle) * 100)}% / SPEED ${Math.round(state.player.speed / (state.player.speed < 0 ? 48 : 90) * 100)}%`;
 		telemetry.textContent = `HEAT ${Math.ceil(state.player.heat)}% ${state.player.overheated ? '— COOLING LOCKOUT' : ''}\nCANNON ${state.cannonIn > 0 ? 'CYCLING' : 'READY'} / MISSILES ${state.missileIn > 0 ? state.missileIn.toFixed(1) + 's' : 'READY'}`;
 		if (running && state.outcome !== 'playing') {
 			result.hidden = false;

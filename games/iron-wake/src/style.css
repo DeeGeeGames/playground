@@ -63,3 +63,7 @@ main{flex:1;height:auto;min-height:0}
 	#brief .brief-controls p{font-size:10px}
 	#start{padding:10px 16px}
 }
+
+#touch div:first-child{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));min-width:130px}
+#touch [data-control="stop"]{grid-column:span 2}
+#touch div:last-child{align-items:stretch}

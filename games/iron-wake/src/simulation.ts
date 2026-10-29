@@ -2,9 +2,9 @@ export interface Point { x: number; y: number }
 export interface Unit extends Point { id: number; hp: number; angle: number; cooldown: number; heavy: boolean }
 export interface Shot extends Point { vx: number; vy: number; life: number; kind: 'cannon' | 'missile' | 'enemy'; target: number | undefined }
 export interface Effect extends Point { life: number; size: number; color: string }
-export interface Controls { drive: number; turn: number; aim: Point; cannon: boolean; laser: boolean; missile: boolean }
+export interface Controls { drive: number; stop: boolean; turn: number; aim: Point; cannon: boolean; laser: boolean; missile: boolean }
 export interface State {
-	player: Point & { angle: number; turret: number; speed: number; hp: number; heat: number; overheated: boolean };
+	player: Point & { angle: number; turret: number; throttle: number; speed: number; hp: number; heat: number; overheated: boolean };
 	relay: number; enemies: Unit[]; shots: Shot[]; effects: Effect[]; wave: number; spawned: number; spawnIn: number;
 	intermission: number; cannonIn: number; missileIn: number; time: number; kills: number; shake: number;
 	beam: Point | undefined; outcome: 'playing' | 'won' | 'lost'; nextId: number;
@@ -14,7 +14,7 @@ export const distance = function (a: Point, b: Point) { return Math.hypot(a.x - 
 export const angleDelta = function (from: number, to: number) { return Math.atan2(Math.sin(to - from), Math.cos(to - from)); };
 const clamp = function (value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); };
 export const createState = function (): State {
-	return { player: { x: 900, y: 780, angle: -Math.PI / 2, turret: -Math.PI / 2, speed: 0, hp: 100, heat: 0, overheated: false }, relay: 100, enemies: [], shots: [], effects: [], wave: 1, spawned: 0, spawnIn: 2, intermission: 0, cannonIn: 0, missileIn: 0, time: 0, kills: 0, shake: 0, beam: undefined, outcome: 'playing', nextId: 1 };
+	return { player: { x: 900, y: 780, angle: -Math.PI / 2, turret: -Math.PI / 2, throttle: 0, speed: 0, hp: 100, heat: 0, overheated: false }, relay: 100, enemies: [], shots: [], effects: [], wave: 1, spawned: 0, spawnIn: 2, intermission: 0, cannonIn: 0, missileIn: 0, time: 0, kills: 0, shake: 0, beam: undefined, outcome: 'playing', nextId: 1 };
 };
 const burst = function (state: State, at: Point, size: number, color: string) { state.effects.push({ ...at, size, color, life: 0.5 }); };
 const launch = function (state: State, kind: Shot['kind'], origin: Point, angle: number, target?: number) {
@@ -32,7 +32,9 @@ export const step = function (state: State, input: Controls, dt: number) {
 	p.heat = Math.max(0, p.heat - dt * 12);
 	if (p.overheated && p.heat <= 35) p.overheated = false;
 	p.angle += input.turn * dt * 1.05;
-	p.speed += (input.drive * (input.drive < 0 ? 48 : 90) - p.speed) * Math.min(1, dt * 1.5);
+	// Drive input adjusts the engine setting; releasing it holds that setting.
+	p.throttle = input.stop ? 0 : clamp(p.throttle + input.drive * dt * 0.75, -1, 1);
+	p.speed += (p.throttle * (p.throttle < 0 ? 48 : 90) - p.speed) * Math.min(1, dt * 1.5);
 	p.x = clamp(p.x + Math.cos(p.angle) * p.speed * dt, 35, ARENA.width - 35);
 	p.y = clamp(p.y + Math.sin(p.angle) * p.speed * dt, 35, ARENA.height - 35);
 	const aimAngle = Math.atan2(input.aim.y - p.y, input.aim.x - p.x);

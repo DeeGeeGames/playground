@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { angleDelta, createState, step, type Controls, type State } from '../src/simulation';
-const idle: Controls = { drive: 0, turn: 0, aim: { x: 900, y: 200 }, cannon: false, laser: false, missile: false };
+const idle: Controls = { drive: 0, stop: false, turn: 0, aim: { x: 900, y: 200 }, cannon: false, laser: false, missile: false };
 const run = function (state: State, seconds: number, input = idle) { for (let i = 0; i < seconds * 60; i++) step(state, input, 1 / 60); };
 const target = function (state: State, x = 900, y = 580) { state.enemies.push({ id: state.nextId++, x, y, angle: 0, cooldown: 100, hp: 100, heavy: false }); };
 describe('Iron Wake combat', function () {
@@ -8,6 +8,23 @@ describe('Iron Wake combat', function () {
 		const state = createState(); run(state, 0.1, { ...idle, drive: 1 });
 		expect(state.player.speed).toBeGreaterThan(0); expect(state.player.speed).toBeLessThan(20);
 		expect(Math.abs(angleDelta(Math.PI - 0.1, -Math.PI + 0.1) - 0.2)).toBeLessThan(0.001);
+	});
+	test('throttle persists after release and clamps in both directions', function () {
+		const state = createState(); run(state, 1, { ...idle, drive: 1 });
+		expect(state.player.throttle).toBeCloseTo(0.75);
+		const speed = state.player.speed; run(state, 0.5);
+		expect(state.player.throttle).toBeCloseTo(0.75); expect(state.player.speed).toBeGreaterThan(speed);
+		run(state, 2, { ...idle, drive: 1 }); expect(state.player.throttle).toBe(1);
+		run(state, 4, { ...idle, drive: -1 }); expect(state.player.throttle).toBe(-1);
+		run(state, 2); expect(state.player.speed).toBeLessThan(-40); expect(state.player.speed).toBeGreaterThanOrEqual(-48);
+	});
+	test('neutral stops engine demand immediately while momentum decays', function () {
+		const state = createState(); run(state, 1.5, { ...idle, drive: 1 });
+		const speed = state.player.speed;
+		step(state, { ...idle, stop: true, drive: 1 }, 1 / 60);
+		expect(state.player.throttle).toBe(0); expect(state.player.speed).toBeGreaterThan(0); expect(state.player.speed).toBeLessThan(speed);
+		run(state, 4); expect(state.player.throttle).toBe(0); expect(Math.abs(state.player.speed)).toBeLessThan(0.2);
+		expect(createState().player.throttle).toBe(0);
 	});
 	test('cannon shell damages a target and has a reload interval', function () {
 		const state = createState(); target(state); run(state, 0.4, { ...idle, cannon: true });
