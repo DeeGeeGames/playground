@@ -33,12 +33,15 @@ const shutdown = await mountGame('game', async function (container) {
 		missile: element('missile-status'), missileFill: element('missile-fill'), coolant: element('coolant-value'), message: element('message'),
 		brief: element('brief'), pause: element('pause-panel'), result: element('result'), pauseButton: element('pause'), sound: element('sound'),
 	};
+	let selectedWeapon: 'cannon' | 'laser' | 'missile' = 'cannon';
+	const mousePointers = new Set<number>();
+	let mousePressed = false;
 	let state = createState(); let running = false; let paused = false; let muted = false;
 	let aim = { x: 900, y: 450 }; let pointer: { x: number; y: number } | undefined;
 	let frame = 0; let previous = 0; let accumulator = 0; let lastOutcome: State['outcome'] = 'playing';
 	let message = ''; let messageUntil = 0; let terminalUntil = 0; let audioAvailable = true;
-	const resetInput = function () { keys.clear(); pending.clear(); held.clear(); };
-	const active = function (action: string) { return keys.has(action) || pending.has(action) || [...held.values()].includes(action); };
+	const resetInput = function () { keys.clear(); pending.clear(); held.clear(); mousePointers.clear(); mousePressed = false; };
+	const active = function (action: string) { return ((mousePointers.size > 0 || mousePressed) && action === selectedWeapon) || keys.has(action) || pending.has(action) || [...held.values()].includes(action); };
 	const unlockSound = function () {
 		void audio.unlock().then(function (available) {
 			audioAvailable = available;
@@ -54,7 +57,7 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.pauseButton.setAttribute('aria-disabled', String(!running || state.outcome !== 'playing'));
 	};
 	const start = function () {
-		state = createState(); running = true; paused = false; lastOutcome = 'playing';
+		state = createState(); selectedWeapon = 'cannon'; running = true; paused = false; lastOutcome = 'playing';
 		aim = { x: 900, y: 450 }; pointer = undefined; message = 'SYSTEMS ONLINE / DEFEND RELAY 09'; messageUntil = 4;
 		resetInput(); accumulator = 0; terminalUntil = 0; syncMenu(); canvas.focus({ preventScroll: true }); unlockSound();
 	};
@@ -92,12 +95,18 @@ const shutdown = await mountGame('game', async function (container) {
 		const rect = canvas.getBoundingClientRect(); pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
 	};
 	canvas.addEventListener('pointermove', updatePointer, listenerOptions);
+	canvas.addEventListener('wheel', function (event) {
+		if (!running || paused || state.outcome !== 'playing' || event.ctrlKey || event.deltaY === 0) return;
+		event.preventDefault();
+		if (event.deltaY > 0) selectedWeapon = selectedWeapon === 'cannon' ? 'laser' : selectedWeapon === 'laser' ? 'missile' : 'cannon';
+		else selectedWeapon = selectedWeapon === 'cannon' ? 'missile' : selectedWeapon === 'missile' ? 'laser' : 'cannon';
+	}, { ...listenerOptions, passive: false });
 	canvas.addEventListener('pointerdown', function (event) {
 		if ((!event.isPrimary && event.pointerType !== 'touch') || event.button !== 0 || paused || !running || state.outcome !== 'playing') return;
 		updatePointer(event); canvas.focus({ preventScroll: true }); canvas.setPointerCapture(event.pointerId);
-		if (event.pointerType !== 'touch') { held.set(event.pointerId, 'cannon'); pending.add('cannon'); }
+		if (event.pointerType !== 'touch') { mousePointers.add(event.pointerId); mousePressed = true; }
 	}, listenerOptions);
-	const release = function (event: PointerEvent) { held.delete(event.pointerId); };
+	const release = function (event: PointerEvent) { held.delete(event.pointerId); mousePointers.delete(event.pointerId); };
 	window.addEventListener('pointerup', release, listenerOptions);
 	window.addEventListener('pointercancel', release, listenerOptions);
 	canvas.addEventListener('lostpointercapture', release, listenerOptions);
@@ -117,6 +126,11 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const updateHud = function () {
 		const p = state.player;
+		for (const button of container.querySelectorAll<HTMLButtonElement>('[data-weapon]')) {
+			const selected = button.dataset['weapon'] === selectedWeapon;
+			button.classList.toggle('selected', selected);
+			if (button.classList.contains('weapon')) button.setAttribute('aria-current', String(selected));
+		}
 		ui.phase.textContent = paused ? 'OPERATION PAUSED' : `WAVE 0${state.wave} / 03`;
 		ui.status.textContent = !running ? 'Hold the uplink. Survive three waves.' : state.intermission > 0 ? 'Sector clear. Resupply incoming.' : `${state.enemies.length} active · ${state.warnings.length} inbound · ${state.kills}/21 eliminated`;
 		ui.armor.textContent = `${Math.max(0, Math.ceil(p.hp))}%`; ui.armorFill.style.width = `${Math.max(0, p.hp)}%`;
@@ -149,7 +163,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (running && !paused && !document.hidden && state.outcome === 'playing') {
 			accumulator += elapsed;
 			while (accumulator >= 1 / 60 && state.outcome === 'playing') {
-				step(state, makeInput(), 1 / 60); pending.clear(); accumulator -= 1 / 60;
+				step(state, makeInput(), 1 / 60); pending.clear(); mousePressed = false; accumulator -= 1 / 60;
 				audio.update({ speed: state.player.speed, laser: !!state.beam, heat: state.player.heat, active: true }); audio.play(state.events);
 				if (state.events.includes('pickup')) { message = 'SALVAGE RECOVERED'; messageUntil = state.time + 2.5; }
 				if (state.events.includes('wave')) { message = state.wave === 1 ? 'HOSTILE SIGNALS / CHECK TACTICAL RADAR' : 'ARMOR REPAIRED / COOLANT RESUPPLIED'; messageUntil = state.time + 4; }
