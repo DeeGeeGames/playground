@@ -98,11 +98,11 @@ const drawArk = function (ctx: CanvasRenderingContext2D, view: View, state: Stat
 	const deck: DrawItem[] = state.mounts.map(function (mount, index) {
 		return { point: mount, draw: function () { drawMount(ctx, view, mount, index, selected); } };
 	});
-	deck.push({ point: { x: -139, y: 0 }, draw: function () { drawArkBridge(ctx, view); } });
+	deck.push({ point: { x: -162, y: 0 }, draw: function () { drawArkBridge(ctx, view); } });
 	drawInDepthOrder(deck);
 	if (state.shield > 0) {
 		ctx.lineWidth = 2;
-		ring(ctx, view, center, 300, 30, '#88f1e4', '#88f1e408');
+		ring(ctx, view, center, 340, 30, '#88f1e4', '#88f1e408');
 	}
 };
 

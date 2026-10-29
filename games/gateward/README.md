@@ -37,9 +37,10 @@ projection/depth-sort systems are not installed. No gameplay ECS migration, save
 external assets, audio, network, or shared runtime state.
 The page uses the workspace lifecycle disposer for animation and input cleanup.
 
-The ark's Canvas artwork in `src/ark.ts` uses a long beveled gunmetal hull,
-overlapping armor, recessed warm habitation lights, an aft command superstructure,
-and four stern drives. Armored turret housings distinguish twin-barrel flak,
+The ark's Canvas artwork in `src/ark.ts` uses a broad clipped bow, a deep undercut
+gunmetal hull, straight armored broadsides, recessed warm habitation lights, and
+four blocky stern drives. Long aft terraces support a wide sloped command bridge.
+Armored turret housings distinguish twin-barrel flak,
 long-barrel railguns, and paired missile pods. Artwork preserves the eight mount
 positions, selection elevations, and combat rules; the larger hull is decorative.
 
