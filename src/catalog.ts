@@ -11,9 +11,9 @@ export const experiments: readonly Experiment[] = [
 	{
 		title: 'Iron Wake',
 		href: './games/iron-wake/',
-		description: 'An 80-ton mech. Three weapon systems. Hold the relay against an armored assault with cannons, lasers, and homing missiles.',
+		description: 'An isometric siege frame, persistent throttle, and three weapon systems. Manage heat, recover salvage, and hold the relay against three assault waves.',
 		controls: 'Keyboard + Mouse · Touch',
-		category: 'Mech defense prototype',
+		category: 'Isometric mech defense',
 	},
 	{
 		title: 'Power Up',
