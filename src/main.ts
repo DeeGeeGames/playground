@@ -4,17 +4,14 @@ import { experiments } from './catalog';
 const list = document.getElementById('experiments');
 if (!list) throw new Error('Experiment list is missing.');
 
-render(experiments.map(function (experiment, index) {
+render(experiments.map(function (experiment) {
 	return html`
-		<li>
-			<a class="experiment" href=${experiment.href}>
-				<div class="experiment-art" aria-hidden="true"><span class="orb orb-one"></span><span class="orb orb-two"></span><span class="player"></span><span class="platform"></span><span class="experiment-number">${String(index + 1).padStart(2, '0')}</span></div>
-				<div class="experiment-copy">
-					<p class="eyebrow">${experiment.category}</p>
-					<h2>${experiment.title}<span aria-hidden="true">↗</span></h2>
-					<p class="description">${experiment.description}</p>
-					<p class="controls">${experiment.controls}</p>
-				</div>
-			</a>
+		<li class="game-card">
+			${experiment.thumbnail ? html`<img class="game-art" src=${experiment.thumbnail} alt=${experiment.thumbnailAlt ?? ''} width="1100" height="619" />` : ''}
+			<div class="game-meta"><p class="status">Prototype</p><p class="genre">${experiment.category}</p></div>
+			<h3>${experiment.title}</h3>
+			<p class="game-description">${experiment.description}</p>
+			<p class="controls">${experiment.controls}</p>
+			<a class="action action-primary" href=${experiment.href} aria-label=${`Play now — ${experiment.title}`}><span aria-hidden="true">▷</span> Play now</a>
 		</li>`;
 }), list);
