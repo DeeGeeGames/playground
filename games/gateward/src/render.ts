@@ -1,15 +1,9 @@
 import { ESCORTS, WEAPONS, type Enemy, type Escort, type Mount, type Point, type State } from './simulation';
 import { drawBackdrop } from './backdrop';
 import { journeyAt } from './journey';
+import { drawArkBridge, drawArkHull } from './ark';
+import { line, local, polygon, prism, type Outline } from './drawing';
 import { DECK_HEIGHT, depth, edgeIndicator, FLIGHT_HEIGHT, mountHeight, toScreen, TURRET_HEIGHT, type View } from './projection';
-
-type Outline = readonly (readonly [number, number])[];
-
-const hull: Outline = [[-145, -32], [-125, -58], [85, -58], [155, -20], [168, 0], [155, 20], [85, 58], [-125, 58], [-145, 32]];
-
-const spine: Outline = [[-115, -25], [79, -25], [135, 0], [79, 25], [-115, 25]];
-
-const bridge: Outline = [[-20, -10], [15, -10], [23, 0], [15, 10], [-20, 10]];
 
 interface DrawItem {
 	point: Point;
@@ -20,32 +14,6 @@ const drawInDepthOrder = function (items: DrawItem[]) {
 	items.sort(function (a, b) { return depth(a.point) - depth(b.point); });
 	for (const item of items)
 		item.draw();
-};
-
-const polygon = function (ctx: CanvasRenderingContext2D, points: readonly Point[], fill: string, stroke?: string) {
-	const first = points[0];
-	if (!first)
-		return;
-	ctx.beginPath();
-	ctx.moveTo(first.x, first.y);
-	for (const point of points.slice(1))
-		ctx.lineTo(point.x, point.y);
-	ctx.closePath();
-	ctx.fillStyle = fill;
-	ctx.fill();
-	if (stroke) {
-		ctx.strokeStyle = stroke;
-		ctx.stroke();
-	}
-};
-
-const line = function (ctx: CanvasRenderingContext2D, a: Point, b: Point, color: string, width = 1) {
-	ctx.beginPath();
-	ctx.moveTo(a.x, a.y);
-	ctx.lineTo(b.x, b.y);
-	ctx.strokeStyle = color;
-	ctx.lineWidth = width;
-	ctx.stroke();
 };
 
 const text = function (ctx: CanvasRenderingContext2D, value: string, at: Point, color: string, size = 10) {
@@ -67,27 +35,6 @@ const ring = function (ctx: CanvasRenderingContext2D, view: View, point: Point, 
 	ctx.stroke();
 };
 
-const local = function (point: Point, forward: number, across: number, angle: number): Point {
-	return { x: point.x + Math.cos(angle) * forward - Math.sin(angle) * across, y: point.y + Math.sin(angle) * forward + Math.cos(angle) * across };
-};
-
-const prism = function (ctx: CanvasRenderingContext2D, view: View, origin: Point, shape: Outline, bottom: number, top: number, color: string, side: string, angle = 0, stroke = '#7693a6') {
-	const points = shape.map(function ([x, y]) { return local(origin, x, y, angle); });
-	const high = points.map(function (point) { return toScreen(point, view, top); });
-	const low = points.map(function (point) { return toScreen(point, view, bottom); });
-	ctx.lineWidth = Math.max(0.6, view.scale);
-	for (let i = 0; i < high.length; i++) {
-		const next = (i + 1) % high.length;
-		const a = high[i];
-		const b = high[next];
-		const c = low[next];
-		const d = low[i];
-		if (a && b && c && d && b.x < a.x)
-			polygon(ctx, [a, b, c, d], side, '#142332');
-	}
-	polygon(ctx, high, color, stroke);
-};
-
 const bar = function (ctx: CanvasRenderingContext2D, at: Point, width: number, ratio: number, color: string) {
 	ctx.fillStyle = '#142332';
 	ctx.fillRect(at.x - width / 2, at.y, width, 3);
@@ -103,7 +50,7 @@ const drawMount = function (ctx: CanvasRenderingContext2D, view: View, mount: Mo
 		const top = toScreen(mount, view, TURRET_HEIGHT);
 		const rx = 18 * Math.sqrt(1.5) * view.scale;
 		const ry = 18 * Math.SQRT1_2 * view.scale;
-		ctx.fillStyle = '#233d4d';
+		ctx.fillStyle = '#303e48';
 		ctx.beginPath();
 		ctx.ellipse(base.x, base.y, rx, ry, 0, 0, Math.PI);
 		ctx.lineTo(top.x - rx, top.y);
@@ -112,11 +59,26 @@ const drawMount = function (ctx: CanvasRenderingContext2D, view: View, mount: Mo
 		ctx.fill();
 	}
 	ctx.lineWidth = selected === index ? 2 : 1;
-	ring(ctx, view, mount, 18, height, color, mount.weapon ? '#436675' : '#122333');
+	ring(ctx, view, mount, 18, height, color, mount.weapon ? '#4c5962' : '#172731');
 	if (mount.weapon) {
-		prism(ctx, view, mount, [[-3, -4], [mount.weapon === 'rail' ? 34 : 25, -4], [mount.weapon === 'rail' ? 34 : 25, 4], [-3, 4]], height + 1, height + 7, color, '#4b6371', mount.aim, color);
-		if (mount.weapon === 'missile')
-			prism(ctx, view, local(mount, 0, -10, mount.aim), [[-4, -3], [22, -3], [22, 3], [-4, 3]], height + 1, height + 7, color, '#655544', mount.aim, color);
+		// Rotating armored housings share the original aiming and selection centers.
+		prism(ctx, view, mount, [[-13, -10], [7, -10], [13, -5], [13, 5], [7, 10], [-13, 10]], height, height + 7, '#77858e', '#3e4c58', mount.aim, '#9caab0');
+		if (mount.weapon === 'missile') {
+			for (const side of [-1, 1]) {
+				const pod = local(mount, 0, side * 8, mount.aim);
+				prism(ctx, view, pod, [[-11, -5], [14, -5], [14, 5], [-11, 5]], height + 5, height + 12, '#8c8575', '#4e5050', mount.aim, '#b6ac96');
+				for (const across of [-2, 2])
+					line(ctx, toScreen(local(pod, 14, across, mount.aim), view, height + 7), toScreen(local(pod, 14, across, mount.aim), view, height + 10), color, Math.max(0.8, 2 * view.scale));
+			}
+		}
+		else {
+			for (const across of mount.weapon === 'rail' ? [0] : [-5, 5]) {
+				const barrel = local(mount, 0, across, mount.aim);
+				const length = mount.weapon === 'rail' ? 35 : 27;
+				prism(ctx, view, barrel, [[5, -2], [length, -2], [length, 2], [5, 2]], height + 4, height + 8, '#adb9bd', '#4d606c', mount.aim, '#b6c5c8');
+				line(ctx, toScreen(local(barrel, length - 7, 0, mount.aim), view, height + 8), toScreen(local(barrel, length - 1, 0, mount.aim), view, height + 8), color, Math.max(1, 2 * view.scale));
+			}
+		}
 	}
 	else
 		text(ctx, '+', { ...toScreen(mount, view, height), y: toScreen(mount, view, height).y + 4 }, '#799eac', 13);
@@ -131,30 +93,16 @@ const drawMount = function (ctx: CanvasRenderingContext2D, view: View, mount: Mo
 
 const drawArk = function (ctx: CanvasRenderingContext2D, view: View, state: State, selected: number, reducedMotion: boolean) {
 	const center = { x: 0, y: 0 };
-	const moving = journeyAt(state.time).speed > 0;
-	const plume = moving ? 60 : 5;
-	for (const y of [-22, 22]) {
-		const flame: Outline = [[-144, y - 10], [-144, y + 10], [-144 - plume - (reducedMotion || !moving ? 0 : Math.sin(state.time * 17) * 5), y]];
-		polygon(ctx, flame.map(function ([x, y]) { return toScreen({ x, y }, view, 6); }), '#79e6dd');
-	}
-	prism(ctx, view, center, hull, -15, DECK_HEIGHT, '#3e596a', '#1d3447', 0, '#93b0bf');
-	prism(ctx, view, center, spine, DECK_HEIGHT, 29, '#273f54', '#172c3e', 0, '#56798c');
-	for (const x of [-9, 20, 49, 78])
-		line(ctx, toScreen({ x, y: -20 }, view, 30), toScreen({ x, y: 20 }, view, 30), '#49677c', view.scale);
-	text(ctx, 'ARK / 07', toScreen({ x: 80, y: 0 }, view, 35), '#adc7d2', view.width < 650 ? 8 : 10);
-	// A compact bridge leaves every hardpoint visible. Sort it with the turrets,
-	// so aft hardware cannot paint over the bridge's nearer faces.
+	drawArkHull(ctx, view, state.time, reducedMotion);
+	// Sort the aft superstructure with the hardpoints to preserve their visibility.
 	const deck: DrawItem[] = state.mounts.map(function (mount, index) {
 		return { point: mount, draw: function () { drawMount(ctx, view, mount, index, selected); } };
 	});
-	deck.push({ point: { x: -50, y: 0 }, draw: function () {
-			prism(ctx, view, { x: -50, y: 0 }, bridge, 29, 39, '#57788c', '#28455c', 0, '#89a7b7');
-			line(ctx, toScreen({ x: -66, y: 10 }, view, 36), toScreen({ x: -37, y: 10 }, view, 36), '#8be8e1', Math.max(1, 3 * view.scale));
-		} });
+	deck.push({ point: { x: -139, y: 0 }, draw: function () { drawArkBridge(ctx, view); } });
 	drawInDepthOrder(deck);
 	if (state.shield > 0) {
 		ctx.lineWidth = 2;
-		ring(ctx, view, center, 179, 30, '#88f1e4', '#88f1e408');
+		ring(ctx, view, center, 300, 30, '#88f1e4', '#88f1e408');
 	}
 };
 

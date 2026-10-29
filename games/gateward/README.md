@@ -37,6 +37,12 @@ projection/depth-sort systems are not installed. No gameplay ECS migration, save
 external assets, audio, network, or shared runtime state.
 The page uses the workspace lifecycle disposer for animation and input cleanup.
 
+The ark's Canvas artwork in `src/ark.ts` uses a long beveled gunmetal hull,
+overlapping armor, recessed warm habitation lights, an aft command superstructure,
+and four stern drives. Armored turret housings distinguish twin-barrel flak,
+long-barrel railguns, and paired missile pods. Artwork preserves the eight mount
+positions, selection elevations, and combat rules; the larger hull is decorative.
+
 The camera follows the ark along a 2.52 km route at 12 m/s. Fixed navigation
 beacons, a scrolling lattice, distant debris, and layered star parallax communicate
 travel. The gate reaches the ark at the end of the route; scenery and drive stop
