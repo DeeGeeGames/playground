@@ -11,6 +11,13 @@ export interface Experiment {
 // Add a game folder, then add its link here. Tooling discovers pages itself.
 export const experiments: readonly Experiment[] = [
 	{
+		title: 'Gateward',
+		href: './games/gateward/',
+		description: 'Build a moving fortress. Fit turrets, launch escort wings, and defend a slow capital ship through six waves on the way to Kepler Gate.',
+		controls: 'Mouse + Keyboard · Touch',
+		category: 'Capital ship tower defense prototype',
+	},
+	{
 		title: 'Dreadwake',
 		thumbnail: './games/dreadwake/preview.png',
 		thumbnailAlt: 'Dreadwake alpha: an armored star cruiser with split prows, glowing rail arrays, and twin drives in deep space.',
