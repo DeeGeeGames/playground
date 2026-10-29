@@ -79,27 +79,51 @@ export const render = function (ctx: CanvasRenderingContext2D, width: number, he
 		const palette = player ? steel : enemies[kind]; const size = kind === 'scout' && !player ? 0.8 : kind === 'siege' ? 1.15 : 1;
 		disc(at, 35 * size, '#050d1455');
 		const stride = moving ? Math.sin(state.time * (player ? 6 : 8)) * 9 : 0;
-		const feet = [-1, 1].map(function (side) { return { side, at: local(at, stride * side, side * 20 * size, hull) }; }).sort(function (a, b) { return a.at.x + a.at.y - b.at.x - b.at.y; });
+		// Rear-set knees and forward ankles keep the digitigrade silhouette visible
+		// even at rest. Each rigid segment follows its projected joint endpoints.
+		const limb = function (a: Point, az: number, b: Point, bz: number, width: number, color: string) {
+			const from = project(a, az); const to = project(b, bz);
+			const length = Math.hypot(to.x - from.x, to.y - from.y);
+			const nx = -(to.y - from.y) / length * width / 2;
+			const ny = (to.x - from.x) / length * width / 2;
+			path([{ x: from.x + nx, y: from.y + ny }, { x: to.x + nx, y: to.y + ny }, { x: to.x - nx, y: to.y - ny }, { x: from.x - nx, y: from.y - ny }], color, palette.edge);
+		};
+		const feet = [-1, 1].map(function (side) { return { side, at: local(at, (7 + stride * side) * size, side * 23 * size, hull) }; }).sort(function (a, b) { return a.at.x + a.at.y - b.at.x - b.at.y; });
 		for (const foot of feet) {
 			const lift = moving ? Math.max(0, stride * foot.side) * 0.5 : 0;
-			box(foot.at, 34 * size, 17 * size, lift, 9, dark, hull);
-			box(local(foot.at, -6, 0, hull), 16 * size, 13 * size, 9 + lift, 20 * size, palette, hull);
+			const hip = local(at, -2 * size, foot.side * 18 * size, hull);
+			const knee = local(at, (-23 + stride * foot.side * 0.3) * size, foot.side * 24 * size, hull);
+			const ankle = local(foot.at, -5 * size, 0, hull);
+			box(foot.at, 38 * size, 18 * size, lift, 7 * size, dark, hull);
+			for (const toe of [-1, 1]) box(local(foot.at, 15 * size, toe * 6 * size, hull), 15 * size, 6 * size, lift, 5 * size, palette, hull);
+			limb(hip, 48 * size, knee, 30 * size + lift, 12 * size, dark.side);
+			limb(knee, 30 * size + lift, ankle, 10 * size + lift, 14 * size, palette.top);
+			limb(local(knee, 5 * size, 0, hull), 29 * size + lift, ankle, 13 * size + lift, 3 * size, steel.edge);
+			box(knee, 14 * size, 17 * size, 26 * size + lift, 9 * size, dark, hull);
+			box(ankle, 13 * size, 14 * size, 7 * size + lift, 9 * size, palette, hull);
 		}
-		box(at, 29 * size, 37 * size, 26 * size, 14 * size, dark, hull);
-		box(at, 38 * size, 43 * size, 37 * size, 21 * size, palette, turret);
+		box(at, 25 * size, 37 * size, 45 * size, 12 * size, dark, hull);
+		box(local(at, -5 * size, 0, turret), 35 * size, 41 * size, 54 * size, 20 * size, palette, turret);
+		// Long, low cockpit projects between the two raised weapon pods.
+		box(local(at, 17 * size, 0, turret), 34 * size, 27 * size, 53 * size, 16 * size, palette, turret);
+		box(local(at, 29 * size, 0, turret), 10 * size, 23 * size, 64 * size, 6 * size, { top: player ? '#9fe5e7' : '#ffae7e', side: '#255b6d', edge: '#c4fcf4' }, turret);
 		for (const side of [-1, 1]) {
-			const shoulder = local(at, -3, side * 32 * size, turret);
-			box(shoulder, 29 * size, 17 * size, 34 * size, 19 * size, side === 1 && player ? amber : palette, turret);
-			box(local(shoulder, 22, 0, turret), 35 * size, 7 * size, 38 * size, 7 * size, dark, turret);
-			if (side === 1 && player) for (const offset of [-6, 0, 6]) box(local(shoulder, offset, 0, turret), 3, 10, 54, 2, dark, turret);
+			const shoulder = local(at, -7 * size, side * 33 * size, turret);
+			box(shoulder, 26 * size, 18 * size, 49 * size, 16 * size, palette, turret);
+			box(local(shoulder, 22 * size, 0, turret), 35 * size, 8 * size, 51 * size, 8 * size, dark, turret);
+			box(local(shoulder, -4 * size, 0, turret), 22 * size, 23 * size, 70 * size, 19 * size, player ? amber : palette, turret);
+			// Dark launch tubes on the forward faces read at gameplay scale.
+			for (const offset of [-7, 0, 7]) for (const z of [75, 82]) {
+				box(local(shoulder, 8 * size, offset * size, turret), 2 * size, 4 * size, z * size, 4 * size, dark, turret);
+			}
 		}
-		box(local(at, 10 * size, 0, turret), 9 * size, 22 * size, 55 * size, 5 * size, { top: player ? '#9fe5e7' : '#ffae7e', side: '#255b6d', edge: '#c4fcf4' }, turret);
+
 		if (player && state.player.heat > 60) {
-			const vent = project(local(at, -23, 0, hull), 45 + (state.time * 25) % 24);
+			const vent = project(local(at, -23, 0, hull), 70 + (state.time * 25) % 24);
 			ctx.fillStyle = '#b3c4cf44'; ctx.beginPath(); ctx.arc(vent.x, vent.y, 6 + state.player.heat / 15, 0, TAU); ctx.fill();
 		}
 		if (!player && hp < maxHp) {
-			const bar = project(at, 94 * size); ctx.fillStyle = '#0a151b'; ctx.fillRect(bar.x - 22, bar.y, 44, 4); ctx.fillStyle = '#df9d7b'; ctx.fillRect(bar.x - 22, bar.y, 44 * Math.max(0, hp) / maxHp, 4);
+			const bar = project(at, 105 * size); ctx.fillStyle = '#0a151b'; ctx.fillRect(bar.x - 22, bar.y, 44, 4); ctx.fillStyle = '#df9d7b'; ctx.fillRect(bar.x - 22, bar.y, 44 * Math.max(0, hp) / maxHp, 4);
 		}
 	};
 	const things: { depth: number; draw: () => void }[] = state.enemies.map(function (enemy) {
