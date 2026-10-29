@@ -1,88 +1,257 @@
-import { ESCORTS, ROUTE_SECONDS, WEAPONS, type Point, type State } from './simulation';
+import { ESCORTS, WEAPONS, type Enemy, type Escort, type Mount, type Point, type State } from './simulation';
+import { drawBackdrop } from './backdrop';
+import { journeyAt } from './journey';
+import { DECK_HEIGHT, depth, edgeIndicator, FLIGHT_HEIGHT, mountHeight, toScreen, TURRET_HEIGHT, type View } from './projection';
 
-export interface View { width: number; height: number; scale: number; cx: number; cy: number }
-export const viewFor = function (width: number, height: number): View { return { width, height, scale: width < 650 ? Math.min(width / 900, height / 850) : Math.min(width / 1180, height / 970), cx: width / 2, cy: height / 2 }; };
-export const toWorld = function (point: Point, view: View): Point { return { x: (point.x - view.cx) / view.scale, y: (point.y - view.cy) / view.scale }; };
-const polygon = function (ctx: CanvasRenderingContext2D, points: readonly (readonly number[])[]) {
-	ctx.beginPath(); for (const [i, point] of points.entries()) { const x = point[0] ?? 0; const y = point[1] ?? 0; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); } ctx.closePath();
+type Outline = readonly (readonly [number, number])[];
+
+const hull: Outline = [[-145, -32], [-125, -58], [85, -58], [155, -20], [168, 0], [155, 20], [85, 58], [-125, 58], [-145, 32]];
+
+const spine: Outline = [[-115, -25], [79, -25], [135, 0], [79, 25], [-115, 25]];
+
+const bridge: Outline = [[-20, -10], [15, -10], [23, 0], [15, 10], [-20, 10]];
+
+interface DrawItem {
+	point: Point;
+	draw: () => void;
+}
+
+const drawInDepthOrder = function (items: DrawItem[]) {
+	items.sort(function (a, b) { return depth(a.point) - depth(b.point); });
+	for (const item of items)
+		item.draw();
 };
-const circle = function (ctx: CanvasRenderingContext2D, x: number, y: number, radius: number) { ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); };
-const bar = function (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, ratio: number, color: string) {
-	ctx.fillStyle = '#101e2c'; ctx.fillRect(x - width / 2, y, width, 4); ctx.fillStyle = color; ctx.fillRect(x - width / 2, y, width * Math.max(0, ratio), 4);
+
+const polygon = function (ctx: CanvasRenderingContext2D, points: readonly Point[], fill: string, stroke?: string) {
+	const first = points[0];
+	if (!first)
+		return;
+	ctx.beginPath();
+	ctx.moveTo(first.x, first.y);
+	for (const point of points.slice(1))
+		ctx.lineTo(point.x, point.y);
+	ctx.closePath();
+	ctx.fillStyle = fill;
+	ctx.fill();
+	if (stroke) {
+		ctx.strokeStyle = stroke;
+		ctx.stroke();
+	}
 };
+
+const line = function (ctx: CanvasRenderingContext2D, a: Point, b: Point, color: string, width = 1) {
+	ctx.beginPath();
+	ctx.moveTo(a.x, a.y);
+	ctx.lineTo(b.x, b.y);
+	ctx.strokeStyle = color;
+	ctx.lineWidth = width;
+	ctx.stroke();
+};
+
+const text = function (ctx: CanvasRenderingContext2D, value: string, at: Point, color: string, size = 10) {
+	ctx.fillStyle = color;
+	ctx.font = `${size}px ui-monospace, monospace`;
+	ctx.textAlign = 'center';
+	ctx.fillText(value, at.x, at.y);
+};
+
+const ring = function (ctx: CanvasRenderingContext2D, view: View, point: Point, radius: number, elevation: number, color: string, fill?: string) {
+	const at = toScreen(point, view, elevation);
+	ctx.beginPath();
+	ctx.ellipse(at.x, at.y, radius * Math.sqrt(1.5) * view.scale, radius * Math.SQRT1_2 * view.scale, 0, 0, Math.PI * 2);
+	if (fill) {
+		ctx.fillStyle = fill;
+		ctx.fill();
+	}
+	ctx.strokeStyle = color;
+	ctx.stroke();
+};
+
+const local = function (point: Point, forward: number, across: number, angle: number): Point {
+	return { x: point.x + Math.cos(angle) * forward - Math.sin(angle) * across, y: point.y + Math.sin(angle) * forward + Math.cos(angle) * across };
+};
+
+const prism = function (ctx: CanvasRenderingContext2D, view: View, origin: Point, shape: Outline, bottom: number, top: number, color: string, side: string, angle = 0, stroke = '#7693a6') {
+	const points = shape.map(function ([x, y]) { return local(origin, x, y, angle); });
+	const high = points.map(function (point) { return toScreen(point, view, top); });
+	const low = points.map(function (point) { return toScreen(point, view, bottom); });
+	ctx.lineWidth = Math.max(0.6, view.scale);
+	for (let i = 0; i < high.length; i++) {
+		const next = (i + 1) % high.length;
+		const a = high[i];
+		const b = high[next];
+		const c = low[next];
+		const d = low[i];
+		if (a && b && c && d && b.x < a.x)
+			polygon(ctx, [a, b, c, d], side, '#142332');
+	}
+	polygon(ctx, high, color, stroke);
+};
+
+const bar = function (ctx: CanvasRenderingContext2D, at: Point, width: number, ratio: number, color: string) {
+	ctx.fillStyle = '#142332';
+	ctx.fillRect(at.x - width / 2, at.y, width, 3);
+	ctx.fillStyle = color;
+	ctx.fillRect(at.x - width / 2, at.y, width * Math.max(0, ratio), 3);
+};
+
+const drawMount = function (ctx: CanvasRenderingContext2D, view: View, mount: Mount, index: number, selected: number) {
+	const color = selected === index ? '#d6efad' : mount.weapon === 'rail' ? '#cdb6ef' : mount.weapon === 'missile' ? '#edc589' : '#91e3da';
+	const height = mountHeight(mount);
+	if (mount.weapon) {
+		const base = toScreen(mount, view, DECK_HEIGHT);
+		const top = toScreen(mount, view, TURRET_HEIGHT);
+		const rx = 18 * Math.sqrt(1.5) * view.scale;
+		const ry = 18 * Math.SQRT1_2 * view.scale;
+		ctx.fillStyle = '#233d4d';
+		ctx.beginPath();
+		ctx.ellipse(base.x, base.y, rx, ry, 0, 0, Math.PI);
+		ctx.lineTo(top.x - rx, top.y);
+		ctx.ellipse(top.x, top.y, rx, ry, 0, Math.PI, 0, true);
+		ctx.closePath();
+		ctx.fill();
+	}
+	ctx.lineWidth = selected === index ? 2 : 1;
+	ring(ctx, view, mount, 18, height, color, mount.weapon ? '#436675' : '#122333');
+	if (mount.weapon) {
+		prism(ctx, view, mount, [[-3, -4], [mount.weapon === 'rail' ? 34 : 25, -4], [mount.weapon === 'rail' ? 34 : 25, 4], [-3, 4]], height + 1, height + 7, color, '#4b6371', mount.aim, color);
+		if (mount.weapon === 'missile')
+			prism(ctx, view, local(mount, 0, -10, mount.aim), [[-4, -3], [22, -3], [22, 3], [-4, 3]], height + 1, height + 7, color, '#655544', mount.aim, color);
+	}
+	else
+		text(ctx, '+', { ...toScreen(mount, view, height), y: toScreen(mount, view, height).y + 4 }, '#799eac', 13);
+	const at = toScreen(mount, view, height);
+	text(ctx, String(index + 1), { x: at.x, y: at.y + (mount.y < 0 ? -17 : 23) }, selected === index ? '#e1f3c1' : '#9ab7c5', view.width < 650 ? 10 : 11);
+	if (mount.level > 0)
+		for (let pip = 0; pip < mount.level; pip++) {
+			ctx.fillStyle = color;
+			ctx.fillRect(at.x - mount.level * 2.5 + pip * 5, at.y + 10, 3, 2);
+		}
+};
+
+const drawArk = function (ctx: CanvasRenderingContext2D, view: View, state: State, selected: number, reducedMotion: boolean) {
+	const center = { x: 0, y: 0 };
+	const moving = journeyAt(state.time).speed > 0;
+	const plume = moving ? 60 : 5;
+	for (const y of [-22, 22]) {
+		const flame: Outline = [[-144, y - 10], [-144, y + 10], [-144 - plume - (reducedMotion || !moving ? 0 : Math.sin(state.time * 17) * 5), y]];
+		polygon(ctx, flame.map(function ([x, y]) { return toScreen({ x, y }, view, 6); }), '#79e6dd');
+	}
+	prism(ctx, view, center, hull, -15, DECK_HEIGHT, '#3e596a', '#1d3447', 0, '#93b0bf');
+	prism(ctx, view, center, spine, DECK_HEIGHT, 29, '#273f54', '#172c3e', 0, '#56798c');
+	for (const x of [-9, 20, 49, 78])
+		line(ctx, toScreen({ x, y: -20 }, view, 30), toScreen({ x, y: 20 }, view, 30), '#49677c', view.scale);
+	text(ctx, 'ARK / 07', toScreen({ x: 80, y: 0 }, view, 35), '#adc7d2', view.width < 650 ? 8 : 10);
+	// A compact bridge leaves every hardpoint visible. Sort it with the turrets,
+	// so aft hardware cannot paint over the bridge's nearer faces.
+	const deck: DrawItem[] = state.mounts.map(function (mount, index) {
+		return { point: mount, draw: function () { drawMount(ctx, view, mount, index, selected); } };
+	});
+	deck.push({ point: { x: -50, y: 0 }, draw: function () {
+			prism(ctx, view, { x: -50, y: 0 }, bridge, 29, 39, '#57788c', '#28455c', 0, '#89a7b7');
+			line(ctx, toScreen({ x: -66, y: 10 }, view, 36), toScreen({ x: -37, y: 10 }, view, 36), '#8be8e1', Math.max(1, 3 * view.scale));
+		} });
+	drawInDepthOrder(deck);
+	if (state.shield > 0) {
+		ctx.lineWidth = 2;
+		ring(ctx, view, center, 179, 30, '#88f1e4', '#88f1e408');
+	}
+};
+
+const drawEnemy = function (ctx: CanvasRenderingContext2D, view: View, enemy: Enemy) {
+	const shape: Outline = enemy.kind === 'flagship' ? [[-46, -22], [-18, -35], [45, -15], [58, 0], [45, 15], [-18, 35], [-46, 22], [-22, 0]] : enemy.kind === 'armored' ? [[-22, -20], [17, -20], [30, 0], [17, 20], [-22, 20]] : enemy.kind === 'bomber' ? [[-18, -20], [0, -12], [22, 0], [0, 12], [-18, 20], [-9, 0]] : [[-13, -11], [18, 0], [-13, 11], [-5, 0]];
+	const color = enemy.kind === 'armored' ? '#ad84a4' : enemy.kind === 'bomber' ? '#e5ac7c' : '#e08687';
+	const angle = Math.atan2(-enemy.y, -enemy.x);
+	prism(ctx, view, enemy, shape, enemy.kind === 'flagship' ? 9 : 22, FLIGHT_HEIGHT, color, '#513345', angle, '#f0baa8');
+	if (enemy.kind === 'flagship')
+		prism(ctx, view, enemy, [[-23, -12], [20, -12], [30, 0], [20, 12], [-23, 12]], FLIGHT_HEIGHT, 52, '#b793a2', '#513345', angle);
+	if (enemy.hp < enemy.maxHp || enemy.kind === 'flagship') {
+		const at = toScreen(enemy, view, enemy.kind === 'flagship' ? 80 : 62);
+		bar(ctx, at, enemy.kind === 'flagship' ? 75 : 26, enemy.hp / enemy.maxHp, '#e78b82');
+	}
+};
+
+const drawEscort = function (ctx: CanvasRenderingContext2D, view: View, escort: Escort) {
+	const shape: Outline = escort.kind === 'guardian' ? [[-20, -13], [10, -13], [23, 0], [10, 13], [-20, 13], [-13, 0]] : [[-11, -8], [15, 0], [-11, 8], [-5, 0]];
+	prism(ctx, view, escort, shape, 24, FLIGHT_HEIGHT, escort.kind === 'guardian' ? '#91bcec' : '#96e6e1', '#284a68', escort.angle, '#b8ebee');
+	if (escort.hp < ESCORTS[escort.kind].hp)
+		bar(ctx, toScreen(escort, view, 59), 26, escort.hp / ESCORTS[escort.kind].hp, '#89d5de');
+};
+
+const drawGate = function (ctx: CanvasRenderingContext2D, view: View, time: number) {
+	const x = journeyAt(time).remaining;
+	if (x > 1100) return;
+	for (const radius of [170, 150]) {
+		ctx.beginPath();
+		for (let i = 0; i <= 64; i++) {
+			const angle = i / 64 * Math.PI * 2;
+			const at = toScreen({ x, y: Math.cos(angle) * radius }, view, Math.sin(angle) * radius + 25);
+			if (i === 0)
+				ctx.moveTo(at.x, at.y);
+			else
+				ctx.lineTo(at.x, at.y);
+		}
+		ctx.strokeStyle = radius === 170 ? '#25544e' : '#83dfcb';
+		ctx.lineWidth = (radius === 170 ? 18 : 7) * view.scale;
+		ctx.stroke();
+	}
+	text(ctx, 'KEPLER GATE', toScreen({ x, y: 0 }, view, 220), '#83dfcb');
+};
+
 export const render = function (ctx: CanvasRenderingContext2D, view: View, state: State, selected: number, reducedMotion: boolean, rallyMode: boolean) {
-	const { width, height, cx, cy, scale } = view;
-	ctx.fillStyle = '#080f19'; ctx.fillRect(0, 0, width, height);
-	// Deterministic stars drift past the camera to communicate the slow rail journey.
-	for (let i = 0; i < 145; i++) {
-		const drift = reducedMotion ? 0 : state.time * (i % 3 + 1) * 0.65;
-		const x = ((i * 173.73 - drift) % width + width) % width; const y = (i * 97.31) % height;
-		ctx.fillStyle = i % 5 === 0 ? '#6e8b9d' : '#293d50'; ctx.fillRect(x, y, i % 7 === 0 ? 2 : 1, 1);
-	}
-	ctx.save(); ctx.translate(cx, cy); ctx.scale(scale, scale);
-	ctx.lineWidth = 1 / scale; ctx.strokeStyle = '#142433'; ctx.setLineDash([4, 12]);
-	ctx.beginPath(); ctx.moveTo(-1500, 0); ctx.lineTo(1500, 0); ctx.stroke(); ctx.setLineDash([]);
-	for (const y of [-360, 360]) { ctx.beginPath(); ctx.moveTo(-400, y); ctx.lineTo(400, y); ctx.stroke(); }
-	ctx.font = '12px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = '#526b7d'; ctx.fillText('PORT', 0, -385); ctx.fillText('STARBOARD', 0, 390); ctx.fillText('BOW →', 390, -16); ctx.fillText('← ASTERN', -400, -16);
-	if (state.time > ROUTE_SECONDS - 35) {
-		const gateX = 600 - Math.min(1, (state.time - (ROUTE_SECONDS - 35)) / 35) * 220;
-		ctx.save(); ctx.translate(gateX, 0); ctx.scale(0.35, 1); ctx.strokeStyle = '#83dfcb'; ctx.lineWidth = 12; circle(ctx, 0, 0, 150); ctx.stroke(); ctx.strokeStyle = '#25544e'; ctx.lineWidth = 25; circle(ctx, 0, 0, 170); ctx.stroke(); ctx.restore();
-		ctx.fillStyle = '#83dfcb'; ctx.fillText('KEPLER GATE', gateX, -195);
-	}
+	const { width, height, scale } = view;
+	if (width <= 0 || height <= 0)
+		return;
+	drawBackdrop(ctx, view, state.time, reducedMotion);
+	ctx.save();
+	for (const [value, point] of [['PORT', { x: 0, y: -330 }], ['STARBOARD', { x: 0, y: 330 }], ['BOW →', { x: 380, y: 0 }], ['← ASTERN', { x: -380, y: 0 }]] as const)
+		text(ctx, value, toScreen(point, view), '#63818f', view.width < 650 ? 8 : 10);
+	drawGate(ctx, view, state.time);
 	const mount = state.mounts[selected];
 	if (mount?.weapon) {
-		circle(ctx, mount.x, mount.y, WEAPONS[mount.weapon].range * (1 + (mount.level - 1) * 0.12)); ctx.fillStyle = '#84ead907'; ctx.fill(); ctx.strokeStyle = '#84ead930'; ctx.setLineDash([6, 8]); ctx.stroke(); ctx.setLineDash([]);
+		ctx.lineWidth = 1;
+		ctx.setLineDash([6, 8]);
+		ring(ctx, view, mount, WEAPONS[mount.weapon].range * (1 + (mount.level - 1) * 0.12), TURRET_HEIGHT, '#84ead933', '#84ead907');
+		ctx.setLineDash([]);
 	}
 	if (state.escorts.length > 0 || rallyMode) {
-		ctx.strokeStyle = rallyMode ? '#d5ed9b' : '#9edbf077'; ctx.lineWidth = 1.5 / scale;
-		circle(ctx, state.rally.x, state.rally.y, 25); ctx.stroke(); ctx.beginPath(); ctx.moveTo(state.rally.x - 35, state.rally.y); ctx.lineTo(state.rally.x + 35, state.rally.y); ctx.moveTo(state.rally.x, state.rally.y - 35); ctx.lineTo(state.rally.x, state.rally.y + 35); ctx.stroke();
-		ctx.fillStyle = '#89bed2'; ctx.fillText('RALLY', state.rally.x, state.rally.y + 45);
+		ctx.lineWidth = 1.3;
+		const color = rallyMode ? '#d5ed9b' : '#9edbf088';
+		ring(ctx, view, state.rally, 25, 0, color);
+		for (const axis of [0, 1])
+			line(ctx, toScreen({ x: state.rally.x - (axis === 0 ? 35 : 0), y: state.rally.y - (axis === 1 ? 35 : 0) }, view), toScreen({ x: state.rally.x + (axis === 0 ? 35 : 0), y: state.rally.y + (axis === 1 ? 35 : 0) }, view), color);
+		const at = toScreen(state.rally, view);
+		text(ctx, 'RALLY', { x: at.x, y: at.y + 27 }, '#89bed2', 9);
 	}
-	// The capital ship: a broad armored hull, aft drives, bridge, and eight hardpoints.
-	for (const y of [-22, 22]) {
-		ctx.fillStyle = '#7de5db'; polygon(ctx, [[-143, y - 10], [-143, y + 10], [-180 - (reducedMotion ? 0 : Math.sin(state.time * 17) * 7), y]]); ctx.fill();
-	}
-	polygon(ctx, [[-145, -32], [-125, -58], [85, -58], [155, -20], [168, 0], [155, 20], [85, 58], [-125, 58], [-145, 32]]);
-	ctx.fillStyle = '#314958'; ctx.fill(); ctx.strokeStyle = '#7897a8'; ctx.lineWidth = 2; ctx.stroke();
-	polygon(ctx, [[-115, -26], [79, -26], [135, 0], [79, 26], [-115, 26]]); ctx.fillStyle = '#1a2d3d'; ctx.fill(); ctx.strokeStyle = '#486779'; ctx.stroke();
-	ctx.fillStyle = '#506d7d'; ctx.fillRect(-70, -20, 44, 40); ctx.fillStyle = '#86dcd7'; ctx.fillRect(-65, -16, 5, 32);
-	ctx.fillStyle = '#738e9f'; ctx.font = '12px monospace'; ctx.fillText('ARK / 07', 35, 4);
-	if (state.shield > 0) { ctx.strokeStyle = '#88f1e4'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(0, 0, 185, 95, 0, 0, Math.PI * 2); ctx.stroke(); }
-	for (const [i, m] of state.mounts.entries()) {
-		ctx.save(); ctx.translate(m.x, m.y);
-		circle(ctx, 0, 0, 18); ctx.fillStyle = selected === i ? '#d6efad' : m.weapon ? '#648d98' : '#132331'; ctx.fill(); ctx.strokeStyle = selected === i ? '#e7f9ce' : '#7298a5'; ctx.lineWidth = selected === i ? 3 : 1; ctx.stroke();
-		if (m.weapon) {
-			ctx.save(); ctx.rotate(m.aim); ctx.fillStyle = m.weapon === 'rail' ? '#cdb6ef' : m.weapon === 'missile' ? '#edc589' : '#91e3da';
-			ctx.fillRect(0, -4, m.weapon === 'rail' ? 30 : 23, 8); if (m.weapon === 'missile') ctx.fillRect(0, -10, 18, 5); ctx.restore();
-			for (let pip = 0; pip < m.level; pip++) { ctx.fillStyle = '#def3cf'; ctx.fillRect(-8 + pip * 7, 21, 4, 4); }
-		} else { ctx.fillStyle = '#7894a4'; ctx.font = '18px monospace'; ctx.fillText('+', 0, 6); }
-		ctx.fillStyle = selected === i ? '#d6efad' : '#8ea9ba'; ctx.font = '13px monospace'; ctx.fillText(String(i + 1), 0, m.y < 0 ? -28 : 43); ctx.restore();
-	}
-	for (const enemy of state.enemies) {
-		ctx.save(); ctx.translate(enemy.x, enemy.y); ctx.rotate(Math.atan2(-enemy.y, -enemy.x));
-		ctx.fillStyle = enemy.kind === 'armored' ? '#ab7d9f' : enemy.kind === 'bomber' ? '#da9b69' : '#d96f73'; ctx.strokeStyle = '#f5b6a3'; ctx.lineWidth = 1.5;
-		if (enemy.kind === 'flagship') polygon(ctx, [[-46,-22], [-18,-35], [45,-15], [58,0], [45,15], [-18,35], [-46,22], [-22,0]]);
-		else if (enemy.kind === 'armored') polygon(ctx, [[-22,-20], [17,-20], [30,0], [17,20], [-22,20]]);
-		else if (enemy.kind === 'bomber') polygon(ctx, [[-18,-20], [0,-12], [22,0], [0,12], [-18,20], [-9,0]]);
-		else polygon(ctx, [[-13,-11], [18,0], [-13,11], [-5,0]]);
-		ctx.fill(); ctx.stroke(); ctx.restore();
-		if (enemy.hp < enemy.maxHp || enemy.kind === 'flagship') bar(ctx, enemy.x, enemy.y - (enemy.kind === 'flagship' ? 48 : 30), enemy.kind === 'flagship' ? 90 : 34, enemy.hp / enemy.maxHp, '#e78b82');
-		if (enemy.id === state.priority) { circle(ctx, enemy.x, enemy.y, enemy.kind === 'flagship' ? 63 : 38); ctx.strokeStyle = '#f4d68a'; ctx.setLineDash([7,5]); ctx.stroke(); ctx.setLineDash([]); }
-		const limitX = width / scale / 2 - 24; const limitY = height / scale / 2 - 24;
-		if (Math.abs(enemy.x) > limitX || Math.abs(enemy.y) > limitY) {
-			const factor = Math.min(limitX / Math.max(1, Math.abs(enemy.x)), limitY / Math.max(1, Math.abs(enemy.y)));
-			ctx.save(); ctx.translate(enemy.x * factor, enemy.y * factor); ctx.rotate(Math.atan2(enemy.y, enemy.x)); polygon(ctx, [[9,0],[-6,-6],[-6,6]]); ctx.fillStyle = '#f59682'; ctx.fill(); ctx.restore();
-		}
-	}
-	for (const escort of state.escorts) {
-		ctx.save(); ctx.translate(escort.x, escort.y); ctx.rotate(escort.angle); ctx.fillStyle = escort.kind === 'guardian' ? '#8fbbeb' : '#96e6e1';
-		if (escort.kind === 'guardian') polygon(ctx, [[-20,-13],[10,-13],[23,0],[10,13],[-20,13],[-13,0]]); else polygon(ctx, [[-11,-8],[15,0],[-11,8],[-5,0]]);
-		ctx.fill(); ctx.restore(); if (escort.hp < ESCORTS[escort.kind].hp) bar(ctx, escort.x, escort.y - 22, 30, escort.hp / ESCORTS[escort.kind].hp, '#89d5de');
-	}
+	// Canvas owns the draw queue; the plugin depth-sort systems operate on Pixi objects.
+	const ships: DrawItem[] = [{ point: { x: 0, y: 0 }, draw: function () { drawArk(ctx, view, state, selected, reducedMotion); } }, ...state.enemies.map(function (enemy) { return { point: enemy, draw: function () { drawEnemy(ctx, view, enemy); } }; }), ...state.escorts.map(function (escort) { return { point: escort, draw: function () { drawEscort(ctx, view, escort); } }; })];
+	drawInDepthOrder(ships);
 	for (const shot of state.shots) {
-		ctx.strokeStyle = shot.side === 'enemy' ? '#ff8d7f' : shot.weapon === 'rail' ? '#dbbeff' : shot.weapon === 'missile' ? '#f5ce8a' : '#99ece1';
-		ctx.lineWidth = shot.weapon === 'rail' ? 3 : 2; ctx.beginPath(); ctx.moveTo(shot.x, shot.y); ctx.lineTo(shot.x - shot.vx * (shot.weapon === 'rail' ? 0.04 : 0.025), shot.y - shot.vy * 0.025); ctx.stroke();
+		const color = shot.side === 'enemy' ? '#ff8d7f' : shot.weapon === 'rail' ? '#dbbeff' : shot.weapon === 'missile' ? '#f5ce8a' : '#99ece1';
+		const tail = { x: shot.x - shot.vx * (shot.weapon === 'rail' ? 0.04 : 0.025), y: shot.y - shot.vy * (shot.weapon === 'rail' ? 0.04 : 0.025) };
+		line(ctx, toScreen(tail, view, TURRET_HEIGHT), toScreen(shot, view, TURRET_HEIGHT), color, Math.max(1.2, (shot.weapon === 'rail' ? 3 : 2) * scale));
 	}
-	for (const e of state.effects) { ctx.globalAlpha = e.life / e.maxLife; ctx.strokeStyle = e.color; ctx.lineWidth = 3; circle(ctx, e.x, e.y, e.radius * (1 - e.life / e.maxLife * 0.7)); ctx.stroke(); }
-	ctx.globalAlpha = 1; ctx.restore();
+	for (const e of state.effects) {
+		ctx.globalAlpha = e.life / e.maxLife;
+		ctx.lineWidth = 2;
+		ring(ctx, view, e, e.radius * (1 - e.life / e.maxLife * 0.7), TURRET_HEIGHT, e.color);
+	}
+	ctx.globalAlpha = 1;
+	for (const enemy of state.enemies) {
+		if (enemy.id === state.priority) {
+			ctx.setLineDash([5, 4]);
+			ctx.lineWidth = 1.5;
+			ring(ctx, view, enemy, enemy.kind === 'flagship' ? 70 : 42, FLIGHT_HEIGHT, '#f4d68a');
+			ctx.setLineDash([]);
+		}
+		const marker = edgeIndicator(enemy, view);
+		if (!marker)
+			continue;
+		ctx.save();
+		ctx.translate(marker.point.x, marker.point.y);
+		ctx.rotate(marker.angle);
+		polygon(ctx, [{ x: 8, y: 0 }, { x: -6, y: -5 }, { x: -6, y: 5 }], '#f59682');
+		ctx.restore();
+	}
+	ctx.restore();
 };

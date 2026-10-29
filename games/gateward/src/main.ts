@@ -1,6 +1,8 @@
 import { mountGame } from '../../../shared/lifecycle';
-import { build, createState, deploy, distance, ESCORTS, invested, MAX_HULL, notify, pulse, repair, ROUTE_SECONDS, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Weapon } from './simulation';
-import { render, toWorld, viewFor } from './render';
+import { build, createState, deploy, ESCORTS, invested, MAX_HULL, notify, pulse, repair, ROUTE_SECONDS, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Weapon } from './simulation';
+import { render } from './render';
+import { journeyAt } from './journey';
+import { pickEnemy, pickMount, toWorld, viewFor } from './projection';
 
 const element = function (id: string): HTMLElement {
 	const found = document.getElementById(id); if (!found) throw new Error(`Missing element: ${id}`); return found;
@@ -15,7 +17,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('Canvas unavailable');
 	const abort = new AbortController(); const options = { signal: abort.signal };
 	const ui = {
-		hull: element('hull'), salvage: element('salvage'), route: element('route-progress'), distance: element('distance'),
+		hull: element('hull'), salvage: element('salvage'), route: element('route-progress'), routeLabel: element('route-label'), distance: element('distance'),
 		wave: element('wave-label'), waveInfo: element('wave-info'), mountTitle: element('mount-title'), mountInfo: element('mount-info'),
 		build: element('build-options'), upgradeOptions: element('upgrade-options'), upgrade: button('upgrade'), sell: button('sell'),
 		escorts: element('escort-count'), depart: button('depart'), pause: button('pause'), speed: button('speed'), rally: button('rally'),
@@ -73,9 +75,10 @@ const shutdown = await mountGame('game', async function (container) {
 	canvas.addEventListener('pointerdown', function (event) {
 		if (!available() || event.button !== 0) return;
 		const rect = canvas.getBoundingClientRect(); const view = viewFor(rect.width, rect.height);
-		const point = toWorld({ x: event.clientX - rect.left, y: event.clientY - rect.top }, view);
-		const mount = state.mounts.findIndex(function (m) { return distance(point, m) < 29; });
-		const enemy = state.enemies.find(function (e) { return distance(point, e) < (e.kind === 'flagship' ? 60 : 32); });
+		const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+		const point = toWorld(screen, view);
+		const mount = pickMount(screen, view, state.mounts);
+		const enemy = pickEnemy(screen, view, state.enemies);
 		if (mount >= 0 && !rallyMode) selected = mount;
 		else if (enemy && !rallyMode) { state.priority = enemy.id; notify(state, `Priority target: ${enemy.kind}. All weapons in range will focus fire.`); }
 		else { state.rally = { x: Math.max(-450, Math.min(450, point.x)), y: Math.max(-370, Math.min(370, point.y)) }; rallyMode = false; notify(state, 'Escort rally point updated.'); }
@@ -100,6 +103,8 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.hull, `${Math.ceil(state.hull)} / ${MAX_HULL}`); meter.value = state.hull;
 		label(ui.salvage, String(Math.floor(state.salvage))); ui.route.style.width = `${Math.min(100, state.time / ROUTE_SECONDS * 100)}%`;
 		label(ui.distance, `${Math.min(100, Math.floor(state.time / ROUTE_SECONDS * 100))}%`);
+		const journey = journeyAt(state.time);
+		label(ui.routeLabel, journey.remaining > 0 ? `KEPLER · ${(journey.remaining / 1000).toFixed(2)} KM` : 'KEPLER · ARRIVED');
 		label(ui.wave, state.status === 'fitting' ? 'DRYDOCK / FITTING' : `CONTACT ${String(state.wave).padStart(2, '0')} / 06 ${state.cleared ? '— CLEAR' : ''}`);
 		label(ui.waveInfo, state.status === 'fitting' ? 'Build your defenses. Departure is your call.' : state.wave < WAVE_COUNT ? `Next: ${waveSide(state.wave + 1)} in ${Math.max(0, Math.ceil(state.nextWave - state.time))}s · ${state.enemies.length} hostiles` : state.enemies.length + state.arrivals.length > 0 ? `${state.enemies.length} hostiles · Defeat the gatekeeper and reach the gate.` : 'Passage clear. Approaching Kepler Gate.');
 		for (const [i, dot] of [...element('wave-dots').children].entries()) { dot.classList.toggle('current', i + 1 === state.wave); dot.classList.toggle('done', i + 1 < state.wave); }

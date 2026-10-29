@@ -1,6 +1,6 @@
 # Gateward
 
-A self-contained, top-down capital-ship tower defense prototype. The ark follows
+A self-contained, isometric capital-ship tower defense prototype. The ark follows
 its route automatically; the player builds its defenses instead of piloting.
 
 Open `games/gateward/` from the launcher. Fit the ship with the starting 300
@@ -28,9 +28,21 @@ hostiles to win; losing the ark's hull ends the run.
   panel. Focus loss and hidden documents pause the running voyage. Pointer/touch
   commands use the same actions. Physical touch devices are separate acceptance.
 
-Browser-independent simulation lives in `src/simulation.ts`; Canvas rendering and DOM input are
-separate. No saves, external assets, audio, network, ECS, or shared runtime state.
+Browser-independent simulation lives in `src/simulation.ts`; Canvas rendering and
+DOM input are separate. `src/projection.ts` uses the published ECSpresso isometric
+projection plugin helpers (`worldToIso` / `isoToWorld`) for the view and pointer
+coordinates. Hulls and turrets have visual elevation; selection uses their
+projected centers. Canvas draws ships back to front by world X + Y. The Pixi-only
+projection/depth-sort systems are not installed. No gameplay ECS migration, saves,
+external assets, audio, network, or shared runtime state.
 The page uses the workspace lifecycle disposer for animation and input cleanup.
+
+The camera follows the ark along a 2.52 km route at 12 m/s. Fixed navigation
+beacons, a scrolling lattice, distant debris, and layered star parallax communicate
+travel. The gate reaches the ark at the end of the route; scenery and drive stop
+there even if hostiles remain. Pausing freezes the journey, and replay returns to
+departure. Reduced motion disables decorative parallax and engine flicker while
+keeping navigation and the gate tied to route progress.
 
 `bun test games/gateward/tests` exercises economy, combat, escort losses, support
 systems, failure, and a complete salvage-funded victory. `bun run check` validates
