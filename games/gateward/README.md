@@ -37,11 +37,11 @@ projection/depth-sort systems are not installed. No gameplay ECS migration, save
 external assets, audio, network, or shared runtime state.
 The page uses the workspace lifecycle disposer for animation and input cleanup.
 
-The ark's Canvas artwork in `src/ark.ts` uses a broad clipped bow, a deep undercut
-gunmetal hull, straight armored broadsides, recessed warm habitation lights, and
-four blocky stern drives. Long aft terraces support a wide sloped command bridge.
-Armored turret housings distinguish twin-barrel flak,
-long-barrel railguns, and paired missile pods. Artwork preserves the eight mount
+The ark's Canvas artwork in `src/ark.ts` uses an elongated rounded gunmetal hull,
+curved shoulders and belly, recessed light belts, four stern drives, and a low
+command housing blended into the shell. Shaded armor faces are built and projected
+once for the fixed isometric camera. Armored turret housings distinguish twin-barrel
+flak, long-barrel railguns, and paired missile pods. Artwork preserves the eight mount
 positions, selection elevations, and combat rules; the larger hull is decorative.
 
 The camera follows the ark along a 2.52 km route at 12 m/s. Fixed navigation

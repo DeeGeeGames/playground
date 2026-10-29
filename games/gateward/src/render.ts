@@ -1,7 +1,7 @@
 import { ESCORTS, WEAPONS, type Enemy, type Escort, type Mount, type Point, type State } from './simulation';
 import { drawBackdrop } from './backdrop';
 import { journeyAt } from './journey';
-import { drawArkBridge, drawArkHull } from './ark';
+import { drawArkBridge, drawArkHull, drawArkShield } from './ark';
 import { line, local, polygon, prism, type Outline } from './drawing';
 import { DECK_HEIGHT, depth, edgeIndicator, FLIGHT_HEIGHT, mountHeight, toScreen, TURRET_HEIGHT, type View } from './projection';
 
@@ -92,18 +92,14 @@ const drawMount = function (ctx: CanvasRenderingContext2D, view: View, mount: Mo
 };
 
 const drawArk = function (ctx: CanvasRenderingContext2D, view: View, state: State, selected: number, reducedMotion: boolean) {
-	const center = { x: 0, y: 0 };
 	drawArkHull(ctx, view, state.time, reducedMotion);
 	// Sort the aft superstructure with the hardpoints to preserve their visibility.
 	const deck: DrawItem[] = state.mounts.map(function (mount, index) {
 		return { point: mount, draw: function () { drawMount(ctx, view, mount, index, selected); } };
 	});
-	deck.push({ point: { x: -162, y: 0 }, draw: function () { drawArkBridge(ctx, view); } });
+	deck.push({ point: { x: -180, y: 0 }, draw: function () { drawArkBridge(ctx, view); } });
 	drawInDepthOrder(deck);
-	if (state.shield > 0) {
-		ctx.lineWidth = 2;
-		ring(ctx, view, center, 340, 30, '#88f1e4', '#88f1e408');
-	}
+	if (state.shield > 0) drawArkShield(ctx, view);
 };
 
 const drawEnemy = function (ctx: CanvasRenderingContext2D, view: View, enemy: Enemy) {
