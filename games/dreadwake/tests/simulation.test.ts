@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { ARC, MAX_HULL, RELOAD, angleDelta, clamp, createState, distance, hitFraction, inArc, sideAngle, step, targetFor, type Controls, type State } from '../src/simulation';
+import { ARC, MAX_HULL, RELOAD, angleDelta, clamp, createState, cycleTarget, designateTarget, distance, hitFraction, inArc, sideAngle, step, targetFor, type Controls, type State } from '../src/simulation';
 
-const idle: Controls = { drive: 0, turn: 0, neutral: false, port: false, starboard: false, brace: false };
+const idle: Controls = { drive: 0, turn: 0, neutral: false, port: false, starboard: false, brace: false, pulse: false };
 const advance = function (state: State, seconds: number, input: Partial<Controls> = {}) {
 	for (let i = 0; i < Math.round(seconds * 60); i++) step(state, { ...idle, ...input }, 1 / 60);
 };
@@ -67,7 +67,7 @@ describe('broadside batteries', function () {
 			expect(Math.abs(angleDelta(sideAngle(state.player, 'port'), Math.atan2(shell.vy, shell.vx)))).toBeLessThanOrEqual(ARC + 0.0001);
 		}
 	});
-	test('a well-aligned broadside sinks a frigate', function () {
+	test('a well-aligned broadside destroys a frigate', function () {
 		const state = createState(); advance(state, 3, { port: true });
 		expect(state.kills).toBeGreaterThanOrEqual(1); expect(state.stats.hits).toBeGreaterThanOrEqual(5);
 	});
@@ -128,5 +128,58 @@ describe('combat and encounter lifecycle', function () {
 				brace: state.shells.some(function (shell) { return shell.hostile && distance(shell, p) < 160; }) }, 1 / 60);
 		}
 		expect(state.outcome).toBe('won'); expect(state.kills).toBe(8); expect(state.stats.salvos).toBeGreaterThanOrEqual(8);
+	});
+});
+
+describe('alpha shield and fire control', function () {
+	test('shield absorbs 85 percent without stacking with armor lock or blocking salvos', function () {
+		const state = quietState();
+		state.shells.push({ x: -40, y: 0, vx: 600, vy: 0, hostile: true, damage: 100, life: 1 });
+		step(state, { ...idle, pulse: true, brace: true }, 1 / 60);
+		expect(state.player.hp).toBe(MAX_HULL - 15); expect(state.stats.damageBlocked).toBe(85);
+		expect(state.events).toContain('shield'); expect(state.events).toContain('shield-hit');
+		advance(state, 0.1, { port: true });
+		expect(state.stats.salvos).toBe(1); expect(state.shield.active).toBeGreaterThan(2.8);
+	});
+	test('shield expires and requires a fresh press after cooldown, including a held key', function () {
+		const state = quietState(); step(state, { ...idle, pulse: true }, 1 / 60);
+		advance(state, 19, { pulse: true });
+		expect(state.shield.active).toBe(0); expect(state.shield.cooldown).toBe(0);
+		state.shells.push({ x: -40, y: 0, vx: 600, vy: 0, hostile: true, damage: 100, life: 1 });
+		step(state, { ...idle, pulse: true }, 1 / 60); expect(state.player.hp).toBe(MAX_HULL - 100);
+		step(state, idle, 1 / 60); step(state, { ...idle, pulse: true }, 1 / 60);
+		expect(state.shield.active).toBe(3); expect(state.shield.cooldown).toBe(18);
+		const reset = createState(); expect(reset.shield.cooldown).toBe(0); expect(reset.priorityTarget).toBeUndefined();
+	});
+	test('shield also protects hull contact, with no drive or reload penalty', function () {
+		const run = function (pulse: boolean) {
+			const state = createState(); const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing frigate');
+			enemy.x = 0; enemy.y = 0; enemy.cooldown = 100;
+			step(state, { ...idle, pulse, drive: 1, port: true }, 1 / 60); return state;
+		};
+		const normal = run(false); const shielded = run(true);
+		expect(MAX_HULL - shielded.player.hp).toBeCloseTo((MAX_HULL - normal.player.hp) * 0.15, 8);
+		expect(shielded.player.throttle).toBe(normal.player.throttle);
+		expect(shielded.batteries.port.reload).toBe(normal.batteries.port.reload);
+	});
+	test('priority wins within its arc and falls back outside it; committed salvos keep their target', function () {
+		const state = createState(); const near = state.enemies[0]; const far = state.enemies[1];
+		if (!near || !far) throw new Error('Missing frigates');
+		near.x = -300; near.y = 0; far.x = -500; far.y = 0;
+		expect(targetFor(state, 'port')?.id).toBe(near.id);
+		designateTarget(state, far.id); expect(targetFor(state, 'port')?.id).toBe(far.id);
+		step(state, { ...idle, port: true }, 1 / 60); designateTarget(state, near.id);
+		expect(state.batteries.port.target).toBe(far.id);
+		designateTarget(state, far.id); far.x = 400; expect(targetFor(state, 'port')?.id).toBe(near.id);
+		far.hp = 0; step(state, idle, 1 / 60); expect(state.priorityTarget).toBeUndefined();
+		designateTarget(state, 999); expect(state.priorityTarget).toBeUndefined();
+	});
+	test('target cycling is deterministic, includes automatic mode, and ignores dead contacts', function () {
+		const state = createState(); const first = state.enemies[0]; const second = state.enemies[1];
+		if (!first || !second) throw new Error('Missing frigates');
+		state.enemies.reverse(); cycleTarget(state); expect(state.priorityTarget).toBe(first.id);
+		cycleTarget(state); expect(state.priorityTarget).toBe(second.id);
+		cycleTarget(state); expect(state.priorityTarget).toBeUndefined();
+		first.hp = 0; cycleTarget(state); expect(state.priorityTarget).toBe(second.id);
 	});
 });
