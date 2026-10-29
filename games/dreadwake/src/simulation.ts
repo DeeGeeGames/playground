@@ -1,6 +1,6 @@
 export interface Point { x: number; y: number }
 export type Side = 'port' | 'starboard';
-export type CombatEvent = 'cannon' | 'hit' | 'damage' | 'explosion' | 'wave';
+export type CombatEvent = 'cannon' | 'hit' | 'damage' | 'explosion' | 'wave' | 'shield' | 'shield-hit' | 'alert' | 'ready';
 export interface Ship extends Point {
 	id: number; angle: number; vx: number; vy: number; hp: number; maxHp: number;
 	length: number; width: number;
@@ -10,7 +10,7 @@ export interface Enemy extends Ship {
 }
 export interface Battery { reload: number; remaining: number; next: number; target: number | undefined }
 export interface Shell extends Point { vx: number; vy: number; life: number; hostile: boolean; damage: number }
-export interface Effect extends Point { kind: 'muzzle' | 'impact' | 'explosion'; life: number; duration: number }
+export interface Effect extends Point { kind: 'muzzle' | 'impact' | 'explosion' | 'shield'; life: number; duration: number }
 export interface Wreck extends Point { angle: number; length: number; width: number; life: number }
 export interface State {
 	player: Ship & { throttle: number; yaw: number; braced: boolean };
@@ -18,12 +18,16 @@ export interface State {
 	time: number; wave: number; intermission: number; kills: number; nextId: number;
 	outcome: 'playing' | 'won' | 'lost'; events: CombatEvent[]; shake: number;
 	stats: { salvos: number; hits: number; damageBlocked: number };
+	shield: { active: number; cooldown: number; held: boolean };
+	priorityTarget: number | undefined;
 }
-export interface Controls { drive: number; turn: number; neutral: boolean; port: boolean; starboard: boolean; brace: boolean }
+export interface Controls { drive: number; turn: number; neutral: boolean; port: boolean; starboard: boolean; brace: boolean; pulse: boolean }
 export const RANGE = 690;
 export const ARC = Math.PI / 6;
 export const RELOAD = 7.5;
 export const MAX_HULL = 1400;
+export const SHIELD_DURATION = 3;
+export const SHIELD_COOLDOWN = 18;
 export const clamp = function (value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); };
 export const distance = function (a: Point, b: Point) { return Math.hypot(a.x - b.x, a.y - b.y); };
 export const angleDelta = function (from: number, to: number) { return Math.atan2(Math.sin(to - from), Math.cos(to - from)); };
@@ -35,8 +39,18 @@ export const inArc = function (ship: Ship, target: Point, side: Side) {
 	return distance(ship, target) <= RANGE && Math.abs(angleDelta(sideAngle(ship, side), Math.atan2(target.y - ship.y, target.x - ship.x))) <= ARC;
 };
 export const targetFor = function (state: State, side: Side): Enemy | undefined {
+	const priority = state.enemies.find(function (enemy) { return enemy.id === state.priorityTarget && enemy.hp > 0 && inArc(state.player, enemy, side); });
+	if (priority) return priority;
 	return state.enemies.filter(function (enemy) { return enemy.hp > 0 && inArc(state.player, enemy, side); })
 		.sort(function (a, b) { return distance(state.player, a) - distance(state.player, b) || a.id - b.id; })[0];
+};
+export const designateTarget = function (state: State, id: number | undefined) {
+	state.priorityTarget = state.enemies.find(function (enemy) { return enemy.hp > 0 && enemy.id === id; })?.id;
+};
+export const cycleTarget = function (state: State) {
+	const targets = [...state.enemies].filter(function (enemy) { return enemy.hp > 0; }).sort(function (a, b) { return a.id - b.id; });
+	const current = targets.findIndex(function (enemy) { return enemy.id === state.priorityTarget; });
+	designateTarget(state, targets[current + 1]?.id);
 };
 const approach = function (value: number, target: number, amount: number) { return value + clamp(target - value, -amount, amount); };
 const effect = function (state: State, at: Point, kind: Effect['kind']) {
@@ -61,10 +75,11 @@ const spawnWave = function (state: State) {
 export const createState = function (): State {
 	const state: State = {
 		player: { id: 0, x: 0, y: 0, angle: -Math.PI / 2, vx: 0, vy: 0, hp: MAX_HULL, maxHp: MAX_HULL,
-			length: 200, width: 66, throttle: 0, yaw: 0, braced: false },
+			length: 220, width: 90, throttle: 0, yaw: 0, braced: false },
 		batteries: { port: { reload: 0, remaining: 0, next: 0, target: undefined }, starboard: { reload: 0, remaining: 0, next: 0, target: undefined } },
 		enemies: [], shells: [], effects: [], wrecks: [], time: 0, wave: 1, intermission: 0, kills: 0, nextId: 1,
 		outcome: 'playing', events: [], shake: 0, stats: { salvos: 0, hits: 0, damageBlocked: 0 },
+		shield: { active: 0, cooldown: 0, held: false }, priorityTarget: undefined,
 	};
 	spawnWave(state); state.events = [];
 	return state;
@@ -135,6 +150,7 @@ const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 		enemy.cooldown -= dt;
 		if (enemy.cooldown <= 0 && range < 900) {
 			enemy.warning = 1.8;
+			state.events.push('alert');
 			// Commit the firing solution at the start of the tell. A course change can dodge it.
 			const lead = range / 240 + 1.8;
 			enemy.aim = { x: p.x + p.vx * lead, y: p.y + p.vy * lead };
@@ -147,7 +163,9 @@ const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 		const push = (minimum - separation) * Math.min(1, dt * 3);
 		enemy.x += Math.cos(away) * push; enemy.y += Math.sin(away) * push;
 		p.vx -= Math.cos(away) * dt * 8; p.vy -= Math.sin(away) * dt * 8;
-		enemy.hp -= dt * 45; p.hp -= dt * (p.braced ? 5 : 14);
+		enemy.hp -= dt * 45;
+		const damage = dt * 14; const received = damage * (state.shield.active > 0 ? 0.15 : p.braced ? 0.35 : 1);
+		p.hp -= received; state.stats.damageBlocked += damage - received;
 	}
 };
 export const step = function (state: State, input: Controls, elapsed: number) {
@@ -155,6 +173,14 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	if (state.outcome !== 'playing' || !Number.isFinite(elapsed) || elapsed <= 0) return;
 	const dt = Math.min(elapsed, 1 / 30); const p = state.player;
 	state.time += dt; state.shake = Math.max(0, state.shake - dt * 12);
+	const cooling = state.shield.cooldown > 0;
+	state.shield.active = Math.max(0, state.shield.active - dt);
+	state.shield.cooldown = Math.max(0, state.shield.cooldown - dt);
+	if (cooling && state.shield.cooldown === 0) state.events.push('ready');
+	if (input.pulse && !state.shield.held && state.shield.cooldown === 0) {
+		state.shield.active = SHIELD_DURATION; state.shield.cooldown = SHIELD_COOLDOWN; state.events.push('shield');
+	}
+	state.shield.held = input.pulse;
 	p.braced = input.brace;
 	p.throttle = input.neutral ? 0 : clamp(p.throttle + input.drive * dt * 0.45, -0.35, 1);
 	p.yaw = approach(p.yaw, input.turn * (p.braced ? 0.09 : 0.24), dt * 0.12);
@@ -173,10 +199,11 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 			.filter(function (candidate): candidate is { ship: Ship; fraction: number } { return candidate.fraction !== undefined; })
 			.sort(function (a, b) { return a.fraction - b.fraction || a.ship.id - b.ship.id; })[0];
 		if (hit) {
-			const damage = shell.damage * (shell.hostile && p.braced ? 0.35 : 1);
+			const shielded = shell.hostile && state.shield.active > 0;
+			const damage = shell.damage * (shielded ? 0.15 : shell.hostile && p.braced ? 0.35 : 1);
 			hit.ship.hp = Math.max(0, hit.ship.hp - damage); shell.life = 0;
-			effect(state, { x: from.x + (shell.x - from.x) * hit.fraction, y: from.y + (shell.y - from.y) * hit.fraction }, 'impact');
-			state.events.push(shell.hostile ? 'damage' : 'hit'); state.shake = Math.max(state.shake, shell.hostile ? 5 : 2);
+			effect(state, { x: from.x + (shell.x - from.x) * hit.fraction, y: from.y + (shell.y - from.y) * hit.fraction }, shielded ? 'shield' : 'impact');
+			state.events.push(shielded ? 'shield-hit' : shell.hostile ? 'damage' : 'hit'); state.shake = Math.max(state.shake, shell.hostile ? shielded ? 1 : 5 : 2);
 			if (shell.hostile) state.stats.damageBlocked += shell.damage - damage;
 			else state.stats.hits++;
 		}
@@ -187,6 +214,7 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 		state.wrecks.push({ x: enemy.x, y: enemy.y, angle: enemy.angle, length: enemy.length, width: enemy.width, life: 35 });
 	}
 	state.enemies = state.enemies.filter(function (enemy) { return enemy.hp > 0; });
+	if (!state.enemies.some(function (enemy) { return enemy.id === state.priorityTarget; })) state.priorityTarget = undefined;
 	state.effects = state.effects.filter(function (fx) { fx.life -= dt; return fx.life > 0; });
 	state.wrecks = state.wrecks.filter(function (wreck) { wreck.life -= dt; return wreck.life > 0; });
 	p.hp = Math.max(0, p.hp);

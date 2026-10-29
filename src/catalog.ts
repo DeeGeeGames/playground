@@ -13,11 +13,11 @@ export const experiments: readonly Experiment[] = [
 	{
 		title: 'Dreadwake',
 		thumbnail: './games/dreadwake/preview.png',
-		thumbnailAlt: 'Dreadwake prototype: an isometric capital ship firing both six-gun broadside batteries.',
+		thumbnailAlt: 'Dreadwake alpha: an armored star cruiser with split prows, glowing rail arrays, and twin drives in deep space.',
 		href: './games/dreadwake/',
-		description: 'Command a lumbering capital ship. Carry momentum through slow turns, line up six-gun broadsides, and brace against incoming volleys.',
+		description: 'Command a heavy star cruiser. Designate targets, commit six-gun broadsides, and time shield pulses to break a three-contact blockade.',
 		controls: 'Keyboard · Touch',
-		category: 'Isometric capital combat prototype',
+		category: 'Capital starship combat alpha',
 	},
 	{
 		title: 'Iron Wake',
