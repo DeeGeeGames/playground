@@ -106,14 +106,19 @@ export const render = function (ctx: CanvasRenderingContext2D, width: number, he
 		// Long, low cockpit projects between the two raised weapon pods.
 		box(local(at, 17 * size, 0, turret), 34 * size, 27 * size, 53 * size, 16 * size, palette, turret);
 		box(local(at, 29 * size, 0, turret), 10 * size, 23 * size, 64 * size, 6 * size, { top: player ? '#9fe5e7' : '#ffae7e', side: '#255b6d', edge: '#c4fcf4' }, turret);
+		// The fixed isometric view looks toward the origin from positive X/Y.
+		const frontFacesCamera = Math.cos(turret) + Math.sin(turret) > 1e-10;
 		for (const side of [-1, 1]) {
 			const shoulder = local(at, -7 * size, side * 33 * size, turret);
 			box(shoulder, 26 * size, 18 * size, 49 * size, 16 * size, palette, turret);
 			box(local(shoulder, 22 * size, 0, turret), 35 * size, 8 * size, 51 * size, 8 * size, dark, turret);
 			box(local(shoulder, -4 * size, 0, turret), 22 * size, 23 * size, 70 * size, 19 * size, player ? amber : palette, turret);
-			// Dark launch tubes on the forward faces read at gameplay scale.
-			for (const offset of [-7, 0, 7]) for (const z of [75, 82]) {
-				box(local(shoulder, 8 * size, offset * size, turret), 2 * size, 4 * size, z * size, 4 * size, dark, turret);
+			// Recessed ports belong to the rack's front face, not separate boxes
+			// painted over its roof and rear. Suppress edge-on roundoff as well.
+			if (frontFacesCamera) for (const offset of [-7, 0, 7]) for (const z of [75, 82]) {
+				const a = local(shoulder, 7 * size, (offset - 2) * size, turret);
+				const b = local(shoulder, 7 * size, (offset + 2) * size, turret);
+				path([project(a, z * size), project(b, z * size), project(b, (z + 4) * size), project(a, (z + 4) * size)], dark.side, dark.edge);
 			}
 		}
 
