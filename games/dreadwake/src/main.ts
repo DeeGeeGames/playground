@@ -1,7 +1,7 @@
 import { mountGame } from '../../../shared/lifecycle';
 import { createState, cycleTarget, designateTarget, distance, MAX_HULL, RELOAD, SHIELD_COOLDOWN, step, targetFor, type Controls } from './simulation';
 import { createRenderer } from './render';
-import { cameraFor, pickShip, zoomForWheel } from './projection';
+import { cameraFor, pickShip, screenToWorld, zoomForWheel } from './projection';
 import { createAudio } from './audio';
 
 const element = function (id: string): HTMLElement {
@@ -34,10 +34,11 @@ const shutdown = await mountGame('game', async function (container) {
 		port: { label: element('port-state'), fill: element('port-fill'), target: element('port-target') },
 		starboard: { label: element('starboard-state'), fill: element('starboard-fill'), target: element('starboard-target') },
 	};
+	let heading: number | undefined;
 	let state = createState(); let running = false; let paused = false; let muted = false;
 	let frame = 0; let previous = 0; let accumulator = 0; let zoom = 1;
 	const clearInput = function () {
-		keys.clear(); pending.clear(); state.shield.held = false;
+		heading = undefined; keys.clear(); pending.clear(); state.shield.held = false;
 		for (const button of buttons) for (const id of pointers.keys()) if (button.hasPointerCapture(id)) button.releasePointerCapture(id);
 		pointers.clear();
 	};
@@ -105,7 +106,13 @@ const shutdown = await mountGame('game', async function (container) {
 	canvas.addEventListener('pointerdown', function (event) {
 		if (!playable() || event.button !== 0) return;
 		const rect = canvas.getBoundingClientRect();
-		const target = pickShip({ x: event.clientX - rect.left, y: event.clientY - rect.top }, cameraFor(rect.width, rect.height, state.player, zoom), state.enemies);
+		const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+		const camera = cameraFor(rect.width, rect.height, state.player, zoom);
+		const target = pickShip(point, camera, state.enemies);
+		if (!target && event.pointerType === 'mouse') {
+			const world = screenToWorld(point, camera, 20);
+			if (distance(world, state.player) > 1) heading = Math.atan2(world.y - state.player.y, world.x - state.player.x);
+		}
 		designateTarget(state, target?.id); canvas.focus({ preventScroll: true });
 	}, options);
 	const hud = function () {
@@ -153,8 +160,9 @@ const shutdown = await mountGame('game', async function (container) {
 		if (playable() && !document.hidden) {
 			accumulator += elapsed;
 			while (accumulator >= 1 / 60 && state.outcome === 'playing') {
+				if (active('right') || active('left')) heading = undefined;
 				const input: Controls = { drive: Number(active('forward')) - Number(active('back')), turn: Number(active('right')) - Number(active('left')),
-					neutral: active('neutral'), port: active('port'), starboard: active('starboard'), brace: active('brace'), pulse: active('pulse') };
+					...(heading === undefined ? {} : { heading }), neutral: active('neutral'), port: active('port'), starboard: active('starboard'), brace: active('brace'), pulse: active('pulse') };
 				step(state, input, 1 / 60); pending.clear(); accumulator -= 1 / 60;
 				audio.update(Math.hypot(state.player.vx, state.player.vy), true, state.events);
 				if (state.outcome !== 'playing') showResult();

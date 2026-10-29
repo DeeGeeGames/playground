@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createState } from '../src/simulation';
-import { cameraFor, pickShip, project, worldToScreen, zoomForWheel } from '../src/projection';
+import { cameraFor, pickShip, project, screenToWorld, worldToScreen, zoomForWheel } from '../src/projection';
 
 test('world axes project to symmetric isometric diagonals', function () {
 	const x = project({ x: 100, y: 0 }); const y = project({ x: 0, y: 100 });
@@ -49,6 +49,17 @@ test('target picking follows projected ships at each zoom and viewport', functio
 			expect(pickShip(at, camera, ships)?.id).toBe(ship.id);
 			expect(pickShip({ x: at.x + 500, y: at.y + 500 }, camera, ships)).toBeUndefined();
 			expect(pickShip(at, camera, [])).toBeUndefined();
+		}
+	}
+});
+
+test('heading picking reverses the hull-plane projection across viewports and zoom', function () {
+	for (const zoom of [0.5, 1, 2.5]) {
+		for (const width of [390, 1440]) {
+			const camera = cameraFor(width, 844, { x: 123, y: -456 }, zoom);
+			const point = { x: -230, y: 890 };
+			const result = screenToWorld(worldToScreen(point, camera, 20), camera, 20);
+			expect(result.x).toBeCloseTo(point.x); expect(result.y).toBeCloseTo(point.y);
 		}
 	}
 });

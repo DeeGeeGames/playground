@@ -17,6 +17,12 @@ export const worldToScreen = function (point: Point, camera: Camera, elevation =
 		y: (at.y - camera.center.y) * camera.scale + camera.height * 0.45 };
 };
 
+export const screenToWorld = function (point: Point, camera: Camera, elevation = 0): Point {
+	const x = (point.x - camera.width / 2) / camera.scale + camera.center.x;
+	const y = (point.y - camera.height * 0.45) / camera.scale + camera.center.y + elevation;
+	return { x: y + x / Math.sqrt(3), y: y - x / Math.sqrt(3) };
+};
+
 // Picking uses the same projected hull center and scale as the renderer.
 export const pickShip = function <T extends Ship>(point: Point, camera: Camera, ships: readonly T[]): T | undefined {
 	return ships.map(function (ship) {

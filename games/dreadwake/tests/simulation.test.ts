@@ -183,3 +183,16 @@ describe('alpha shield and fire control', function () {
 		first.hp = 0; cycleTarget(state); expect(state.priorityTarget).toBe(second.id);
 	});
 });
+
+test('heading orders take the shortest turn and settle despite existing yaw and armor lock', function () {
+	for (const brace of [false, true]) {
+		const state = quietState(); state.player.angle = Math.PI - 0.1; state.player.yaw = -0.1;
+		const heading = -Math.PI + 0.4;
+		advance(state, 1, { heading, brace });
+		expect(state.player.yaw).toBeGreaterThan(0);
+		advance(state, 25, { heading, brace });
+		expect(Math.abs(angleDelta(state.player.angle, heading))).toBeLessThan(0.001);
+		expect(Math.abs(state.player.yaw)).toBeLessThan(0.001);
+		expect(state.player.throttle).toBe(0);
+	}
+});

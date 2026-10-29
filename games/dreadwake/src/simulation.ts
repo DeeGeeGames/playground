@@ -21,7 +21,7 @@ export interface State {
 	shield: { active: number; cooldown: number; held: boolean };
 	priorityTarget: number | undefined;
 }
-export interface Controls { drive: number; turn: number; neutral: boolean; port: boolean; starboard: boolean; brace: boolean; pulse: boolean }
+export interface Controls { drive: number; turn: number; heading?: number; neutral: boolean; port: boolean; starboard: boolean; brace: boolean; pulse: boolean }
 export const RANGE = 690;
 export const ARC = Math.PI / 6;
 export const RELOAD = 7.5;
@@ -183,7 +183,10 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	state.shield.held = input.pulse;
 	p.braced = input.brace;
 	p.throttle = input.neutral ? 0 : clamp(p.throttle + input.drive * dt * 0.45, -0.35, 1);
-	p.yaw = approach(p.yaw, input.turn * (p.braced ? 0.09 : 0.24), dt * 0.12);
+	const headingError = input.heading === undefined ? undefined : angleDelta(p.angle, input.heading);
+	const desiredYaw = headingError === undefined ? input.turn * (p.braced ? 0.09 : 0.24)
+		: clamp(headingError * 0.8, -(p.braced ? 0.09 : 0.24), p.braced ? 0.09 : 0.24);
+	p.yaw = approach(p.yaw, desiredYaw, dt * 0.12);
 	p.angle = angleDelta(0, p.angle + p.yaw * dt);
 	const speed = p.throttle * (p.braced ? 24 : 86);
 	p.vx += (Math.cos(p.angle) * speed - p.vx) * dt * 0.22;
