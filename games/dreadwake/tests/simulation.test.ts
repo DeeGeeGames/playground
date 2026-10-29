@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ARC, MAX_HULL, RELOAD, angleDelta, clamp, createState, cycleTarget, designateTarget, distance, hitFraction, inArc, sideAngle, step, targetFor, type Controls, type State } from '../src/simulation';
 
-const idle: Controls = { drive: 0, turn: 0, neutral: false, port: false, starboard: false, brace: false, pulse: false };
+const idle: Controls = { drive: 0, turn: 0, neutral: false, port: false, starboard: false, brace: false, pulse: false, torpedo: false, autoFire: false };
 const advance = function (state: State, seconds: number, input: Partial<Controls> = {}) {
 	for (let i = 0; i < Math.round(seconds * 60); i++) step(state, { ...idle, ...input }, 1 / 60);
 };

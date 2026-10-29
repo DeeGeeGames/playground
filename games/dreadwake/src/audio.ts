@@ -65,6 +65,8 @@ export const createAudio = function () {
 				if (at - (last.get(event) ?? -1) < 0.07) continue;
 				last.set(event, at);
 				if (event === 'cannon') { tone(130, 24, 0.55, 0.48, 'sine'); burst(1800, 0.28, 0.3); tone(920, 150, 0.09, 0.08, 'sawtooth'); }
+				if (event === 'torpedo') { burst(1200, 0.45, 0.18); tone(90, 240, 0.38, 0.14, 'sawtooth'); }
+				if (event === 'intercept') { burst(5400, 0.065, 0.08); tone(1800, 700, 0.055, 0.045, 'square'); }
 				if (event === 'hit') { burst(3600, 0.18, 0.2); tone(420, 95, 0.2, 0.1, 'square'); }
 				if (event === 'damage') { burst(800, 0.45, 0.45); tone(65, 22, 0.4, 0.3, 'sawtooth'); }
 				if (event === 'explosion') { burst(1500, 1.6, 0.6); tone(85, 15, 1.4, 0.5, 'sine'); }

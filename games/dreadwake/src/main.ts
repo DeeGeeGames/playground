@@ -1,5 +1,5 @@
 import { mountGame } from '../../../shared/lifecycle';
-import { createState, cycleTarget, designateTarget, distance, MAX_HULL, RELOAD, SHIELD_COOLDOWN, step, targetFor, type Controls } from './simulation';
+import { createState, cycleTarget, designateTarget, distance, MAX_HULL, RELOAD, SHIELD_COOLDOWN, TORPEDO_RELOAD, step, targetFor, torpedoTargetFor, type Controls } from './simulation';
 import { createRenderer } from './render';
 import { cameraFor, pickShip, screenToWorld, zoomForWheel } from './projection';
 import { createAudio } from './audio';
@@ -13,6 +13,7 @@ const bindings = new Map([
 	['KeyW', 'forward'], ['ArrowUp', 'forward'], ['KeyS', 'back'], ['ArrowDown', 'back'],
 	['KeyA', 'left'], ['ArrowLeft', 'left'], ['KeyD', 'right'], ['ArrowRight', 'right'],
 	['KeyX', 'neutral'], ['KeyQ', 'port'], ['KeyE', 'starboard'], ['Space', 'brace'], ['KeyF', 'pulse'],
+	['KeyT', 'torpedo'], ['KeyG', 'autoFire'],
 ]);
 const shutdown = await mountGame('game', async function (container) {
 	const canvas = container.querySelector('canvas'); if (!canvas) throw new Error('Missing battlefield');
@@ -24,6 +25,8 @@ const shutdown = await mountGame('game', async function (container) {
 		message: element('message'), sound: element('sound'), brace: element('brace'),
 		pulse: element('pulse'), pulseState: element('pulse-state'), pulseFill: element('pulse-fill'), shield: element('shield-readout'),
 		targetName: element('target-name'), targetInfo: element('target-info'), cycle: element('cycle-target'), clear: element('clear-target'),
+		torpedo: element('torpedo'), torpedoState: element('torpedo-state'), torpedoFill: element('torpedo-fill'), torpedoTarget: element('torpedo-target'),
+		autoFire: element('auto-fire'), autoState: element('auto-state'), defenseState: element('defense-state'), defenseCount: element('defense-count'),
 	};
 	const render = createRenderer();
 	const audio = createAudio(); const abort = new AbortController(); const options = { signal: abort.signal };
@@ -38,7 +41,7 @@ const shutdown = await mountGame('game', async function (container) {
 	let state = createState(); let running = false; let paused = false; let muted = false;
 	let frame = 0; let previous = 0; let accumulator = 0; let zoom = 1;
 	const clearInput = function () {
-		heading = undefined; keys.clear(); pending.clear(); state.shield.held = false;
+		heading = undefined; keys.clear(); pending.clear(); state.shield.held = false; state.torpedoes.held = false; state.fireControl.held = false;
 		for (const button of buttons) for (const id of pointers.keys()) if (button.hasPointerCapture(id)) button.releasePointerCapture(id);
 		pointers.clear();
 	};
@@ -130,6 +133,15 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.pulseState.textContent = state.shield.active > 0 ? `FIELD ACTIVE / ${state.shield.active.toFixed(1)} S` : state.shield.cooldown > 0 ? `CHARGING / ${state.shield.cooldown.toFixed(1)} S` : 'READY · 3 SEC / −85% DAMAGE';
 		ui.pulseFill.style.width = `${(1 - state.shield.cooldown / SHIELD_COOLDOWN) * 100}%`;
 		ui.pulse.classList.toggle('cooling', state.shield.cooldown > 0);
+		const torpedoTarget = torpedoTargetFor(state); const rack = state.torpedoes;
+		ui.torpedoState.textContent = rack.remaining > 0 ? 'LAUNCHING' : rack.reload > 0 ? `${rack.reload.toFixed(1)} S` : p.braced ? 'LOCKED' : torpedoTarget ? 'READY' : 'NO LOCK';
+		ui.torpedoTarget.textContent = torpedoTarget ? `BOW LOCK / ${torpedoTarget.kind.toUpperCase()} ${String(torpedoTarget.id).padStart(2, '0')}` : 'ALIGN BOW / 1,000 M';
+		ui.torpedoFill.style.width = `${(1 - rack.reload / TORPEDO_RELOAD) * 100}%`;
+		ui.torpedo.classList.toggle('locked', !!torpedoTarget);
+		ui.autoState.textContent = state.fireControl.automatic ? p.braced ? 'AUTO / ARMOR LOCK' : 'AUTO / VALID ARCS' : 'MANUAL / HOLD Q + E';
+		ui.autoFire.setAttribute('aria-pressed', String(state.fireControl.automatic));
+		ui.defenseState.textContent = state.pointDefense.reload > 0 ? 'INTERCEPTING' : 'SCANNING';
+		ui.defenseCount.textContent = `${state.stats.interceptions} ROUNDS STOPPED`;
 		for (const [i, marker] of [...container.querySelectorAll('.mission-steps i')].entries()) {
 			marker.classList.toggle('active', i + 1 === state.wave); marker.classList.toggle('complete', i + 1 < state.wave);
 		}
@@ -152,13 +164,14 @@ const shutdown = await mountGame('game', async function (container) {
 		for (const button of buttons) button.classList.toggle('pressed', playable() && active(button.dataset['action'] ?? ''));
 		ui.brace.classList.toggle('pressed', playable() && p.braced);
 		ui.pulse.classList.toggle('pressed', playable() && state.shield.active > 0);
-		ui.message.textContent = !playable() ? '' : state.intermission > 0 ? state.wave === 3 ? 'FINAL CONTACT CLEAR / SECURING THE PASSAGE' : `CONTACT CLEAR / NEXT IN ${Math.ceil(6 - state.intermission)} S / REPAIRS +20%` : state.shield.active > 0 ? 'AEGIS FIELD ACTIVE / 85% DAMAGE REDUCTION' : p.braced ? 'ARMOR LOCK / NEW SALVOS LOCKED / RELOAD SLOWED' : state.enemies.some(function (enemy) { return enemy.warning > 0; }) ? 'INCOMING VOLLEY / EVADE, LOCK ARMOR OR PULSE SHIELDS' : state.time < 12 ? 'TARGETS IN SIDE ARCS / HOLD Q + E TO FIRE' : '';
+		ui.autoFire.classList.toggle('pressed', state.fireControl.automatic);
+		ui.message.textContent = !playable() ? '' : state.intermission > 0 ? state.wave === 3 ? 'FINAL CONTACT CLEAR / SECURING THE PASSAGE' : `CONTACT CLEAR / NEXT IN ${Math.ceil(6 - state.intermission)} S / REPAIRS +20%` : state.shield.active > 0 ? 'AEGIS FIELD ACTIVE / 85% DAMAGE REDUCTION' : p.braced ? 'ARMOR LOCK / NEW SALVOS LOCKED / RELOAD SLOWED' : state.enemies.some(function (enemy) { return enemy.warning > 0; }) ? 'INCOMING VOLLEY / EVADE, LOCK ARMOR OR PULSE SHIELDS' : state.time < 12 ? 'Q/E BROADSIDES · G AUTO CREWS · T BOW TORPEDOES' : '';
 	};
 	const showResult = function () {
 		clearInput(); syncPanels(); audio.update(0, false, []);
 		element('result-title').textContent = state.outcome === 'won' ? 'BLOCKADE BROKEN.' : 'SIGNAL LOST.';
 		element('result-copy').textContent = state.outcome === 'won' ? 'Eight hostile ships reduced to drifting metal. The passage is yours.' : 'The hull has given way. Keep both batteries working, change course when red rings appear, and use armor lock or a shield pulse for volleys you cannot avoid.';
-		element('result-stats').textContent = `${state.kills} / 8 ships broken · ${Math.floor(state.time / 60)}m ${Math.floor(state.time % 60)}s · ${state.stats.salvos} salvos · ${Math.round(state.stats.damageBlocked)} damage prevented`;
+		element('result-stats').textContent = `${state.kills} / 8 ships broken · ${Math.floor(state.time / 60)}m ${Math.floor(state.time % 60)}s · ${state.stats.salvos} broadsides · ${state.stats.torpedoSalvos} torpedo salvos · ${state.stats.interceptions} rounds intercepted · ${Math.round(state.stats.damageBlocked)} damage prevented by armor / shields`;
 		element('restart').focus({ preventScroll: true });
 	};
 	const tick = function (now: number) {
@@ -168,7 +181,8 @@ const shutdown = await mountGame('game', async function (container) {
 			while (accumulator >= 1 / 60 && state.outcome === 'playing') {
 				if (active('right') || active('left')) heading = undefined;
 				const input: Controls = { drive: Number(active('forward')) - Number(active('back')), turn: Number(active('right')) - Number(active('left')),
-					...(heading === undefined ? {} : { heading }), neutral: active('neutral'), port: active('port'), starboard: active('starboard'), brace: active('brace'), pulse: active('pulse') };
+					...(heading === undefined ? {} : { heading }), neutral: active('neutral'), port: active('port'), starboard: active('starboard'), brace: active('brace'),
+					pulse: pending.has('pulse'), torpedo: pending.has('torpedo'), autoFire: pending.has('autoFire') };
 				step(state, input, 1 / 60); pending.clear(); accumulator -= 1 / 60;
 				audio.update(Math.hypot(state.player.vx, state.player.vy), true, state.events);
 				if (state.outcome !== 'playing') showResult();

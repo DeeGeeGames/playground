@@ -15,7 +15,7 @@ export const experiments: readonly Experiment[] = [
 		thumbnail: './games/dreadwake/preview.png',
 		thumbnailAlt: 'Dreadwake alpha: an armored star cruiser with split prows, glowing rail arrays, and twin drives in deep space.',
 		href: './games/dreadwake/',
-		description: 'Command a heavy star cruiser. Designate targets, commit six-gun broadsides, and time shield pulses to break a three-contact blockade.',
+		description: 'Command a heavy star cruiser. Coordinate rail broadsides, homing bow torpedoes, and automatic point defense to break a three-contact blockade.',
 		controls: 'Keyboard · Touch',
 		category: 'Capital starship combat alpha',
 	},

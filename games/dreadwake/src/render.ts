@@ -1,4 +1,4 @@
-import { clamp, distance, targetFor, type Point, type Ship, type Side, type State } from './simulation';
+import { clamp, distance, targetFor, torpedoTargetFor, type Point, type Ship, type Side, type State } from './simulation';
 import { cameraFor, worldToScreen, type Camera } from './projection';
 import { drawStarship, polygon, line } from './ship-art';
 import { createBackdrop } from './backdrop';
@@ -76,6 +76,12 @@ export const createRenderer = function () {
 			polygon(ctx, [{ x: at.x - r, y: at.y }, { x: at.x, y: at.y - r * 0.4 }, { x: at.x + r * 0.7, y: at.y + r * 0.3 }, { x: at.x, y: at.y + r * 0.6 }], '#172938', '#29404c');
 		}
 		drawFiringSolution(ctx, camera, state, 'port'); drawFiringSolution(ctx, camera, state, 'starboard');
+		const torpedoTarget = torpedoTargetFor(state);
+		if (torpedoTarget && state.torpedoes.reload === 0 && !p.braced) {
+			const at = worldToScreen(torpedoTarget, camera);
+			ring(ctx, at, torpedoTarget.length * camera.scale * 0.82, '#f1c58a99');
+			label(ctx, 'T / TORPEDO LOCK', { x: at.x, y: at.y + torpedoTarget.length * camera.scale * 0.55 + 14 }, '#f1c58a', 9);
+		}
 		// Course prediction deliberately preserves current velocity instead of snapping to the bow.
 		for (let i = 1; i < 10; i++) {
 			const at = worldToScreen({ x: p.x + p.vx * i * 0.5, y: p.y + p.vy * i * 0.5 }, camera);
@@ -116,9 +122,15 @@ export const createRenderer = function () {
 		if (heading !== undefined) drawHeading(ctx, camera, p, heading);
 		for (const shell of state.shells) {
 			const at = worldToScreen(shell, camera, 22);
-			const tail = worldToScreen({ x: shell.x - shell.vx * 0.085, y: shell.y - shell.vy * 0.085 }, camera, 22);
-			line(ctx, tail, at, shell.hostile ? '#ff6c8b90' : '#77edff90', shell.hostile ? 2 : 3);
-			ctx.fillStyle = shell.hostile ? '#ffc0cf' : '#d6ffff'; ctx.beginPath(); ctx.arc(at.x, at.y, shell.hostile ? 2 : 2.8, 0, Math.PI * 2); ctx.fill();
+			const trail = shell.guidance ? 0.22 : 0.085;
+			const tail = worldToScreen({ x: shell.x - shell.vx * trail, y: shell.y - shell.vy * trail }, camera, 22);
+			line(ctx, tail, at, shell.hostile ? '#ff6c8b90' : shell.guidance ? '#f1b566b0' : '#77edff90', shell.guidance ? 4 : shell.hostile ? 2 : 3);
+			ctx.fillStyle = shell.hostile ? '#ffc0cf' : shell.guidance ? '#ffe6b1' : '#d6ffff'; ctx.beginPath(); ctx.arc(at.x, at.y, shell.guidance ? 3.5 : shell.hostile ? 2 : 2.8, 0, Math.PI * 2); ctx.fill();
+		}
+		for (const trace of state.pointDefense.traces) {
+			ctx.globalAlpha = trace.life / 0.16;
+			line(ctx, worldToScreen(trace.from, camera, 22), worldToScreen(trace.to, camera, 22), '#fff1be', 1.5);
+			ctx.globalAlpha = 1;
 		}
 		for (const fx of state.effects) {
 			const progress = 1 - fx.life / fx.duration; const at = worldToScreen(fx, camera, 23);
@@ -147,7 +159,7 @@ export const createRenderer = function () {
 			const at = worldToScreen(enemy, camera);
 			const safeTop = height < 500 ? 70 : 100;
 			const compact = height <= 500 && width >= 540;
-			const safeBottom = height - (compact ? 130 : width <= 700 ? 245 : 225);
+			const safeBottom = height - (compact ? 180 : width <= 700 ? 300 : 280);
 			if (at.x > 45 && at.x < width - 45 && at.y > safeTop && at.y < safeBottom) continue;
 			const dx = at.x - width / 2; const dy = at.y - height * 0.45;
 			const fit = Math.min((width / 2 - 35) / Math.max(1, Math.abs(dx)), (height * 0.45 - safeTop - 10) / Math.max(1, Math.abs(dy)));

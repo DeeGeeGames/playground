@@ -81,6 +81,18 @@ canvas { width: 100%; height: 100%; display: block; outline: none; touch-action:
 .pulse i { position: absolute; bottom: 0; left: 0; height: 2px; background: var(--cyan); width: 100%; }
 .pulse.cooling { border-color: #34455f; }
 .pulse.cooling > span { color: #93a5bd; }
+.armament { position: absolute; width: 100%; bottom: calc(100% + 8px); display: grid; grid-template-columns: 1.35fr 1fr 1fr; gap: 8px; }
+.armament button, .point-defense { position: relative; display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 48px; padding: 8px 12px; text-align: left; background: var(--panel); border: 1px solid var(--line); }
+.armament button > span, .point-defense > span { font: 9px ui-monospace, monospace; color: var(--cyan); }
+.armament small { font: 7px ui-monospace, monospace; color: #91a6bf; margin-top: 5px; }
+.armament strong { margin-left: auto; font: 9px ui-monospace, monospace; color: var(--gold); white-space: nowrap; }
+.armament .torpedo.locked { border-color: #f1c58a88; }
+.torpedo i { position: absolute; bottom: 0; left: 0; height: 2px; width: 100%; background: var(--gold); }
+.point-defense { justify-content: space-between; }
+.point-defense b { color: var(--gold); font-size: 7px; }
+.point-defense > small { font-size: 7px; margin: 0; text-align: right; }
+.armament button.pressed { background: #244853; border-color: var(--cyan); }
+.defense { bottom: calc(100% + 64px); }
 footer { position: absolute; bottom: calc(12px + env(safe-area-inset-bottom)); width: 100%; text-align: center; color: #8295ad; font: 8px ui-monospace, monospace; letter-spacing: .3px; pointer-events: none; }
 footer span { margin: 0 10px; color: #40536e; }
 .overlay { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 95px 24px 24px; background: #040914db; backdrop-filter: blur(7px); overflow: auto; }
@@ -135,3 +147,22 @@ h2 { font: 800 32px/1.1 'Arial', sans-serif; color: #e5edf5; letter-spacing: -1p
 @media (max-height: 740px) and (min-width: 901px) { .briefing { padding-block: 90px 24px; } h1 { font-size: 49px; margin: 16px 0; } .panel > .intro { font-size: 13px; } .brief-intel { margin-top: 18px; padding-block: 12px; } .orders { gap: 11px; margin-block: 18px; } .orders p { font-size: 9px; } .brief-note { margin-top: 8px; } }
 @media (max-height: 500px) and (min-width: 540px) { .topbar { padding: max(10px, env(safe-area-inset-top)) 16px 10px; flex-wrap: nowrap; align-items: center; } .mission { order: 0; width: auto; flex-direction: column; gap: 7px; } .brand-icon { width: 25px; height: 30px; font-size: 27px; } .brand { font-size: 12px; } .mission { min-width: auto; } .hull { top: 74px; left: max(16px, env(safe-area-inset-left)); width: 135px; } .hull strong { font-size: 28px; } .hull > span { font-size: 7px; letter-spacing: 0; } .hull > span small { font-size: 6px; } .hull div small { font-size: 6px; } .hull p { font-size: 6px; } .shield-readout { display: none; } .field-message { top: 64px; left: 160px; right: 160px; font-size: 7px; } .cockpit { bottom: max(10px, env(safe-area-inset-bottom)); width: calc(100% - 32px); grid-template-columns: 1fr 230px 1fr; } .battery { min-height: 72px; padding: 7px 10px; grid-template-rows: 26px 15px; } .helm { grid-column: auto; grid-row: auto; padding: 6px 10px 3px; } .helm-input { margin-top: 5px; gap: 4px; } .helm-input button { width: 29px; height: 30px; font-size: 17px; } .helm-input button small { display: none; } .neutral { margin-top: 2px; padding: 2px; } .defense { width: auto; bottom: calc(100% + 6px); } .defense button { min-height: 34px; padding: 5px 8px; } .defense button small { display: none; } footer { display: none; } .overlay { padding-top: 75px; } .brief.panel { max-width: 100%; width: 600px; } .briefing { padding: 80px 32px 24px; } .brief-intel, .brief-note, .brief .intro { display: none; } h1 { font-size: 36px; margin: 8px 0 18px; } .orders { grid-template-columns: repeat(3, 1fr); gap: 20px; margin-block: 16px; } .orders > div { display: block; } .orders b { display: flex; gap: 8px; font-size: 8px; margin-bottom: 7px; } .orders b span { margin-top: 0; } .orders p { font-size: 9px; } .brief .primary { max-width: 290px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; } }
+@media (max-width: 700px) {
+	.armament { grid-template-columns: 1.2fr 1fr; gap: 7px; bottom: calc(100% + 7px); }
+	.armament button { min-height: 48px; padding: 7px; gap: 6px; }
+	.armament button > span { font-size: 8px; }
+	.armament kbd { font-size: 8px; padding: 3px; }
+	.armament small { font-size: 6px; letter-spacing: -.1px; }
+	.armament strong { font-size: 8px; }
+	.point-defense { display: none; }
+	.defense { bottom: calc(100% + 62px); }
+}
+@media (max-height: 500px) and (min-width: 540px) {
+	.armament { grid-template-columns: 1.3fr 1fr 1fr; bottom: calc(100% + 6px); gap: 6px; }
+	.armament button, .point-defense { min-height: 38px; padding: 5px 8px; gap: 6px; }
+	.armament button > span, .point-defense > span { font-size: 8px; }
+	.armament small { font-size: 6px; margin-top: 3px; }
+	.point-defense { display: flex; }
+	.point-defense > small { display: none; }
+	.defense { bottom: calc(100% + 50px); }
+}
