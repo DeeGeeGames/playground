@@ -22,4 +22,11 @@ export const experiments: readonly Experiment[] = [
 		controls: 'Keyboard · Gamepad · Touch',
 		category: 'Action sandbox',
 	},
+	{
+		title: 'Spring Run',
+		href: './games/spring-run/',
+		description: 'A gunner on the left fires across the lane. Spring off the mark to dodge, then release to pull back.',
+		controls: 'Touch stick · Keyboard · Gamepad',
+		category: 'Runner',
+	},
 ];

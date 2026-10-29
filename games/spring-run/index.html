@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<title>Spring Run</title>
+		<link rel="stylesheet" href="./src/style.css" />
+	</head>
+	<body>
+		<main>
+			<nav><a href="../../">← All experiments</a></nav>
+			<h1>Spring Run</h1>
+			<p>A gunner on the left fires across the lane. You are stuck on a mark in the middle. Drag the stick to spring out, up to the ring. Release, and you pull back.</p>
+			<p id="status" role="status">3 lives. Drag the stick to spring off the mark. Release to return.</p>
+			<div id="play">
+				<div id="game" role="img" aria-label="A large gunner on the left fires at a small runner held on a mark in the middle of the lane."></div>
+			</div>
+			<p class="help"><strong>Spring</strong> Drag the stick, or hold W A S D / arrows. Gamepad left stick. Release to return. You cannot leave the ring.</p>
+			<p id="error" role="alert" hidden></p>
+		</main>
+		<script type="module" src="./src/main.ts"></script>
+	</body>
+</html>
