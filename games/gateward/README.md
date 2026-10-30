@@ -152,18 +152,42 @@ Hardware touch/controller checks and owner playtesting remain separate gates.
 
 Choose **Systems Lab** in the briefing, pause menu or result, or open
 `?mode=systems`. This provisional experiment uses the 90-second drill encounters
-and survival rule while ship systems are developed. Full voyage and Escort Drill
-retain their original rules. A later Systems Trial will add a real-distance
-arrival requirement and deadline.
+while ship systems are developed. Complete its actual 1.08 km route, resolve all
+scheduled contacts, and survive at least 90 seconds to win. Engine power changes
+the arrival time; elapsed time alone cannot complete the route. Full voyage and
+Escort Drill retain their original rules. The later Systems Trial will have its
+own encounters and an explicit deadline.
 
 The ark starts with 240 of 360 energy shield HP. Hostile rounds hit escorts first,
-then consume shield charge, then damage hull with any overflow. Recharge is 8 HP/s
-after three simulation seconds without a positive-damage ark hit. Fitting,
+then consume shield charge, then damage hull with any overflow. Default recharge
+is 8 HP/s after three simulation seconds without a positive-damage ark hit. Fitting,
 pause/focus loss and results freeze recharge. A depleted shield must recharge;
 it never instantly restores. The blue charge bar and brief blue/amber impact
 shell show energy shields; the green Aegis shell shows its separate five-second
 emergency protection. Aegis still clears enemy rounds and pushes nearby enemies,
 reduces only hull overflow by 80%, and never refills energy shields.
+
+The reactor always allocates ten integer units between engines, weapons and
+shields. Start at 4/4/2; choose a preset or select donor/recipient systems and
+transfer one unit. Controls work with native keyboard activation, pointer and
+simulated touch. Fitting permits planning; pause, focus loss and results reject
+changes. Restart restores 4/4/2, charge and route progress.
+
+| Preset | Engines / weapons / shields | Speed | Ark cadence | Recharge |
+| --- | --- | --- | --- | --- |
+| Balanced | 4 / 4 / 2 | 12 m/s | 1.0× | 8 HP/s |
+| Engines | 6 / 2 / 2 | 18 m/s | 0.5× | 8 HP/s |
+| Weapons | 2 / 6 / 2 | 6 m/s | 1.5× | 8 HP/s |
+| Shields | 2 / 2 / 6 | 6 m/s | 0.5× | 24 HP/s |
+
+Output curves are linear tuning constants: 3 m/s per engine unit, 0.25× reload
+progress per weapon unit (maximum 2.5×), and 4 HP/s per shield unit. Zero engine
+power stops progress while combat continues; zero weapons freezes ark reload
+progress and firing; zero shields stops recharge. Reallocation never grants
+instant charge or reload progress. Escort reactors and weapon damage stay
+independent. The engineering panel's travel ETA excludes combat clearance.
+Navigation beacons, gate position, route percentage and drive plumes share the
+same actual distance/speed. Reduced motion retains physical route progress.
 
 Sound effects use local Web Audio synthesis: flak reports, railgun cracks,
 missile exhaust, escort fire, hull impacts, explosions, contact/clear signals,

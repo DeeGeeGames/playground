@@ -3,8 +3,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnemy, createEscort, createTurret, disposeObject, type TurretVisual } from './actors-3d';
 import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, pickEnemy, pickMount, resizeView, toScreen, toWorld, TURRET_HEIGHT, viewFor, type View } from './projection';
-import { beaconAt, journeyAt } from './journey';
-import { createState, coverageFor, durationFor, ESCORTS, type Enemy, type Point, type State } from './simulation';
+import { beaconFor, CRUISE_SPEED, journeyFor } from './journey';
+import { createState, coverageFor, ESCORTS, type Enemy, type Point, type State } from './simulation';
 import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
 import { createTrajectory, effectHeight, projectileHeight, type Trajectory } from './projectiles-3d';
 import { shieldAppearance } from './shield-view';
@@ -234,8 +234,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		}
 		for (const escort of state.escorts) if (escort.sector) text(`G${escort.id} · ${escort.sector}`, toScreen(escort, view, FLIGHT_HEIGHT + 42), '#a6d4d9', 9);
 		for (const escort of state.escorts) if (escort.hp < ESCORTS[escort.kind].hp) { const at = toScreen(escort, view, FLIGHT_HEIGHT + 29); ctx.fillStyle = '#89d5de'; ctx.fillRect(at.x - 13, at.y, 26 * Math.max(0, escort.hp / ESCORTS[escort.kind].hp), 3); }
-		for (let i = 0; i <= 6; i++) { const point = beaconAt(i, state.time / durationFor(state) * 210); if (Math.abs(point.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: 180 }, view, -5), '#6e939f', 9); }
-		if (journeyAt(state.time / durationFor(state) * 210).remaining <= 1100) text('KEPLER GATE', toScreen({ x: journeyAt(state.time / durationFor(state) * 210).remaining, y: 0 }, view, 220), '#83dfcb');
+		for (let i = 0; i <= 6; i++) { const point = beaconFor(i, state); if (Math.abs(point.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: 180 }, view, -5), '#6e939f', 9); }
+		if (journeyFor(state).remaining <= 1100) text('KEPLER GATE', toScreen({ x: journeyFor(state).remaining, y: 0 }, view, 220), '#83dfcb');
 	};
 
 	return {
@@ -244,10 +244,10 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			resize(); if (view.width <= 0 || view.height <= 0) return;
 			controls.enabled = controlsEnabled; controls.update();
 			for (const [index, turret] of turrets.entries()) { const mount = state.mounts[index]; if (mount) turret.update(mount, selected === index); }
-			const journey = journeyAt(state.time / durationFor(state) * 210); const drift = reducedMotion ? 0 : journey.distance;
+			const journey = journeyFor(state); const drift = reducedMotion ? 0 : journey.distance;
 			const flicker = reducedMotion ? 0 : Math.sin(state.time * 17) * 4;
 			for (const drive of drives) if (drive) drive.traverse(function (object) { if (object instanceof Mesh) { const materials = Array.isArray(object.material) ? object.material : [object.material]; for (const material of materials) if (material instanceof MeshStandardMaterial) material.emissiveIntensity = journey.speed > 0 ? 3.2 + flicker * 0.05 : 1.5; } });
-			for (const { plume, origin } of plumes) { const length = 58 + flicker; plume.visible = journey.speed > 0; plume.scale.y = length; plume.position.set(origin.x - length / 2 - 2, origin.y, origin.z); }
+			for (const { plume, origin } of plumes) { const length = (58 + flicker) * journey.speed / CRUISE_SPEED; plume.visible = journey.speed > 0; plume.scale.y = length; plume.position.set(origin.x - length / 2 - 2, origin.y, origin.z); }
 			const shieldView = shieldAppearance(state);
 			shield.visible = shieldView.aegisVisible; energyShield.visible = shieldView.energyVisible;
 			energyShield.material.opacity = shieldView.energyOpacity; energyShield.material.color.set(shieldView.energyColor);
@@ -287,7 +287,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			while (effects.length < state.effects.length) { const effect = circle('#ffffff', 1, 1); scene.add(effect); effects.push(effect); }
 			for (const [index, model] of effects.entries()) { const effect = state.effects[index]; model.visible = !!effect; if (effect) { model.position.set(effect.x, effectHeight(effect), effect.y); model.scale.setScalar(effect.radius * (1 - effect.life / effect.maxLife * 0.7)); if (model.material instanceof MeshBasicMaterial) { model.material.transparent = true; model.material.color.set(effect.color); model.material.opacity = effect.life / effect.maxLife; } } }
 			gate.visible = journey.remaining <= 1100; gate.position.set(journey.remaining, 25, 0);
-			for (const [index, beacon] of beacons.entries()) { const at = beaconAt(index, state.time / durationFor(state) * 210); beacon.position.x = at.x; beacon.visible = Math.abs(at.x) <= 1100; }
+			for (const [index, beacon] of beacons.entries()) { const at = beaconFor(index, state); beacon.position.x = at.x; beacon.visible = Math.abs(at.x) <= 1100; }
 			for (const { points, parallax, origins } of stars) { const position = points.geometry.getAttribute('position'); for (let i = 0; i < position.count; i++) position.setX(i, (((origins[i * 3] ?? 0) - drift * parallax + 1500) % 3000 + 3000) % 3000 - 1500); position.needsUpdate = true; }
 			for (const { rock, x } of rocks) rock.position.x = ((x - drift * 0.72 + 1100) % 2200 + 2200) % 2200 - 1100;
 			navigation.position.x = -(drift % 160);

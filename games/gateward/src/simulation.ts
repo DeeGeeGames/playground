@@ -1,5 +1,5 @@
 import { ESCORT_DRILL, type Scenario } from './scenarios';
-import { absorbShieldDamage, advanceSystems, createSystems, type SystemsState } from './systems';
+import { absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
 export type Point = { x: number; y: number };
 export type Weapon = 'flak' | 'rail' | 'missile';
 export type EnemyKind = 'raider' | 'bomber' | 'armored' | 'flagship';
@@ -45,9 +45,10 @@ export interface State {
 }
 export const distance = function (a: Point, b: Point): number { return Math.hypot(a.x - b.x, a.y - b.y); };
 export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill'; systems?: boolean } = {}): State {
+	const scenario = options.scenario === 'drill' ? ESCORT_DRILL : undefined;
 	return {
-		systems: options.systems ? createSystems() : undefined,
-		scenario: options.scenario === 'drill' ? ESCORT_DRILL : undefined, experimental: options.scenario === 'drill' || (options.experimental ?? false), wings: [], launches: 0, orders: 0, escortLosses: 0, coverageDegrees: options.coverageDegrees ?? (options.scenario === 'drill' ? 240 : 360), paused: false, focused: true,
+		systems: options.systems ? createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed) : undefined,
+		scenario, experimental: options.scenario === 'drill' || (options.experimental ?? false), wings: [], launches: 0, orders: 0, escortLosses: 0, coverageDegrees: options.coverageDegrees ?? (options.scenario === 'drill' ? 240 : 360), paused: false, focused: true,
 		time: 0, hull: MAX_HULL, salvage: options.scenario === 'drill' ? ESCORT_DRILL.salvage : 300, wave: 0, nextWave: options.scenario === 'drill' ? (ESCORT_DRILL.encounters[0]?.at ?? 10) : 5, kills: 0, status: 'fitting',
 		mounts: [-1, 1].flatMap(function (side) { return [-96, -32, 32, 96].map(function (x): Mount { return { x, y: side * 43, weapon: undefined, level: 0, cooldown: 0, aim: side * Math.PI / 2 }; }); }),
 		enemies: [], escorts: [], shots: [], effects: [], arrivals: [], nextId: 1, rally: { x: 0, y: 0 }, priority: undefined,
@@ -56,6 +57,21 @@ export const createState = function (options: { coverageDegrees?: number; experi
 };
 export const notify = function (state: State, message: string) { state.message = message; state.messageTime = 4; };
 const canOrder = function (state: State) { return !state.paused && state.focused && (state.status === 'fitting' || state.status === 'running'); };
+export const setAllocation = function (state: State, allocation: Readonly<Allocation>): boolean {
+	const systems = state.systems;
+	if (!systems || !canOrder(state)) return false;
+	if (!POWER_CHANNELS.every(function (channel) { return Number.isInteger(allocation[channel]) && allocation[channel] >= 0; })) return false;
+	if (POWER_CHANNELS.reduce(function (sum, channel) { return sum + allocation[channel]; }, 0) !== REACTOR_UNITS) return false;
+	if (POWER_CHANNELS.every(function (channel) { return systems.allocation[channel] === allocation[channel]; })) return false;
+	systems.allocation = { engines: allocation.engines, weapons: allocation.weapons, shields: allocation.shields };
+	systems.powerChanges++;
+	return true;
+};
+export const transferPower = function (state: State, from: PowerChannel, to: PowerChannel): boolean {
+	if (!state.systems || from === to || !POWER_CHANNELS.includes(from) || !POWER_CHANNELS.includes(to)) return false;
+	const allocation = state.systems.allocation;
+	return setAllocation(state, { ...allocation, [from]: allocation[from] - 1, [to]: allocation[to] + 1 });
+};
 export const build = function (state: State, index: number, weapon: Weapon): boolean {
 	const mount = state.mounts[index]; const config = WEAPONS[weapon];
 	if (!canOrder(state) || !mount || mount.weapon || state.salvage < config.cost) return false;
@@ -181,7 +197,7 @@ const startEncounter = function (state: State) {
 export const durationFor = function (state: State): number { return state.scenario?.duration ?? ROUTE_SECONDS; };
 export const contactWarning = function (state: State): string {
 	const next = state.scenario?.encounters[state.wave];
-	return next ? `${next.sector.toUpperCase()} · ${next.count} ${next.kind} · arrival ${Math.max(0, Math.ceil(next.at - state.time))}s` : 'All contacts arrived · hold until 90s';
+	return next ? `${next.sector.toUpperCase()} · ${next.count} ${next.kind} · arrival ${Math.max(0, Math.ceil(next.at - state.time))}s` : state.systems ? 'Clear remaining contacts and reach gate' : 'All contacts arrived · hold until 90s';
 };
 const effect = function (state: State, point: Point, radius: number, color: string) {
 	state.effects.push({ x: point.x, y: point.y, radius, life: 0.45, maxLife: 0.45, color });
@@ -213,7 +229,10 @@ export const step = function (state: State, dt: number) {
 	if (!canOrder(state) || state.status !== 'running' || !Number.isFinite(dt) || dt <= 0) return;
 	dt = Math.min(dt, 0.05); state.time += dt;
 	state.pulseCooldown = Math.max(0, state.pulseCooldown - dt); state.aegisRemaining = Math.max(0, state.aegisRemaining - dt); state.repairCooldown = Math.max(0, state.repairCooldown - dt); state.messageTime = Math.max(0, state.messageTime - dt);
-	if (state.systems) state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
+	if (state.systems) {
+		state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
+		state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + powerOutputs(state.systems.allocation).speed * dt);
+	}
 	// The reactor provides a modest income even while enemies remain outside firing range.
 	state.salvage += dt * 1.2;
 	if (state.time >= state.nextWave) { if (state.scenario) startEncounter(state); else if (state.wave < WAVE_COUNT) startWave(state); }
@@ -221,8 +240,10 @@ export const step = function (state: State, dt: number) {
 		const config = ENEMIES[arrival.kind]; state.enemies.push({ id: state.nextId++, kind: arrival.kind, x: arrival.x, y: arrival.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8 });
 	}
 	state.arrivals = state.arrivals.filter(function (a) { return a.at > state.time; });
+	const weaponRate = state.systems ? powerOutputs(state.systems.allocation).weaponRate : 1;
 	for (const mount of state.mounts) {
-		mount.cooldown -= dt; if (!mount.weapon) continue;
+		mount.cooldown = state.systems ? Math.max(0, mount.cooldown - dt * weaponRate) : mount.cooldown - dt;
+		if (!mount.weapon || weaponRate === 0) continue;
 		const config = WEAPONS[mount.weapon]; const candidates = state.enemies.filter(function (enemy) { return enemy.hp > 0 && covered(state, mount, enemy); });
 		const target = candidates.find(function (enemy) { return enemy.id === state.priority; }) ?? nearest(mount, candidates, coverageFor(state, mount).range);
 		if (!target) continue;
@@ -292,5 +313,11 @@ export const step = function (state: State, dt: number) {
 		state.cleared = true; state.salvage += 50; state.hull = Math.min(MAX_HULL, state.hull + 60); notify(state, 'Sector secured. +50 salvage · +60 hull. Refit for the next contact.');
 	}
 	if (state.hull <= 0) { state.status = 'lost'; state.shots = []; }
-	else if (state.scenario ? state.time >= state.scenario.duration : state.time >= ROUTE_SECONDS && state.wave === WAVE_COUNT && state.enemies.length === 0 && state.arrivals.length === 0) { state.status = 'won'; state.shots = []; }
+	else {
+		const combatResolved = state.wave === (state.scenario?.encounters.length ?? WAVE_COUNT) && state.enemies.length === 0 && state.arrivals.length === 0;
+		const complete = state.systems
+			? state.time >= durationFor(state) && state.systems.distanceTraveled >= state.systems.routeLength && combatResolved
+			: state.scenario ? state.time >= state.scenario.duration : state.time >= ROUTE_SECONDS && combatResolved;
+		if (complete) { state.status = 'won'; state.shots = []; }
+	}
 };
