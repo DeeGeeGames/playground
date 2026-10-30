@@ -1,3 +1,4 @@
+import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fieldBlocks, fieldRelative, INTERDICTION_CONFIG, navigateField, type Detour } from './interdiction';
 import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
 import { ESCORT_DRILL, type Scenario } from './scenarios';
 import { absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
@@ -25,10 +26,10 @@ const ENEMIES = {
 	flagship: { hp: 2400, speed: 14, range: 370, damage: 55, reload: 2.8, reward: 180, armor: 0.7 },
 };
 export interface Mount extends Point { weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
-export interface Enemy extends Point { id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
+export interface Enemy extends Point { interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
 export interface Escort extends Point { wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
 export interface Shot extends Point { sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
-export interface Effect extends Point { radius: number; life: number; maxLife: number; color: string }
+export interface Effect extends Point { sourceShot?: Shot; radius: number; life: number; maxLife: number; color: string }
 export interface Arrival { at: number; kind: EnemyKind; x: number; y: number }
 export const SECTORS = ['port', 'starboard', 'ahead', 'astern'] as const;
 export type Sector = typeof SECTORS[number];
@@ -58,6 +59,31 @@ export const createState = function (options: { coverageDegrees?: number; experi
 };
 export const notify = function (state: State, message: string) { state.message = message; state.messageTime = 4; };
 const canOrder = function (state: State) { return !state.paused && state.focused && (state.status === 'fitting' || state.status === 'running'); };
+export const interdictionReason = function (state: State, point?: Point): string {
+	const interdiction = state.systems?.interdiction;
+	if (!interdiction) return 'Systems mode only';
+	if (!canOrder(state)) return state.paused ? 'Paused' : !state.focused ? 'Command link unfocused' : 'Run ended';
+	if (state.status !== 'running') return 'Depart first';
+	if (interdiction.field) return 'One field already active';
+	if (interdiction.cooldown > 0) return `Field cooling down: ${Math.ceil(interdiction.cooldown)}s`;
+	if (state.salvage < INTERDICTION_CONFIG.cost) return `Need ${INTERDICTION_CONFIG.cost} salvage`;
+	if (!point) return '';
+	if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return 'Choose a valid point';
+	if (point.x < INTERDICTION_CONFIG.minRelativeX || Math.hypot(point.x, point.y) > INTERDICTION_CONFIG.maxRange) return 'Place ahead or beside the ark, within 450m';
+	const fromHull = Math.hypot(Math.max(0, Math.abs(point.x) - 145), Math.max(0, Math.abs(point.y) - 40));
+	if (fromHull <= INTERDICTION_CONFIG.radius + INTERDICTION_CONFIG.minArkClearance) return 'Field must clear the ark hull';
+	if (state.enemies.some(function (enemy) { return enemy.hp > 0 && distance(point, enemy) <= enemyClearance(enemy); })) return 'Field must clear hostile ships';
+	return '';
+};
+export const placeInterdiction = function (state: State, point: Point): boolean {
+	if (interdictionReason(state, point) || !state.systems) return false;
+	const systems = state.systems;
+	state.salvage -= INTERDICTION_CONFIG.cost;
+	systems.interdiction.field = { id: state.nextId++, world: { x: systems.distanceTraveled + point.x, y: point.y }, remaining: INTERDICTION_CONFIG.lifetime };
+	systems.interdiction.cooldown = INTERDICTION_CONFIG.cooldown; systems.interdiction.placements++;
+	notify(state, 'Interdiction deployed. Hostile approaches and rounds are blocked.');
+	return true;
+};
 export const setAllocation = function (state: State, allocation: Readonly<Allocation>): boolean {
 	const systems = state.systems;
 	if (!systems || !canOrder(state)) return false;
@@ -240,8 +266,8 @@ export const contactWarning = function (state: State): string {
 	const count = contacts.filter(function (enemy) { return enemy.kind === contact.kind && contactDirection(enemy) === contactDirection(contact) && contactIntel(state, enemy) === 'classified'; }).length;
 	return `${contactDirection(contact)} · ${count} ${contact.kind} · in range`;
 };
-const effect = function (state: State, point: Point, radius: number, color: string) {
-	state.effects.push({ x: point.x, y: point.y, radius, life: 0.45, maxLife: 0.45, color });
+const effect = function (state: State, point: Point, radius: number, color: string, sourceShot?: Shot) {
+	state.effects.push({ x: point.x, y: point.y, radius, life: 0.45, maxLife: 0.45, color, ...(sourceShot ? { sourceShot: { ...sourceShot } } : {}) });
 };
 const fire = function (state: State, from: Point, to: Point, damage: number, speed: number, side: Shot['side'], weapon: Shot['weapon'], target: number | undefined, sensorDamage?: number) {
 	const angle = Math.atan2(to.y - from.y, to.x - from.x);
@@ -270,16 +296,19 @@ export const step = function (state: State, dt: number) {
 	if (!canOrder(state) || state.status !== 'running' || !Number.isFinite(dt) || dt <= 0) return;
 	dt = Math.min(dt, 0.05); state.time += dt;
 	state.pulseCooldown = Math.max(0, state.pulseCooldown - dt); state.aegisRemaining = Math.max(0, state.aegisRemaining - dt); state.repairCooldown = Math.max(0, state.repairCooldown - dt); state.messageTime = Math.max(0, state.messageTime - dt);
+	const distanceBefore = state.systems?.distanceTraveled ?? 0;
 	if (state.systems) {
 		state.systems.sensors.repairCooldown = Math.max(0, state.systems.sensors.repairCooldown - dt);
 		state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
 		state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + powerOutputs(state.systems.allocation).speed * dt);
 	}
+	const fieldDrift = (state.systems?.distanceTraveled ?? 0) - distanceBefore;
+	advanceInterdiction(state, dt);
 	// The reactor provides a modest income even while enemies remain outside firing range.
 	state.salvage += dt * 1.2;
 	if (state.time >= state.nextWave) { if (state.scenario) startEncounter(state); else if (state.wave < WAVE_COUNT) startWave(state); }
 	for (const arrival of state.arrivals.filter(function (a) { return a.at <= state.time; })) {
-		const config = ENEMIES[arrival.kind]; state.enemies.push({ id: state.nextId++, kind: arrival.kind, x: arrival.x, y: arrival.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8 });
+		const config = ENEMIES[arrival.kind]; const position = arrivalOutsideField(state, arrival, arrival.kind); state.enemies.push({ id: state.nextId++, kind: arrival.kind, x: position.x, y: position.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8 });
 	}
 	state.arrivals = state.arrivals.filter(function (a) { return a.at > state.time; });
 	clearLostPriority(state);
@@ -315,8 +344,9 @@ export const step = function (state: State, dt: number) {
 		const config = ENEMIES[enemy.kind]; enemy.cooldown -= dt;
 		const escort = nearest(enemy, state.escorts.filter(function (e) { return e.hp > 0; }), 180);
 		const destination = escort ?? { x: Math.max(-110, Math.min(110, enemy.x)), y: Math.max(-30, Math.min(30, enemy.y)) };
-		if (distance(enemy, destination) > config.range * 0.85) moveToward(enemy, destination, config.speed, dt);
-		if (enemy.cooldown <= 0 && distance(enemy, destination) <= config.range) {
+		const detouring = navigateField(state, enemy, destination, config.speed, dt, fieldDrift, distance(enemy, destination) > config.range * 0.85);
+		if (!detouring && distance(enemy, destination) > config.range * 0.85) moveToward(enemy, destination, config.speed, dt);
+		if (enemy.cooldown <= 0 && distance(enemy, destination) <= config.range && !fieldBlocks(state, enemy, destination)) {
 			fire(state, enemy, destination, config.damage, enemy.kind === 'bomber' ? 155 : 235, 'enemy', 'hostile', escort?.id, state.systems && enemy.kind === 'bomber' ? SENSOR_CONFIG.damagePerBomberHit : undefined); enemy.cooldown = config.reload;
 		}
 	}
@@ -335,6 +365,11 @@ export const step = function (state: State, dt: number) {
 			if (shot.weapon === 'missile') { for (const enemy of state.enemies) if (distance(hit, enemy) < 85) damageEnemy(enemy, shot.damage, shot.weapon); effect(state, hit, 85, '#f9c875'); }
 			else { damageEnemy(hit, shot.damage, shot.weapon); effect(state, hit, 10, '#a6efe5'); }
 		} else {
+			const center = fieldRelative(state);
+			const blocked = center ? circleHit({ x: before.x - fieldDrift, y: before.y }, shot, center, INTERDICTION_CONFIG.radius) : undefined;
+			if (blocked && state.systems) {
+				effect(state, blocked, 20, '#d7bf89', shot); shot.life = 0; state.systems.interdiction.blockedShots++; continue;
+			}
 			const hit = state.escorts.find(function (escort) { return escort.hp > 0 && segmentDistance(escort, before, shot) < (escort.kind === 'guardian' ? 20 : 12); });
 			if (hit) { hit.hp -= shot.damage; shot.life = 0; effect(state, hit, 15, '#ff897e'); }
 			else if (Math.abs(shot.x) < 145 && Math.abs(shot.y) < 40) {

@@ -1,3 +1,4 @@
+import type { InterdictionField } from './interdiction';
 import { SENSOR_CONFIG } from './sensors';
 export const POWER_CHANNELS = ['engines', 'weapons', 'shields'] as const;
 export type PowerChannel = typeof POWER_CHANNELS[number];
@@ -31,6 +32,7 @@ export const SHIELD_CONFIG = {
 } as const;
 
 export interface SystemsState {
+	interdiction: { field: InterdictionField | undefined; cooldown: number; placements: number; redirected: number; blockedShots: number };
 	sensors: { integrity: number; repairCooldown: number; impairments: number; repairs: number };
 	allocation: Allocation;
 	distanceTraveled: number;
@@ -43,6 +45,7 @@ export interface SystemsState {
 
 export const createSystems = function (routeLength: number): SystemsState {
 	return {
+		interdiction: { field: undefined, cooldown: 0, placements: 0, redirected: 0, blockedShots: 0 },
 		sensors: { integrity: SENSOR_CONFIG.maxIntegrity, repairCooldown: 0, impairments: 0, repairs: 0 },
 		allocation: { ...POWER_PRESETS.balanced }, distanceTraveled: 0, routeLength, powerChanges: 0,
 		shield: { charge: SHIELD_CONFIG.initialCharge, capacity: SHIELD_CONFIG.capacity, rechargeDelay: 0, hitFlash: 0 },

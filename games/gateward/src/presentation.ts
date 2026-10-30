@@ -4,17 +4,19 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnemy, createEscort, createTurret, disposeObject, type TurretVisual } from './actors-3d';
 import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, pickEnemy, pickMount, resizeView, toScreen, toWorld, TURRET_HEIGHT, viewFor, type View } from './projection';
 import { beaconFor, CRUISE_SPEED, journeyFor } from './journey';
-import { createState, coverageFor, ESCORTS, type Enemy, type Point, type State } from './simulation';
+import { createState, coverageFor, ESCORTS, interdictionReason, type Enemy, type Point, type State } from './simulation';
 import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
 import { createTrajectory, effectHeight, projectileHeight, type Trajectory } from './projectiles-3d';
 import { shieldAppearance } from './shield-view';
 import { canAcquire, contactIntel } from './sensors';
+import { fieldRelative, INTERDICTION_CONFIG } from './interdiction';
 
 type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'hull' };
 export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined }
 export interface Presentation {
-	render: (state: State, selected: number, reducedMotion: boolean, rallyMode: boolean, controlsEnabled: boolean) => void;
+	render: (state: State, selected: number, reducedMotion: boolean, rallyMode: boolean, controlsEnabled: boolean, placement?: Point) => void;
 	pick: (point: Point, state: State) => PickResult;
+	placementPoint: (point: Point) => Point | undefined;
 	resetCamera: () => void;
 	cancelInteraction: () => void;
 	getView: () => View;
@@ -134,6 +136,10 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	const range = new Line(new BufferGeometry(), new LineBasicMaterial({ color: '#77dec8', transparent: true, opacity: 0.22, depthWrite: false })); scene.add(range);
 	let coverageSignature = '';
 	const rally = circle('#b7dbe4', 25, 0.7, 1); scene.add(rally);
+	const field = circle('#d7bf89', INTERDICTION_CONFIG.radius, 0.85, 2); field.visible = false; scene.add(field);
+	const buoy = new Mesh(new IcosahedronGeometry(8, 0), new MeshBasicMaterial({ color: '#d7bf89' })); buoy.visible = false; scene.add(buoy);
+	const fieldPreview = circle('#d0e7a6', INTERDICTION_CONFIG.radius, 0.65, 2); fieldPreview.visible = false; scene.add(fieldPreview);
+	const placementRange = circle('#d7bf89', INTERDICTION_CONFIG.maxRange, 0.18, 1); placementRange.position.y = FLIGHT_HEIGHT; placementRange.visible = false; scene.add(placementRange);
 	const priority = circle('#f4d68a', 1, 0.9, 0.025); scene.add(priority);
 	const gate = new Group();
 	for (const [radius, tube, color] of [[170, 9, '#234c4b'], [150, 3, '#83dfcb']] as const) {
@@ -227,6 +233,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		for (const enemy of state.enemies) {
 			const intel = contactIntel(state, enemy);
 			if (intel === 'unseen') continue;
+			if (enemy.detour) text('DETOUR', toScreen(enemy, view, FLIGHT_HEIGHT + 20), '#d7bf89', 9);
 			if (state.systems && intel === 'detected') text('?', toScreen(enemy, view, FLIGHT_HEIGHT + 36), '#d7bf89', 12);
 			if (state.systems && intel === 'classified' && enemy.kind === 'bomber' && !bomberLabelShown) {
 				text('BOMBER · ARRAY ROUNDS', toScreen(enemy, view, FLIGHT_HEIGHT + 52), '#f59682', 9); bomberLabelShown = true;
@@ -243,17 +250,26 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		}
 		for (const escort of state.escorts) if (escort.sector) text(`G${escort.id} · ${escort.sector}`, toScreen(escort, view, FLIGHT_HEIGHT + 42), '#a6d4d9', 9);
 		for (const escort of state.escorts) if (escort.hp < ESCORTS[escort.kind].hp) { const at = toScreen(escort, view, FLIGHT_HEIGHT + 29); ctx.fillStyle = '#89d5de'; ctx.fillRect(at.x - 13, at.y, 26 * Math.max(0, escort.hp / ESCORTS[escort.kind].hp), 3); }
+		const position = fieldRelative(state); const activeField = state.systems?.interdiction.field;
+		if (position && activeField) text(`INTERDICTION · ${Math.ceil(activeField.remaining)}s`, toScreen(position, view, FLIGHT_HEIGHT + 30), '#d7bf89', 10);
 		for (let i = 0; i <= 6; i++) { const point = beaconFor(i, state); if (Math.abs(point.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: 180 }, view, -5), '#6e939f', 9); }
 		if (journeyFor(state).remaining <= 1100) text('KEPLER GATE', toScreen({ x: journeyFor(state).remaining, y: 0 }, view, 220), '#83dfcb');
 	};
 
 	return {
-		render: function (state, selected, reducedMotion, rallyMode, controlsEnabled) {
+		render: function (state, selected, reducedMotion, rallyMode, controlsEnabled, placement) {
 			if (disposed) return;
 			resize(); if (view.width <= 0 || view.height <= 0) return;
 			controls.enabled = controlsEnabled; controls.update();
 			for (const [index, turret] of turrets.entries()) { const mount = state.mounts[index]; if (mount) turret.update(mount, selected === index); }
 			const journey = journeyFor(state); const drift = reducedMotion ? 0 : journey.distance;
+			const fieldPosition = fieldRelative(state); field.visible = !!fieldPosition; buoy.visible = !!fieldPosition;
+			if (fieldPosition) { field.position.set(fieldPosition.x, FLIGHT_HEIGHT, fieldPosition.y); buoy.position.set(fieldPosition.x, FLIGHT_HEIGHT + 8, fieldPosition.y); }
+			fieldPreview.visible = !!placement; placementRange.visible = !!placement;
+			if (placement) {
+				fieldPreview.position.set(placement.x, FLIGHT_HEIGHT, placement.y);
+				if (fieldPreview.material instanceof MeshBasicMaterial) fieldPreview.material.color.set(interdictionReason(state, placement) ? '#f19686' : '#d0e7a6');
+			}
 			const flicker = reducedMotion ? 0 : Math.sin(state.time * 17) * 4;
 			for (const drive of drives) if (drive) drive.traverse(function (object) { if (object instanceof Mesh) { const materials = Array.isArray(object.material) ? object.material : [object.material]; for (const material of materials) if (material instanceof MeshStandardMaterial) material.emissiveIntensity = journey.speed > 0 ? 3.2 + flicker * 0.05 : 1.5; } });
 			for (const { plume, origin } of plumes) { const length = (58 + flicker) * journey.speed / CRUISE_SPEED; plume.visible = journey.speed > 0; plume.scale.y = length; plume.position.set(origin.x - length / 2 - 2, origin.y, origin.z); }
@@ -277,7 +293,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT, target.y); priority.scale.setScalar(target.kind === 'flagship' ? 70 : 42); }
 			const liveEnemies = new Set(state.enemies.map(function (enemy) { return enemy.id; }));
 			for (const [id, model] of enemyModels) if (!liveEnemies.has(id)) { scene.remove(model); targets.delete(model); disposeObject(model); enemyModels.delete(id); }
-			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); model.rotation.y = -Math.atan2(-enemy.y, -enemy.x); }
+			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); const heading = enemy.detour ? { x: enemy.detour.waypoint.x - (state.systems?.distanceTraveled ?? 0), y: enemy.detour.waypoint.y } : { x: 0, y: 0 }; model.rotation.y = -Math.atan2(heading.y - enemy.y, heading.x - enemy.x); }
 			const liveEscorts = new Set(state.escorts.map(function (escort) { return escort.id; }));
 			for (const [id, model] of escortModels) if (!liveEscorts.has(id)) { scene.remove(model); disposeObject(model); escortModels.delete(id); }
 			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } model.position.set(escort.x, FLIGHT_HEIGHT, escort.y); model.rotation.y = -escort.angle; }
@@ -294,7 +310,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			}
 			if (shotCapacity > 0) { shotGeometry.getAttribute('position').needsUpdate = true; shotGeometry.getAttribute('color').needsUpdate = true; } shotGeometry.setDrawRange(0, state.shots.length * 2);
 			while (effects.length < state.effects.length) { const effect = circle('#ffffff', 1, 1); scene.add(effect); effects.push(effect); }
-			for (const [index, model] of effects.entries()) { const effect = state.effects[index]; model.visible = !!effect; if (effect) { model.position.set(effect.x, effectHeight(effect), effect.y); model.scale.setScalar(effect.radius * (1 - effect.life / effect.maxLife * 0.7)); if (model.material instanceof MeshBasicMaterial) { model.material.transparent = true; model.material.color.set(effect.color); model.material.opacity = effect.life / effect.maxLife; } } }
+			for (const [index, model] of effects.entries()) { const effect = state.effects[index]; model.visible = !!effect; if (effect) { model.position.set(effect.x, effectHeight(effect, state), effect.y); model.scale.setScalar(effect.radius * (1 - effect.life / effect.maxLife * 0.7)); if (model.material instanceof MeshBasicMaterial) { model.material.transparent = true; model.material.color.set(effect.color); model.material.opacity = effect.life / effect.maxLife; } } }
 			gate.visible = journey.remaining <= 1100; gate.position.set(journey.remaining, 25, 0);
 			for (const [index, beacon] of beacons.entries()) { const at = beaconFor(index, state); beacon.position.x = at.x; beacon.visible = Math.abs(at.x) <= 1100; }
 			for (const { points, parallax, origins } of stars) { const position = points.geometry.getAttribute('position'); for (let i = 0; i < position.count; i++) position.setX(i, (((origins[i * 3] ?? 0) - drift * parallax + 1500) % 3000 + 3000) % 3000 - 1500); position.needsUpdate = true; }
@@ -312,6 +328,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			if (mount < 0 && !enemy) { const candidate = pickEnemy(point, view, state.enemies); if (candidate) { const center = hit(toScreen(candidate, view, FLIGHT_HEIGHT), roots); if (center?.kind === 'enemy' && center.id === candidate.id) enemy = candidate; } }
 			return { mount, enemy, world: toWorld(point, view) };
 		},
+		placementPoint: function (point) { resize(); return toWorld(point, view, FLIGHT_HEIGHT); },
 		resetCamera: function () { controls.reset(); labelsDirty = true; },
 		cancelInteraction: function () { controls.disconnect(); controls.connect(canvas); },
 		getView: function () { return view; },
