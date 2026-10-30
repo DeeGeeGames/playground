@@ -1,4 +1,5 @@
 import { createEscortPanel } from './escort-panel';
+import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
 import { build, contactWarning, craftCount, durationFor, createState, deploy, ESCORTS, invested, MAX_HULL, notify, pulse, repair, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Weapon } from './simulation';
 import { createPresentation } from './presentation';
@@ -46,6 +47,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (paused) button('resume').focus({ preventScroll: true }); else focusCanvas();
 	};
 	const presentation = await createPresentation(canvas);
+	const detachFullscreen = attachFullscreen(container, button('fullscreen'), element('fullscreen-status'));
 	canvas.addEventListener('webglcontextlost', function () { contextAvailable = false; setPause(true); notify(state, 'Graphics interrupted. Voyage paused until the display is restored.'); }, options);
 	canvas.addEventListener('webglcontextrestored', function () { contextAvailable = true; notify(state, 'Display restored. Resume when ready.'); }, options);
 	button('reset-camera').addEventListener('click', function () { presentation.resetCamera(); focusCanvas(); }, options);
@@ -199,6 +201,6 @@ const shutdown = await mountGame('game', async function (container) {
 		frame = requestAnimationFrame(tick);
 	};
 	frame = requestAnimationFrame(tick);
-	return function () { disposed = true; cancelAnimationFrame(frame); abort.abort(); pointers.clear(); presentation.dispose(); };
+	return function () { disposed = true; cancelAnimationFrame(frame); abort.abort(); detachFullscreen(); pointers.clear(); presentation.dispose(); };
 });
 if (import.meta.hot) import.meta.hot.dispose(shutdown);
