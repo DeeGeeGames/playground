@@ -1,7 +1,9 @@
 import { BoxGeometry, BufferGeometry, CylinderGeometry, ExtrudeGeometry, Group, Line, Material, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Points, Shape, TorusGeometry } from 'three';
 import { DECK_HEIGHT, TURRET_HEIGHT } from './projection';
 import { TURRET_RISE, TURRET_SCALE } from './ship-config';
-import type { Enemy, Escort, Mount, Weapon } from './simulation';
+import type { Mount, Weapon } from './simulation';
+
+export { createEnemy, createEscort } from './craft-3d';
 
 type Outline = readonly (readonly [number, number])[];
 type SolidMaterial = MeshStandardMaterial | MeshBasicMaterial;
@@ -136,73 +138,6 @@ export const createTurret = function (mount: Mount): TurretVisual {
 	};
 	update(mount, false);
 	return { root, update };
-};
-
-export const createEnemy = function (enemy: Enemy): Group {
-	const root = new Group();
-	root.name = `Hostile_${enemy.kind}_${enemy.id}`;
-	const box = new BoxGeometry(1, 1, 1);
-	const color = enemy.kind === 'armored' ? '#a378a4' : enemy.kind === 'bomber' ? '#c99267' : '#ae626b';
-	const shell = armor(color);
-	const dark = armor('#493742');
-	const bright = armor(enemy.kind === 'armored' ? '#c5a6c8' : '#e3a88f');
-	const engine = light('#efb38d');
-
-	if (enemy.kind === 'flagship') {
-		addHull(root, [[-46, -22], [-18, -35], [45, -15], [58, 0], [45, 15], [-18, 35], [-46, 22], [-22, 0]], 18, shell);
-		addHull(root, [[-25, -13], [20, -13], [30, 0], [20, 13], [-25, 13]], 13, dark, 12);
-		addBox(root, box, bright, -12, 22, 0, 20, 7, 18);
-		addBox(root, box, engine, -10, 26, 0, 14, 1.2, 12);
-		for (const z of [-21, 21]) {
-			addBox(root, box, dark, -10, 10, z, 15, 7, 9);
-			addBox(root, box, bright, 2, 11, z, 21, 3, 3);
-			addBox(root, box, engine, -40, -1, z / 1.5, 2, 8, 8);
-		}
-		return root;
-	}
-	if (enemy.kind === 'armored') {
-		addHull(root, [[-22, -20], [17, -20], [30, 0], [17, 20], [-22, 20]], 11, shell);
-		addHull(root, [[-12, -10], [10, -10], [17, 0], [10, 10], [-12, 10]], 7, bright, 7);
-		for (const z of [-18, 18]) addBox(root, box, dark, -1, 0, z, 29, 8, 5);
-		addBox(root, box, engine, -22.5, 0, 0, 1.5, 5, 13);
-		return root;
-	}
-	if (enemy.kind === 'bomber') {
-		addHull(root, [[-18, -20], [0, -12], [22, 0], [0, 12], [-18, 20], [-9, 0]], 6, shell);
-		for (const z of [-11, 11]) {
-			addBox(root, box, dark, -3, 2, z, 20, 7, 6);
-			addBox(root, box, engine, -14, 2, z, 1.5, 4, 4);
-		}
-		addBox(root, box, bright, 4, 5, 0, 11, 3, 7);
-		return root;
-	}
-	addHull(root, [[-13, -11], [18, 0], [-13, 11], [-5, 0]], 5, shell);
-	addBox(root, box, dark, 0, 2.5, 0, 12, 2, 7);
-	addBox(root, box, bright, 0, 4.3, 0, 9, 1.5, 5);
-	addBox(root, box, engine, -9, 0, 0, 2, 3, 5);
-	return root;
-};
-
-export const createEscort = function (escort: Escort): Group {
-	const root = new Group();
-	root.name = `Escort_${escort.kind}_${escort.id}`;
-	const box = new BoxGeometry(1, 1, 1);
-	const guardian = escort.kind === 'guardian';
-	const shell = armor(guardian ? '#7296c5' : '#7fc6c3');
-	const dark = armor('#2b4a62');
-	const bright = light(guardian ? '#abd5ef' : '#a5ebe1');
-	if (guardian) {
-		addHull(root, [[-20, -13], [10, -13], [23, 0], [10, 13], [-20, 13], [-13, 0]], 9, shell);
-		addBox(root, box, dark, -3, 6, 0, 15, 6, 11);
-		addBox(root, box, shell, 10, 7, 0, 18, 3, 3);
-		for (const z of [-8, 8]) addBox(root, box, bright, -18, 0, z, 2, 4, 4);
-		addBox(root, box, bright, -1, 9.3, 0, 7, 0.8, 7);
-		return root;
-	}
-	addHull(root, [[-11, -8], [15, 0], [-11, 8], [-5, 0]], 4, shell);
-	addBox(root, box, dark, 1, 3, 0, 8, 2.5, 4);
-	addBox(root, box, bright, -7, 0, 0, 2, 2, 4);
-	return root;
 };
 
 export const disposeObject = function (root: Object3D): void {

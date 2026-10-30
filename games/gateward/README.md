@@ -59,6 +59,13 @@ source is `assets/gateward-ark.blend`. It has about 8,800 triangles, eight mater
 and no external textures. `tools/build-ark.py` reproduces it in an isolated Blender
 scene and preserves an existing user document when called from live Blender.
 
+The two escort craft and four hostile classes use faceted, segmented steel armor,
+recessed warm glazing, and housed stern drives to match the ark. Escort recognition
+marks stay cyan; hostile plating retains muted rust, ochre, and plum distinctions.
+`src/craft-3d.ts` builds these small models and batches details by material (at most
+eight draws per craft). They keep the original tactical scale, flight layer, and
+planar combat rules. Turret models are unchanged by this supporting-craft pass.
+
 To rebuild the source and runtime asset with Blender on your PATH:
 
 ```sh
