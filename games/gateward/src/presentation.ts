@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnemy, createEscort, createTurret, disposeObject, type TurretVisual } from './actors-3d';
 import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, pickEnemy, pickMount, resizeView, toScreen, toWorld, TURRET_HEIGHT, viewFor, type View } from './projection';
 import { beaconAt, journeyAt } from './journey';
-import { createState, ESCORTS, WEAPONS, type Enemy, type Point, type State } from './simulation';
+import { createState, coverageFor, durationFor, ESCORTS, type Enemy, type Point, type State } from './simulation';
 import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
 import { createTrajectory, effectHeight, projectileHeight, type Trajectory } from './projectiles-3d';
 
@@ -127,7 +127,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	});
 	const shield = new Mesh(new SphereGeometry(1, 40, 24), new MeshBasicMaterial({ color: '#88f1e4', transparent: true, opacity: 0.065, depthWrite: false, blending: AdditiveBlending }));
 	shield.scale.set(SHIELD_RADII.x, SHIELD_RADII.y, SHIELD_RADII.z); shield.position.set(SHIELD_CENTER.x, SHIELD_CENTER.y, SHIELD_CENTER.z); shield.visible = false; scene.add(shield);
-	const range = circle('#77dec8', 1, 0.22); scene.add(range);
+	const range = new Line(new BufferGeometry(), new LineBasicMaterial({ color: '#77dec8', transparent: true, opacity: 0.22, depthWrite: false })); scene.add(range);
+	let coverageSignature = '';
 	const rally = circle('#b7dbe4', 25, 0.7, 1); scene.add(rally);
 	const priority = circle('#f4d68a', 1, 0.9, 0.025); scene.add(priority);
 	const gate = new Group();
@@ -228,9 +229,10 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			ctx.save(); ctx.translate(marker.point.x, marker.point.y); ctx.rotate(marker.angle);
 			ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-6, -5); ctx.lineTo(-6, 5); ctx.closePath(); ctx.fillStyle = '#f59682'; ctx.fill(); ctx.restore();
 		}
+		for (const escort of state.escorts) if (escort.sector) text(`G${escort.id} · ${escort.sector}`, toScreen(escort, view, FLIGHT_HEIGHT + 42), '#a6d4d9', 9);
 		for (const escort of state.escorts) if (escort.hp < ESCORTS[escort.kind].hp) { const at = toScreen(escort, view, FLIGHT_HEIGHT + 29); ctx.fillStyle = '#89d5de'; ctx.fillRect(at.x - 13, at.y, 26 * Math.max(0, escort.hp / ESCORTS[escort.kind].hp), 3); }
-		for (let i = 0; i <= 6; i++) { const point = beaconAt(i, state.time); if (Math.abs(point.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: 180 }, view, -5), '#6e939f', 9); }
-		if (journeyAt(state.time).remaining <= 1100) text('KEPLER GATE', toScreen({ x: journeyAt(state.time).remaining, y: 0 }, view, 220), '#83dfcb');
+		for (let i = 0; i <= 6; i++) { const point = beaconAt(i, state.time / durationFor(state) * 210); if (Math.abs(point.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: 180 }, view, -5), '#6e939f', 9); }
+		if (journeyAt(state.time / durationFor(state) * 210).remaining <= 1100) text('KEPLER GATE', toScreen({ x: journeyAt(state.time / durationFor(state) * 210).remaining, y: 0 }, view, 220), '#83dfcb');
 	};
 
 	return {
@@ -239,15 +241,23 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			resize(); if (view.width <= 0 || view.height <= 0) return;
 			controls.enabled = controlsEnabled; controls.update();
 			for (const [index, turret] of turrets.entries()) { const mount = state.mounts[index]; if (mount) turret.update(mount, selected === index); }
-			const journey = journeyAt(state.time); const drift = reducedMotion ? 0 : journey.distance;
+			const journey = journeyAt(state.time / durationFor(state) * 210); const drift = reducedMotion ? 0 : journey.distance;
 			const flicker = reducedMotion ? 0 : Math.sin(state.time * 17) * 4;
 			for (const drive of drives) if (drive) drive.traverse(function (object) { if (object instanceof Mesh) { const materials = Array.isArray(object.material) ? object.material : [object.material]; for (const material of materials) if (material instanceof MeshStandardMaterial) material.emissiveIntensity = journey.speed > 0 ? 3.2 + flicker * 0.05 : 1.5; } });
 			for (const { plume, origin } of plumes) { const length = 58 + flicker; plume.visible = journey.speed > 0; plume.scale.y = length; plume.position.set(origin.x - length / 2 - 2, origin.y, origin.z); }
 			shield.visible = state.shield > 0;
 			const mount = state.mounts[selected];
 			range.visible = !!mount?.weapon;
-			if (mount?.weapon) { const radius = WEAPONS[mount.weapon].range * (1 + (mount.level - 1) * 0.12); range.scale.setScalar(radius); range.position.set(mount.x, TURRET_HEIGHT, mount.y); }
-			rally.visible = state.escorts.length > 0 || rallyMode; rally.position.set(state.rally.x, 1, state.rally.y);
+			if (mount?.weapon) {
+				const coverage = coverageFor(state, mount); const signature = `${selected}/${coverage.range}/${coverage.arc}`;
+				if (signature !== coverageSignature) {
+					const points = Array.from({ length: 97 }, function (_, i) { const angle = coverage.center - coverage.arc / 2 + coverage.arc * i / 96; return new Vector3(Math.cos(angle) * coverage.range, 0, Math.sin(angle) * coverage.range); });
+					if (coverage.arc < Math.PI * 2) { points.unshift(new Vector3()); points.push(new Vector3()); }
+					range.geometry.dispose(); range.geometry = new BufferGeometry().setFromPoints(points); coverageSignature = signature;
+				}
+				range.position.set(mount.x, TURRET_HEIGHT, mount.y);
+			}
+			rally.visible = !state.experimental && (state.escorts.length > 0 || rallyMode); rally.position.set(state.rally.x, 1, state.rally.y);
 			if (rally.material instanceof MeshBasicMaterial) rally.material.color.set(rallyMode ? '#d5ed9b' : '#9edbf0');
 			const target = state.enemies.find(function (enemy) { return enemy.id === state.priority; }); priority.visible = !!target;
 			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT, target.y); priority.scale.setScalar(target.kind === 'flagship' ? 70 : 42); }
@@ -272,7 +282,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			while (effects.length < state.effects.length) { const effect = circle('#ffffff', 1, 1); scene.add(effect); effects.push(effect); }
 			for (const [index, model] of effects.entries()) { const effect = state.effects[index]; model.visible = !!effect; if (effect) { model.position.set(effect.x, effectHeight(effect), effect.y); model.scale.setScalar(effect.radius * (1 - effect.life / effect.maxLife * 0.7)); if (model.material instanceof MeshBasicMaterial) { model.material.transparent = true; model.material.color.set(effect.color); model.material.opacity = effect.life / effect.maxLife; } } }
 			gate.visible = journey.remaining <= 1100; gate.position.set(journey.remaining, 25, 0);
-			for (const [index, beacon] of beacons.entries()) { const at = beaconAt(index, state.time); beacon.position.x = at.x; beacon.visible = Math.abs(at.x) <= 1100; }
+			for (const [index, beacon] of beacons.entries()) { const at = beaconAt(index, state.time / durationFor(state) * 210); beacon.position.x = at.x; beacon.visible = Math.abs(at.x) <= 1100; }
 			for (const { points, parallax, origins } of stars) { const position = points.geometry.getAttribute('position'); for (let i = 0; i < position.count; i++) position.setX(i, (((origins[i * 3] ?? 0) - drift * parallax + 1500) % 3000 + 3000) % 3000 - 1500); position.needsUpdate = true; }
 			for (const { rock, x } of rocks) rock.position.x = ((x - drift * 0.72 + 1100) % 2200 + 2200) % 2200 - 1100;
 			navigation.position.x = -(drift % 160);
