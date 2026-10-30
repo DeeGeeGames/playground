@@ -14,7 +14,11 @@ hostiles to win; losing the ark's hull ends the run.
   the original orthographic tactical camera. The camera stays centered on the ark.
 - Beam costs 125 salvage, reaches 300m and deals 48 damage per second before armor at balanced weapon power. It automatically tracks one eligible target; upgrades and weapon power scale sustained damage.
 - Flak handles light ships; railguns ignore armor; homing missiles deal splash
-  damage. All turrets fire automatically through full arcs. Upgrade to level 3
+  damage. All turrets turn toward their firing solution before firing automatically
+  through full arcs. Flak turns at 360°/s, beams at 180°/s, missiles at 120°/s,
+  and railguns at 90°/s. Projectile barrels track the lead angle; beams track the
+  contact directly. Turning continues during reload and freezes with zero weapon
+  power, pause, or focus loss. Upgrade to level 3
   for damage, range, and fire rate. Selling returns 70% of the investment.
 - Deploy three interceptors or one guardian. There are nine shared craft slots.
   Click empty space to rally escorts, or use R / the rally button first. Enemies

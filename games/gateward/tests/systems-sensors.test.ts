@@ -80,9 +80,9 @@ describe('acquisition and local defense', function () {
 	test('offline turrets fire locally and missile guidance stops outside detection then recovers', function () {
 		const state = quiet(); const sensors = systemsFor(state).sensors;
 		build(state, 0, 'rail'); sensors.integrity = 0;
-		const enemy = enemyAt(state, 0, -300); step(state, 0.05);
+		const enemy = enemyAt(state, -96, -300); step(state, 0.05);
 		expect(state.shots).toHaveLength(0);
-		enemy.y = -180; step(state, 0.05);
+		enemy.y = -160; step(state, 0.05);
 		expect(state.shots.some(function (shot) { return shot.weapon === 'rail'; })).toBe(true);
 		state.shots = []; enemy.y = -300;
 		state.shots.push({ id: state.nextId++, x: 500, y: 500, vx: 100, vy: 0, damage: 1, side: 'player', weapon: 'missile', target: enemy.id, life: 4 });

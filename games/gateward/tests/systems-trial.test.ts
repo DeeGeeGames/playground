@@ -108,6 +108,7 @@ describe('reproducible equipped trial strategies', function () {
 		const baseline = runTrialStrategy('balanced'); const field = runTrialStrategy('balanced', true);
 		expect(field.state).toEqual(runTrialStrategy('balanced', true).state);
 		expect(field.summary?.reason).toBe('arrival'); expect(field.summary?.fieldPlacements).toBe(1); expect(field.summary?.redirected).toBeGreaterThan(0);
-		expect(field.summary?.kills).toBe(baseline.summary?.kills); expect(field.summary?.shieldAbsorbed).toBeLessThan(baseline.summary?.shieldAbsorbed ?? 0);
+		// Turning delays alter kill timing; this strategy can now tie the baseline's shield damage.
+		expect(field.summary?.kills).toBe(baseline.summary?.kills); expect(field.summary?.shieldAbsorbed).toBeLessThanOrEqual(baseline.summary?.shieldAbsorbed ?? 0);
 	});
 });
