@@ -147,3 +147,11 @@ guardian on port loses at 77s with 20 kills; the single starboard reassignment
 survives with 24 kills. The unarmed baseline is a simulation control; the browser
 requires at least one defense before departure.
 Hardware touch/controller checks and owner playtesting remain separate gates.
+
+Sound effects use local Web Audio synthesis: flak reports, railgun cracks,
+missile exhaust, escort fire, hull impacts, explosions, contact/clear signals,
+Aegis, repairs, departure and results. Sound unlocks on the first pointer or
+keyboard interaction. **Sound on/off** toggles a session-only mute; restart keeps
+that choice. Pause, hidden tabs and focus loss cut active effects; resuming never
+replays missed sounds. Simultaneous cues are grouped and rate/voice limited at
+both simulation speeds. Audio is optional when browser playback is unavailable.
