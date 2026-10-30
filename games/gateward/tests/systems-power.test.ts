@@ -73,7 +73,7 @@ describe('powered cadence and shields', function () {
 		setAllocation(state, { engines: 0, weapons: 10, shields: 0 });
 		advance(state, 2); expect(mount.cooldown).toBeCloseTo(0.05);
 		step(state, 0.05); expect(mount.cooldown).toBe(WEAPONS.rail.reload); expect(state.shots).toHaveLength(1);
-		step(state, 0.05); expect(state.shots).toHaveLength(1); expect(mount.cooldown).toBeCloseTo(2.075);
+		const fired = state.nextId; step(state, 0.05); expect(state.nextId).toBe(fired); expect(mount.cooldown).toBeCloseTo(2.075);
 	});
 	test('idle cooldown clamps to zero and zero weapons suppresses ready guns', function () {
 		const state = quiet(); build(state, 0, 'rail'); advance(state, 100);
@@ -83,12 +83,12 @@ describe('powered cadence and shields', function () {
 		advance(state, 5); expect(state.shots).toHaveLength(0);
 		setAllocation(state, POWER_PRESETS.balanced); step(state, 0.05); expect(state.shots).toHaveLength(1);
 	});
-	test('guardian and fighter cadence and damage stay identical across reactor settings', function () {
+	test('guardian and fighter cadence and damage stay independent of ark weapon power at the same engine speed', function () {
 		for (const kind of ['guardian', 'interceptor'] as const) {
 			const low = createState(); low.status = 'running'; low.nextWave = Infinity; deploy(low, kind);
 			low.enemies.push({ id: low.nextId++, kind: 'armored', x: -100, y: -130, hp: 100000, maxHp: 100000, cooldown: 999 });
 			const high = structuredClone(low);
-			setAllocation(low, { engines: 10, weapons: 0, shields: 0 }); setAllocation(high, { engines: 0, weapons: 10, shields: 0 });
+			setAllocation(low, { engines: 4, weapons: 0, shields: 6 }); setAllocation(high, { engines: 4, weapons: 6, shields: 0 });
 			advance(low, 60); advance(high, 60);
 			expect(low.escorts).toEqual(high.escorts); expect(low.enemies).toEqual(high.enemies); expect(low.shots).toEqual(high.shots); expect(low.nextId).toBeGreaterThan(5);
 		}

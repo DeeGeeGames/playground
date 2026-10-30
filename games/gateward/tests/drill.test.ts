@@ -108,13 +108,13 @@ test('paused and unfocused sorties retain their timers and positions', function 
 test('drill schedule is deterministic and baseline/defenses yield repeatable distinct outcomes', function () {
 	expect(ESCORT_DRILL.encounters.map(function (e) { return e.at; })).toEqual([10, 23, 49, 52]);
 	const outcomes = ['baseline', 'wings', 'guardians'].map(function (s) { if (s !== 'baseline' && s !== 'wings' && s !== 'guardians') throw new Error('Strategy'); const result = strategyRun(s); expect(strategyRun(s)).toEqual(result); return result; });
-	console.table(outcomes); expect(new Set(outcomes.map(function (o) { return o.time; })).size).toBe(3);
+	console.table(outcomes); expect(new Set(outcomes.map(function (o) { return o.hull; })).size).toBe(3);
 	expect(outcomes[0]?.result).toBe('lost'); expect(outcomes.some(function (o) { return o.result === 'won'; })).toBe(true);
 });
 test('orders change outcomes with the same fitted equipment and spending', function () {
 	const heldWing = strategyRun('wings', false); const launchedWing = strategyRun('wings');
-	expect(heldWing.launches).toBe(0); expect(launchedWing.kills).toBeGreaterThan(heldWing.kills); expect(launchedWing.time).toBeGreaterThan(heldWing.time);
+	expect(heldWing.launches).toBe(0); expect(launchedWing.launches).toBeGreaterThan(0); expect(launchedWing.hull).toBeGreaterThan(heldWing.hull);
 	const portScreen = strategyRun('guardians', false); const reassignedScreen = strategyRun('guardians');
-	expect(portScreen.result).toBe('lost'); expect(reassignedScreen.result).toBe('won'); expect(reassignedScreen.hull).toBeGreaterThan(0);
+	expect(portScreen.result).toBe('won'); expect(reassignedScreen.result).toBe('won'); expect(reassignedScreen.hull).not.toBe(portScreen.hull);
 	expect(portScreen.orders).toBe(0); expect(reassignedScreen.orders).toBe(1);
 });

@@ -89,6 +89,34 @@ orbital projection, resize, model hardpoints, and shield clearance. `bun run che
 the whole workspace. Production preview and owner judgment establish visual and
 play-feel evidence separately from deterministic tests.
 
+## Combat flight
+
+Armored ships and flagships intercept a flank, turn onto parallel courses and
+make repeated broadside runs. They gain ground, then ease aft rather than stop
+at a range boundary. Each side battery covers a 100° arc; bow/stern targets wait
+for the ship to turn. Visible side barrels and shot origins share the hull's
+course heading. Heavy ships cruise at up to 40m/s (armored) or 36m/s (flagship),
+so they can intercept even the ark's maximum 30m/s engine allocation.
+
+Raiders and bombers continuously circle the ark or skirmish around nearby escorts,
+with local separation between hostile craft. Raiders take close pot shots;
+bombers stay farther out with array-seeking rounds. Friendly interceptors maneuver
+around contacts during combat. Guardians retain their screening positions, and
+wing sectors, launch/return/rearm phases and rally limits still apply. Ballistic
+guns lead moving targets; weapon damage, reloads, rewards and economy are unchanged.
+
+`src/flight.ts` owns steering, turn limits and broadside geometry. Combat positions
+remain relative to the ark for camera and input compatibility, while flight
+velocities/headings describe world motion. Every flying hostile subtracts actual
+ark travel once per step. Engine reallocations and arrival change relative motion;
+a stopped ark still sees moving attackers. This keeps the planar combat and
+orthographic camera without a physics engine or ECS migration.
+
+`tests/flight.test.ts` covers four-bearing intercepts, moving parallel broadsides,
+bank arcs/origins, stopped/max-power engines, arrival, fighter exchanges,
+determinism and lifecycle freezes. Strategy comparisons below are reproducible
+simulation controls, not owner acceptance of balance or flight feel.
+
 ## Escort Drill
 
 Choose **Escort Drill** in the briefing, pause menu or result, or open
@@ -139,16 +167,18 @@ salvage, repairs, pulses or upgrades. Observed outcomes:
 
 | Strategy | Result/time | Hull | Kills | Escort losses | Launches/orders | Salvage |
 | --- | --- | ---: | ---: | ---: | --- | ---: |
-| No intervention | Lost / 41s | 0 | 0 | 0 | 0 / 0 | 349 |
-| Wing defense | Lost / 92s | 0 | 21 | 3 | 2 / 2 | 417 |
-| Guardian screen | Won / 90s | 559 | 24 | 1 | 0 / 1 | 568 |
+| No intervention | Lost / 42s | 0 | 0 | 0 | 0 / 0 | 350 |
+| Wing defense | Won / 90s | 1025 | 24 | 2 | 3 / 3 | 588 |
+| Guardian screen | Won / 90s | 1100 | 24 | 1 | 0 / 1 | 568 |
 
-The port wing buys time but leaves the bomber approach exposed. Reassigning a
-guardian to starboard screens that approach while the rail covers port. These
-are limited scripted comparisons, not proof of balance or enjoyable feel.
-The tests also repeat the same equipment with escort orders held, isolating the
-value of launch timing and guardian reassignment. The unarmed baseline is a
-simulation control; the browser requires at least one defense before departure.
+With moving attackers, both equipped scripts now clear all contacts. Launching
+the wing preserves more hull than holding it in reserve. Guardian reassignment
+also changes hull survival and escort losses with the same fitting. These orders
+affect outcomes without guaranteeing that an old timing remains optimal.
+These limited controls do not establish balance or enjoyable feel. The tests
+repeat each run and compare identical equipment with orders held.
+The unarmed baseline is a simulation control; the browser requires at least one
+defense before departure.
 Physical input and owner play-feel checks remain separate from simulation evidence.
 
 ## Ship systems and Systems Trial
@@ -258,16 +288,13 @@ Expiry clears navigation state. Intercept effects preserve the round's actual
 presented trajectory while gameplay geometry remains on the 2D plane.
 
 `bun test games/gateward/tests/interdiction.test.ts` compares the same unarmed,
-stationary-ark approach with and without a field at (300, 0). A hostile starts at
-(600, 0), with no escorts. The field changes its route and delays its first shot:
-
-| Hostile | First shot without / with field | Lateral offset at 15s without / with |
-| --- | --- | --- |
-| Raider | 7.82s / 9.07s | 0m / 76.17m |
-| Bomber | 6.67s / 10.25s | 0m / 136.32m |
-
-Both detours rejoin before 15s while the field remains active. These deterministic
-examples demonstrate path shaping and blocked engagement, not feel or balance.
+stationary-ark encounter with and without a field at (300, 0). A hostile starts at
+(600, 0), with no escorts. The field changes the flight path and blocks firing
+through its boundary. The checks cover all four hostile classes at 0, 3, 12 and
+30m/s ark speeds, verifying clearance, bounded movement, a stable detour side,
+and release back to normal flight. Unobstructed craft now maneuver as well, so
+these comparisons measure path differences rather than deviation from a straight
+line. These deterministic checks demonstrate path shaping, not feel or balance.
 
 ### Reproduce the integrated comparisons
 
@@ -281,8 +308,8 @@ orders on the first fixed step at or after each time: launch port at 7s, assign
 Guardian starboard at 23s, build rail on mount **8** at 45s, launch port at 54s,
 assign Guardian ahead at 75s and astern at 98s if it survives. Hull repair is
 attempted below 800 hull and sensor repair below 55 integrity, subject to costs
-and cooldowns. Balanced runs need neither repair. These are scripted controls;
-human input timing and physical-device feel remain separate.
+and cooldowns. Repair requirements vary with flight paths and targeting. These
+are scripted controls; human input timing and physical-device feel remain separate.
 
 The field comparison adds one ahead field at (300, 0) at 70s. The reallocation
 comparison starts with weapon priority, then switches to balanced at 50s. The
@@ -291,27 +318,28 @@ other strategies retain their preset. Rounded outcomes:
 | Strategy | Result / time | Distance | Kills | Hull / shield |
 | --- | --- | ---: | ---: | ---: |
 | Balanced | Won / 120.0s | 1440m | 30 | 1200 / 360 |
-| Engine priority | Deadline / 155s | 1440m | 29 | 842 / 0 |
-| Weapon priority | Deadline / 155s | 930m | 30 | 1200 / 360 |
-| Shield priority | Deadline / 155s | 930m | 29 | 845 / 0 |
+| Engine priority | Won / 107.1s | 1440m | 30 | 1016 / 63 |
+| Weapon priority | Deadline / 155.0s | 930m | 30 | 1200 / 360 |
+| Shield priority | Deadline / 155.0s | 930m | 30 | 1115 / 360 |
 | Weapons → balanced at 50s | Won / 145.0s | 1440m | 30 | 1200 / 360 |
 | Balanced + field at 70s | Won / 120.0s | 1440m | 30 | 1200 / 360 |
 
 | Strategy | Shield absorbed | Power changes | Sensor impairments / repairs | Fields / redirected | Escort losses |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Balanced | 321 | 0 | 0 / 0 | 0 / 0 | 3 |
-| Engine priority | 611 | 1 | 4 / 3 | 0 / 0 | 4 |
-| Weapon priority | 238 | 1 | 0 / 0 | 0 / 0 | 2 |
-| Shield priority | 854 | 1 | 4 / 3 | 0 / 0 | 4 |
-| Weapons → balanced | 287 | 2 | 0 / 0 | 0 / 0 | 3 |
-| Balanced + field | 272 | 0 | 0 / 0 | 1 / 12 | 3 |
+| Balanced | 199 | 0 | 0 / 0 | 0 / 0 | 3 |
+| Engine priority | 521 | 1 | 0 / 0 | 0 / 0 | 3 |
+| Weapon priority | 109 | 1 | 0 / 0 | 0 / 0 | 1 |
+| Shield priority | 702 | 1 | 0 / 0 | 0 / 0 | 3 |
+| Weapons → balanced at 50s | 131 | 2 | 0 / 0 | 0 / 0 | 1 |
+| Balanced + field at 70s | 164 | 0 | 0 / 0 | 1 / 12 | 3 |
 
-Engine priority arrives early but its slower ark guns leave one hostile unresolved.
+Engine priority arrives early and resolves all contacts with less hull remaining.
 Static weapon/shield priority travels too slowly; switching weapon priority back
 to balanced at 50s makes the deadline with the same fitting. The field redirects
-12 approaches and reduces shield damage by 49 while preserving all 30 kills.
-Engine/shield priority exercises sensor impairment and recovery; allocation
-changes warning and defensive opportunities rather than the scheduled clock.
+12 approaches and reduces shield damage by 35 while preserving all 30 kills.
+These equipped scripts avoid sensor impairment; focused bomber/shield tests
+exercise impairment and recovery separately. Allocation changes warning and
+defensive opportunities rather than the scheduled clock.
 These examples establish explainable behavior differences, not final balance.
 
 Owner follow-up enables systems in every mode for rapid prototype iteration.
