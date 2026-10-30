@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { circleHit, enemyClearance, fieldBlocks, fieldRelative, INTERDICTION_CONFIG } from '../src/interdiction';
-import { createState, deploy, interdictionReason, placeInterdiction, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
+import { createState, deploy, ENEMIES, interdictionReason, placeInterdiction, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
 
 const systemsFor = function (state: State) { if (!state.systems) throw new Error('Expected systems'); return state.systems; };
 const quiet = function (engines = 0) {
@@ -120,12 +120,12 @@ describe('deterministic approach shaping', function () {
 		const direct = quiet(); const shaped = quiet(); placeInterdiction(shaped, { x: 300, y: 0 });
 		const plainEnemy = hostile(direct, kind); const enemy = hostile(shaped, kind); const hp = enemy.hp;
 		advance(direct, 15); advance(shaped, 15);
-		expect(Math.abs(plainEnemy.y)).toBeLessThan(1); expect(Math.abs(enemy.y)).toBeGreaterThan(60); expect(enemy.detour).toBeUndefined();
+		expect(Math.hypot(enemy.x - plainEnemy.x, enemy.y - plainEnemy.y)).toBeGreaterThan(60); expect(enemy.detour).toBeUndefined();
 		expect(systemsFor(shaped).interdiction.field).toBeDefined(); expect(systemsFor(shaped).interdiction.redirected).toBe(1); expect(enemy.hp).toBe(hp); expect(shaped.kills).toBe(0);
 	});
 	for (const kind of ['raider', 'bomber', 'armored', 'flagship'] as const) for (const engines of [0, 1, 4, 10]) test(`${kind} at ${engines * 3}m/s maintains clearance, stable side and bounded movement`, function () {
 		const state = quiet(engines); placeInterdiction(state, { x: 300, y: 0 }); const enemy = hostile(state, kind);
-		const speed = { raider: 50, bomber: 30, armored: 24, flagship: 14 }[kind]; let side: -1 | 1 | undefined;
+		const speed = ENEMIES[kind].speed; let side: -1 | 1 | undefined;
 		for (let frame = 0; frame < 1800; frame++) {
 			const before = { x: enemy.x, y: enemy.y }; step(state, 1 / 60);
 			expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeLessThanOrEqual((speed + engines * 3) / 60 + 1e-8);
@@ -141,7 +141,7 @@ describe('deterministic approach shaping', function () {
 		state.escorts.push({ id: state.nextId++, kind: 'guardian', x: 300, y: 10, hp: 100000, cooldown: 9999, angle: 0 });
 		const escort = state.escorts[0]; if (!escort) throw new Error('Missing escort');
 		for (let frame = 0; frame < 120; frame++) { escort.x = 300; escort.y = frame % 2 ? -15 : 15; state.rally = { x: 300, y: escort.y }; step(state, 1 / 60); expect(enemy.detour?.side).toBe(side); }
-		state.escorts = []; advance(state, 15); expect(enemy.detour).toBeUndefined(); expect(Math.abs(enemy.y)).toBeGreaterThan(50);
+		state.escorts = []; const before = { x: enemy.x, y: enemy.y }; advance(state, 15); expect(enemy.detour).toBeUndefined(); expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeGreaterThan(50);
 	});
 	test('an escort inside the field cannot cause an infinite orbit and expiry releases the attacker', function () {
 		const state = quiet(); placeInterdiction(state, { x: 300, y: 0 }); const enemy = hostile(state, 'raider', 450, 0);

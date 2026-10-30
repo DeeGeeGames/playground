@@ -2,6 +2,7 @@ import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fi
 import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
 import { ESCORT_DRILL, SYSTEMS_TRIAL, type Scenario } from './scenarios';
 import { absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
+import { broadsideMuzzle, capitalCourse, createFlight, fighterCourse, fly, inBroadside, isCapital, type Flight } from './flight';
 export type Point = { x: number; y: number };
 export type Weapon = 'flak' | 'rail' | 'missile' | 'beam';
 export type EnemyKind = 'raider' | 'bomber' | 'armored' | 'flagship';
@@ -20,15 +21,15 @@ export const ESCORTS = {
 	interceptor: { name: 'Interceptor wing', cost: 85, count: 3, hp: 65, speed: 160, range: 155, damage: 10, reload: 0.65 },
 	guardian: { name: 'Guardian', cost: 105, count: 1, hp: 260, speed: 85, range: 240, damage: 24, reload: 0.9 },
 };
-const ENEMIES = {
+export const ENEMIES = {
 	raider: { hp: 45, speed: 50, range: 100, damage: 7, reload: 1.2, reward: 9, armor: 1 },
 	bomber: { hp: 95, speed: 30, range: 290, damage: 34, reload: 3.8, reward: 17, armor: 1 },
-	armored: { hp: 260, speed: 24, range: 185, damage: 22, reload: 2.4, reward: 28, armor: 0.48 },
-	flagship: { hp: 2400, speed: 14, range: 370, damage: 55, reload: 2.8, reward: 180, armor: 0.7 },
+	armored: { hp: 260, speed: 40, range: 185, damage: 22, reload: 2.4, reward: 28, armor: 0.48 },
+	flagship: { hp: 2400, speed: 36, range: 370, damage: 55, reload: 2.8, reward: 180, armor: 0.7 },
 };
 export interface Mount extends Point { weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
-export interface Enemy extends Point { interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
-export interface Escort extends Point { wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
+export interface Enemy extends Point { flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
+export interface Escort extends Point { flight?: Flight; wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
 export interface Shot extends Point { beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
 export interface Effect extends Point { sourceShot?: Shot; radius: number; life: number; maxLife: number; color: string }
 export interface Arrival { at: number; kind: EnemyKind; x: number; y: number }
@@ -276,6 +277,29 @@ const fire = function (state: State, from: Point, to: Point, damage: number, spe
 	const angle = Math.atan2(to.y - from.y, to.x - from.x);
 	state.shots.push({ id: state.nextId++, x: from.x, y: from.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, damage, side, weapon, target, life: 4, ...(sensorDamage === undefined ? {} : { sensorDamage }) });
 };
+const interceptTime = function (from: Point, to: Point, velocity: Point, speed: number): number {
+	const dx = to.x - from.x; const dy = to.y - from.y;
+	const a = velocity.x * velocity.x + velocity.y * velocity.y - speed * speed;
+	const b = 2 * (dx * velocity.x + dy * velocity.y); const c = dx * dx + dy * dy;
+	if (Math.abs(a) < 1e-8) return b < 0 ? Math.min(4, -c / b) : 0;
+	const discriminant = b * b - 4 * a * c;
+	if (discriminant < 0) return 0;
+	const times = [(-b - Math.sqrt(discriminant)) / (2 * a), (-b + Math.sqrt(discriminant)) / (2 * a)].filter(function (time) { return time >= 0 && time <= 4; });
+	return times.length ? Math.min(...times) : 0;
+};
+const flightVelocity = function (flight: Flight | undefined, arkSpeed: number): Point {
+	return flight ? { x: Math.cos(flight.angle) * flight.speed - arkSpeed, y: Math.sin(flight.angle) * flight.speed } : { x: 0, y: 0 };
+};
+const aimAhead = function (from: Point, target: Point, velocity: Point, speed: number): Point {
+	const time = interceptTime(from, target, velocity, speed);
+	return { x: target.x + velocity.x * time, y: target.y + velocity.y * time };
+};
+const hostileSolution = function (enemy: Enemy, target: Point, velocity: Point, speed: number): { muzzle: Point; aim: Point } | undefined {
+	const muzzle = isCapital(enemy) ? broadsideMuzzle(enemy, target) : enemy;
+	if (!muzzle) return undefined;
+	const aim = aimAhead(muzzle, target, velocity, speed);
+	return isCapital(enemy) && !inBroadside(enemy.flight?.angle ?? 0, muzzle, aim) ? undefined : { muzzle, aim };
+};
 const nearest = function <T extends Point>(from: Point, targets: readonly T[], range: number): T | undefined {
 	let best: T | undefined; let closest = range;
 	for (const target of targets) { const d = distance(from, target); if (d <= closest) { best = target; closest = d; } }
@@ -307,6 +331,7 @@ export const step = function (state: State, dt: number) {
 	state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
 	state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + powerOutputs(state.systems.allocation).speed * dt);
 	const fieldDrift = (state.systems.distanceTraveled) - distanceBefore;
+	const arkSpeed = fieldDrift / dt;
 	advanceInterdiction(state, dt);
 	// The reactor provides a modest income even while enemies remain outside firing range.
 	state.salvage += dt * 1.2;
@@ -332,14 +357,16 @@ export const step = function (state: State, dt: number) {
 			if (mount.cooldown <= 0) mount.cooldown = config.reload;
 			continue;
 		}
-		if (mount.cooldown <= 0) { fire(state, mount, target, config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); }
+		if (mount.cooldown <= 0) { fire(state, mount, aimAhead(mount, target, flightVelocity(target.flight, arkSpeed), config.speed), config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); }
 	}
 	updateWings(state, dt);
+	const escortVelocities = new Map<number, Point>();
 	for (const [i, escort] of state.escorts.entries()) {
 		if (escort.hp <= 0) continue;
 		const config = ESCORTS[escort.kind]; escort.cooldown -= dt;
 		const wing = state.wings.find(function (w) { return w.id === escort.wingId; });
 		if (wing && wing.phase !== 'sortie') {
+			delete escort.flight;
 			const destination = wing.phase === 'launching' ? SECTOR_POINTS[wing.assignment] : { x: -110, y: 0 };
 			escort.angle = Math.atan2(destination.y - escort.y, destination.x - escort.x); moveToward(escort, destination, config.speed, dt); continue;
 		}
@@ -347,19 +374,46 @@ export const step = function (state: State, dt: number) {
 		const target = wing || escort.sector ? nearest(escort, state.enemies.filter(function (e) { return e.hp > 0 && distance(e, formation) <= 180; }), 300) : targetFor(state, escort, 300);
 		const destination = target && distance(target, formation) < 320 ? target : formation;
 		const standOff = destination === target ? config.range * 0.75 : 5;
-		if (distance(escort, destination) > standOff) moveToward(escort, destination, config.speed, dt);
-		escort.angle = Math.atan2(destination.y - escort.y, destination.x - escort.x);
-		if (target && distance(escort, target) <= config.range && escort.cooldown <= 0) { fire(state, escort, target, config.damage, 550, 'player', 'escort', target.id); escort.cooldown = config.reload; }
+		const before = { x: escort.x, y: escort.y };
+		if (escort.kind === 'interceptor' && target && destination === target) {
+			const desired = fighterCourse(escort, target, 65, 65, config.speed, escort.id % 2 ? -1 : 1, arkSpeed, state.escorts);
+			escort.flight ??= createFlight(escort, desired, config.speed, escort.id);
+			fly(escort, escort.flight, desired, config.speed, 4, fieldDrift, dt);
+			escort.angle = escort.flight.angle;
+		} else {
+			delete escort.flight;
+			if (distance(escort, destination) > standOff) moveToward(escort, destination, config.speed, dt);
+			escort.angle = Math.atan2(destination.y - escort.y, destination.x - escort.x);
+		}
+		escortVelocities.set(escort.id, { x: (escort.x - before.x) / dt, y: (escort.y - before.y) / dt });
+		if (target && distance(escort, target) <= config.range && escort.cooldown <= 0) { fire(state, escort, aimAhead(escort, target, flightVelocity(target.flight, arkSpeed), 550), config.damage, 550, 'player', 'escort', target.id); escort.cooldown = config.reload; }
 	}
 	for (const enemy of state.enemies) {
 		if (enemy.hp <= 0) continue;
 		const config = ENEMIES[enemy.kind]; enemy.cooldown -= dt;
 		const escort = nearest(enemy, state.escorts.filter(function (e) { return e.hp > 0; }), 180);
-		const destination = escort ?? { x: Math.max(-110, Math.min(110, enemy.x)), y: Math.max(-30, Math.min(30, enemy.y)) };
-		const detouring = navigateField(state, enemy, destination, config.speed, dt, fieldDrift, distance(enemy, destination) > config.range * 0.85);
-		if (!detouring && distance(enemy, destination) > config.range * 0.85) moveToward(enemy, destination, config.speed, dt);
-		if (enemy.cooldown <= 0 && distance(enemy, destination) <= config.range && !fieldBlocks(state, enemy, destination)) {
-			fire(state, enemy, destination, config.damage, enemy.kind === 'bomber' ? 155 : 235, 'enemy', 'hostile', escort?.id, enemy.kind === 'bomber' ? SENSOR_CONFIG.damagePerBomberHit : undefined); enemy.cooldown = config.reload;
+		const arkTarget = { x: Math.max(-110, Math.min(110, enemy.x)), y: Math.max(-30, Math.min(30, enemy.y)) };
+		const destination = escort ?? arkTarget;
+		enemy.flight ??= createFlight(enemy, { x: arkSpeed - enemy.x, y: -enemy.y }, config.speed, enemy.id);
+		const flight = enemy.flight;
+		const before = { x: enemy.x, y: enemy.y };
+		const detouring = navigateField(state, enemy, destination, config.speed, dt, fieldDrift, true);
+		if (detouring) {
+			const dx = enemy.x - before.x + fieldDrift; const dy = enemy.y - before.y;
+			if (Math.hypot(dx, dy) > 1e-8) flight.angle = Math.atan2(dy, dx);
+			flight.speed = Math.hypot(dx, dy) / dt;
+		} else {
+			const desired = isCapital(enemy) ? capitalCourse(enemy, flight, config.range, config.speed, arkSpeed)
+				: fighterCourse(enemy, escort ?? { x: 0, y: 0 }, escort ? 60 : enemy.kind === 'bomber' ? 265 : 195, escort ? 60 : enemy.kind === 'bomber' ? 225 : 105, config.speed, enemy.id % 2 ? -1 : 1, arkSpeed, state.enemies);
+			fly(enemy, flight, desired, config.speed, isCapital(enemy) ? 0.7 : 3, fieldDrift, dt);
+		}
+		const shotSpeed = enemy.kind === 'bomber' ? 155 : 235;
+		const escortSolution = escort ? hostileSolution(enemy, escort, escortVelocities.get(escort.id) ?? { x: 0, y: 0 }, shotSpeed) : undefined;
+		const firingEscort = escortSolution ? escort : undefined;
+		const firingTarget = firingEscort ?? arkTarget;
+		const solution = escortSolution ?? hostileSolution(enemy, arkTarget, { x: 0, y: 0 }, shotSpeed);
+		if (enemy.cooldown <= 0 && solution && distance(enemy, firingTarget) <= config.range && !fieldBlocks(state, solution.muzzle, solution.aim)) {
+			fire(state, solution.muzzle, solution.aim, config.damage, shotSpeed, 'enemy', 'hostile', firingEscort?.id, enemy.kind === 'bomber' ? SENSOR_CONFIG.damagePerBomberHit : undefined); enemy.cooldown = config.reload;
 		}
 	}
 	let arkHit = false;

@@ -202,6 +202,10 @@ export const createEnemy = function (enemy: Enemy): Group {
 			plate(parts, 'armor', -2, 7, side * 11, 22, 7, 4);
 			box(parts, 'recess', 13, 7, side * 11, 14, 2, 2.3);
 			box(parts, 'mark', 8, 9.2, side * 11, 3.5, 0.4, 5);
+			for (const x of [-10, 10]) {
+				box(parts, 'recess', x, 5, side * 18, 3.2, 3.2, 7);
+				box(parts, 'window', x, 5, side * 21.5, 2.5, 2.5, 0.5);
+			}
 			drive(parts, -19.5, -1, side * 10, 6);
 			vents(parts, -10, 9.2, side * 11, 4, 1.5);
 		}
@@ -227,6 +231,10 @@ export const createEnemy = function (enemy: Enemy): Group {
 				box(parts, 'mark', x - 3, 14.7, side * 19, 2, 0.5, 7);
 			}
 			for (const z of [10, 23]) drive(parts, -42, -1.5, side * z, 8);
+			for (const x of [-22, -7, 8, 23]) {
+				box(parts, 'recess', x, 6, side * 30, 4, 4, 14);
+				box(parts, 'window', x, 6, side * 37, 3.2, 3.2, 0.6);
+			}
 			vents(parts, -30, 10.2, side * 18, 4, 2.1);
 		}
 		plate(parts, 'armor', 13, 10.3, 0, 68, 24, 5.2);
