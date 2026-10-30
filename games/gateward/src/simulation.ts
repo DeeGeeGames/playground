@@ -12,10 +12,10 @@ export const ROUTE_SECONDS = 210;
 export const WAVE_INTERVAL = 34;
 export const WAVE_COUNT = 6;
 export const WEAPONS = {
-	beam: { name: 'Beam', cost: 125, range: 300, damage: 48, reload: 0.4, speed: 0, description: 'Sustained instant damage. Armor reduces damage.' },
-	flak: { name: 'Flak', cost: 75, range: 255, damage: 13, reload: 0.32, speed: 650, description: 'Rapid fire. Shreds light raiders.' },
-	rail: { name: 'Railgun', cost: 115, range: 440, damage: 95, reload: 2.2, speed: 1100, description: 'Long range. Pierces heavy armor.' },
-	missile: { name: 'Missile', cost: 135, range: 355, damage: 52, reload: 1.8, speed: 300, description: 'Homing salvo. Blasts clustered ships.' },
+	beam: { name: 'Beam', cost: 125, range: 300, damage: 48, reload: 0.4, speed: 0, rotationSpeed: Math.PI, description: 'Sustained instant damage. Armor reduces damage.' },
+	flak: { name: 'Flak', cost: 75, range: 255, damage: 13, reload: 0.32, speed: 650, rotationSpeed: Math.PI * 2, description: 'Rapid fire. Shreds light raiders.' },
+	rail: { name: 'Railgun', cost: 115, range: 440, damage: 95, reload: 2.2, speed: 1100, rotationSpeed: Math.PI / 2, description: 'Long range. Pierces heavy armor.' },
+	missile: { name: 'Missile', cost: 135, range: 355, damage: 52, reload: 1.8, speed: 300, rotationSpeed: Math.PI * 2 / 3, description: 'Homing salvo. Blasts clustered ships.' },
 };
 export const ESCORTS = {
 	interceptor: { name: 'Interceptor wing', cost: 85, count: 3, hp: 65, speed: 160, range: 155, damage: 10, reload: 0.65 },
@@ -350,14 +350,20 @@ export const step = function (state: State, dt: number) {
 		const config = WEAPONS[mount.weapon]; const candidates = state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy) && covered(state, mount, enemy); });
 		const target = candidates.find(function (enemy) { return enemy.id === state.priority; }) ?? nearest(mount, candidates, coverageFor(state, mount).range);
 		if (!target) continue;
-		mount.aim = Math.atan2(target.y - mount.y, target.x - mount.x);
+		// Track the firing solution even while reloading; barrels must finish turning before firing.
+		const aim = mount.weapon === 'beam' ? target : aimAhead(mount, target, flightVelocity(target.flight, arkSpeed), config.speed);
+		const desired = Math.atan2(aim.y - mount.y, aim.x - mount.x);
+		const error = Math.atan2(Math.sin(desired - mount.aim), Math.cos(desired - mount.aim));
+		const travel = config.rotationSpeed * dt;
+		mount.aim += Math.max(-travel, Math.min(travel, error));
+		if (Math.abs(error) > travel) continue;
 		if (mount.weapon === 'beam') {
 			damageEnemy(target, config.damage * dt * weaponRate * (1 + (mount.level - 1) * 0.55) * (1 + (mount.level - 1) * 0.12), 'beam');
 			state.shots.push({ id: state.nextId++, x: target.x, y: target.y, beamFrom: { x: mount.x, y: mount.y }, vx: 0, vy: 0, damage: 0, side: 'player', weapon: 'beam', target: target.id, life: 4 });
 			if (mount.cooldown <= 0) mount.cooldown = config.reload;
 			continue;
 		}
-		if (mount.cooldown <= 0) { fire(state, mount, aimAhead(mount, target, flightVelocity(target.flight, arkSpeed), config.speed), config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); }
+		if (mount.cooldown <= 0) { fire(state, mount, aim, config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); }
 	}
 	updateWings(state, dt);
 	const escortVelocities = new Map<number, Point>();

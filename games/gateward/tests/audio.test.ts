@@ -21,6 +21,7 @@ test('combat sounds are deduplicated and paused simulation produces no new cues'
 	build(state, 0, 'flak'); build(state, 1, 'flak');
 	state.status = 'running'; read(state);
 	state.enemies.push({ id: state.nextId++, kind: 'armored', x: -80, y: -140, hp: 260, maxHp: 260, cooldown: 10 });
+	for (const mount of state.mounts) mount.aim = Math.atan2(-140 - mount.y, -80 - mount.x);
 	step(state, 1 / 60);
 	expect(read(state)).toEqual(['flak']); expect(read(state)).toEqual([]);
 	state.paused = true;

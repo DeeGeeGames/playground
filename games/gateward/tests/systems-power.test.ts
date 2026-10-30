@@ -72,6 +72,9 @@ describe('powered cadence and shields', function () {
 		advance(state, 100); expect(mount.cooldown).toBeCloseTo(0.3); expect(state.shots).toHaveLength(0);
 		setAllocation(state, { engines: 0, weapons: 10, shields: 0 });
 		advance(state, 2); expect(mount.cooldown).toBeCloseTo(0.05);
+		// Isolate reload timing from the new aim delay after engine power changes.
+		const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing enemy');
+		enemy.x = mount.x; enemy.y = -200; delete enemy.flight; mount.aim = -Math.PI / 2;
 		step(state, 0.05); expect(mount.cooldown).toBe(WEAPONS.rail.reload); expect(state.shots).toHaveLength(1);
 		const fired = state.nextId; step(state, 0.05); expect(state.nextId).toBe(fired); expect(mount.cooldown).toBeCloseTo(2.075);
 	});
