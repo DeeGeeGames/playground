@@ -14,8 +14,7 @@ export const SENSOR_CONFIG = {
 } as const;
 
 export const sensorRanges = function (state: State): { detection: number; classification: number } {
-	const sensors = state.systems?.sensors;
-	if (!sensors) return { detection: Infinity, classification: Infinity };
+	const sensors = state.systems.sensors;
 	if (sensors.integrity <= 0) return { detection: SENSOR_CONFIG.localDefenseRange, classification: 0 };
 	return sensors.integrity >= SENSOR_CONFIG.healthyThreshold
 		? { detection: SENSOR_CONFIG.healthyDetectionRange, classification: SENSOR_CONFIG.healthyClassificationRange }
@@ -23,7 +22,6 @@ export const sensorRanges = function (state: State): { detection: number; classi
 };
 
 export const contactIntel = function (state: State, point: Point): 'unseen' | 'detected' | 'classified' {
-	if (!state.systems) return 'classified';
 	const range = Math.hypot(point.x, point.y);
 	const ranges = sensorRanges(state);
 	if (range > ranges.detection) return 'unseen';

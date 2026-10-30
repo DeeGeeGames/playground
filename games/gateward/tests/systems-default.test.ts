@@ -1,0 +1,35 @@
+import { expect, test } from 'bun:test';
+import { build, createState, placeInterdiction, repairSensors, setAllocation, step } from '../src/simulation';
+import { POWER_PRESETS } from '../src/systems';
+import { journeyFor } from '../src/journey';
+import { systemsResultMessage, systemsSummary } from '../src/trial-summary';
+
+const modes = [
+	{ name: 'Full Voyage', options: {}, route: 2520 },
+	{ name: 'Escort Drill', options: { scenario: 'drill' }, route: 1080 },
+	{ name: 'Systems Trial', options: { scenario: 'systems' }, route: 1440 },
+] as const;
+
+for (const mode of modes) test(`${mode.name} supports the complete systems loop without enabling a flag`, function () {
+	const state = createState(mode.options); const fresh = structuredClone(state);
+	expect(state.systems.routeLength).toBe(mode.route);
+	expect(state.systems.allocation).toEqual(POWER_PRESETS.balanced);
+	expect(build(state, 0, 'rail')).toBe(true);
+	expect(setAllocation(state, POWER_PRESETS.engines)).toBe(true);
+	expect(journeyFor(state).eta).toBe(mode.route / 18);
+	state.status = 'running'; state.nextWave = Infinity;
+	state.systems.sensors.integrity = 0;
+	expect(repairSensors(state)).toBe(true);
+	expect(placeInterdiction(state, { x: 300, y: 0 })).toBe(true);
+	state.shots.push({ id: state.nextId++, x: 0, y: 0, vx: 0, vy: 0, damage: 100, side: 'enemy', weapon: 'hostile', target: undefined, life: 1 });
+	step(state, 0.05);
+	expect(state.hull).toBe(1200); expect(state.systems.shield.charge).toBe(140);
+	expect(state.systems.distanceTraveled).toBeCloseTo(0.9);
+	const summary = systemsSummary(state);
+	expect(summary.powerChanges).toBe(1); expect(summary.sensorRepairs).toBe(1); expect(summary.fieldPlacements).toBe(1); expect(summary.shieldAbsorbed).toBe(100);
+	expect(setAllocation(state, { engines: 0, weapons: 8, shields: 2 })).toBe(true);
+	step(state, 0.05); expect(state.systems.distanceTraveled).toBeCloseTo(0.9); expect(journeyFor(state).eta).toBe(Infinity);
+	expect(createState(mode.options)).toEqual(fresh);
+	state.status = 'won';
+	expect(systemsResultMessage(state).includes('deadline')).toBe(mode.name === 'Systems Trial');
+});

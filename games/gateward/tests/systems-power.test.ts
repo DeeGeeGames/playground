@@ -7,7 +7,7 @@ const systemsFor = function (state: State): SystemsState {
 	return state.systems;
 };
 const quiet = function () {
-	const state = createState({ scenario: 'drill', systems: true });
+	const state = createState({ scenario: 'drill' });
 	state.status = 'running'; state.nextWave = Infinity;
 	return state;
 };
@@ -20,7 +20,7 @@ const armed = function () {
 
 describe('conserved reactor orders', function () {
 	test('presets, rapid transfers, rejected orders and reset preserve ten independent integer units', function () {
-		const state = createState({ systems: true }); const systems = systemsFor(state);
+		const state = createState(); const systems = systemsFor(state);
 		expect(systems.allocation).toEqual(POWER_PRESETS.balanced);
 		for (let i = 0; i < 200; i++) {
 			expect(transferPower(state, 'engines', 'weapons')).toBe(true);
@@ -37,9 +37,9 @@ describe('conserved reactor orders', function () {
 		expect(setAllocation(state, systems.allocation)).toBe(false);
 		expect(transferPower(state, 'engines', 'engines')).toBe(false);
 		expect(JSON.stringify(state)).toBe(snapshot);
-		const fresh = systemsFor(createState({ systems: true }));
+		const fresh = systemsFor(createState());
 		expect(fresh.allocation).toEqual(POWER_PRESETS.balanced); expect(fresh.powerChanges).toBe(0); expect(fresh.distanceTraveled).toBe(0);
-		expect(setAllocation(createState(), POWER_PRESETS.engines)).toBe(false);
+		expect(setAllocation(createState(), POWER_PRESETS.engines)).toBe(true);
 	});
 	for (const restriction of ['paused', 'unfocused', 'won', 'lost'] as const) test(`${restriction} rejects changes without any state mutation`, function () {
 		const state = quiet();
@@ -85,7 +85,7 @@ describe('powered cadence and shields', function () {
 	});
 	test('guardian and fighter cadence and damage stay identical across reactor settings', function () {
 		for (const kind of ['guardian', 'interceptor'] as const) {
-			const low = createState({ systems: true }); low.status = 'running'; low.nextWave = Infinity; deploy(low, kind);
+			const low = createState(); low.status = 'running'; low.nextWave = Infinity; deploy(low, kind);
 			low.enemies.push({ id: low.nextId++, kind: 'armored', x: -100, y: -130, hp: 100000, maxHp: 100000, cooldown: 999 });
 			const high = structuredClone(low);
 			setAllocation(low, { engines: 10, weapons: 0, shields: 0 }); setAllocation(high, { engines: 0, weapons: 10, shields: 0 });
@@ -112,18 +112,19 @@ describe('distance and combat completion', function () {
 	});
 	test('arrival clamps while combat continues, and all scheduled and pending contacts must resolve', function () {
 		const state = quiet(); const systems = systemsFor(state);
-		expect(systems.routeLength).toBe(1080); expect(systemsFor(createState({ systems: true })).routeLength).toBe(2520);
+		expect(systems.routeLength).toBe(1080); expect(systemsFor(createState()).routeLength).toBe(2520);
 		setAllocation(state, { engines: 10, weapons: 0, shields: 0 }); advance(state, 1820);
 		expect(systems.distanceTraveled).toBe(1080); expect(state.status).toBe('running');
 		state.wave = state.scenario?.encounters.length ?? 0; state.arrivals.push({ at: 999, kind: 'raider', x: 600, y: 0 }); step(state, 0.05); expect(state.status).toBe('running');
 		state.arrivals = []; state.enemies.push({ id: state.nextId++, kind: 'raider', x: 600, y: 0, hp: 45, maxHp: 45, cooldown: 999 }); step(state, 0.05); expect(state.status).toBe('running');
 		state.enemies = []; step(state, 0.05); expect(state.status).toBe('won');
 	});
-	test('early arrival still waits for scenario duration and legacy drill keeps time-only finish', function () {
+	test('early arrival waits for scenario duration and every mode requires scheduled contacts', function () {
 		const state = quiet(); state.wave = state.scenario?.encounters.length ?? 0; setAllocation(state, { engines: 10, weapons: 0, shields: 0 });
 		advance(state, 800); expect(systemsFor(state).distanceTraveled).toBe(1080); expect(state.status).toBe('running');
 		advance(state, 1010); expect(state.status).toBe('won');
-		const legacy = createState({ scenario: 'drill' }); legacy.status = 'running'; legacy.nextWave = Infinity;
-		advance(legacy, 1810); expect<State['status']>(legacy.status).toBe('won');
+		const waiting = createState({ scenario: 'drill' }); waiting.status = 'running'; waiting.nextWave = Infinity;
+		advance(waiting, 1810); expect<State['status']>(waiting.status).toBe('running');
+		waiting.wave = waiting.scenario?.encounters.length ?? 0; step(waiting, 0.05); expect<State['status']>(waiting.status).toBe('won');
 	});
 });

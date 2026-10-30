@@ -75,8 +75,8 @@ bunx @gltf-transform/cli@4.5.1 dedup /tmp/gateward-asset/gateward-ark.glb /tmp/g
 bunx @gltf-transform/cli@4.5.1 prune /tmp/gateward-asset/dedup.glb games/gateward/public/models/gateward-ark.glb
 ```
 
-The camera follows the ark along a 2.52 km route at 12 m/s. Fixed navigation
-beacons, a scrolling lattice, distant debris, and layered star parallax communicate
+The camera follows the ark along the voyage’s 2.52 km route at a balanced 12 m/s.
+Fixed navigation beacons, a scrolling lattice, distant debris, and layered star parallax communicate
 travel. The gate reaches the ark at the end of the route; scenery and drive stop
 there even if hostiles remain. Pausing freezes the journey, and replay returns to
 departure. Reduced motion disables decorative parallax and engine flicker while
@@ -88,12 +88,15 @@ orbital projection, resize, model hardpoints, and shield clearance. `bun run che
 the whole workspace. Production preview and owner judgment establish visual and
 play-feel evidence separately from deterministic tests.
 
-## Escort Drill (experimental)
+## Escort Drill
 
 Choose **Escort Drill** in the briefing, pause menu or result, or open
 `?mode=drill`. Restart retains the selected mode. Full voyage remains the default
-with its original full arcs, permanent escorts, shared rally and victory rules.
-The drill ends at 90 seconds if the ark survives, even with remaining hostiles.
+with full arcs, permanent escorts and a shared rally. All modes include reactor
+allocation, rechargeable shields, damageable sensors and interdiction by default.
+The drill requires survival, its real 1.08 km route, and clearance of all four
+contacts after at least 90 seconds. Engines can delay arrival; reaching the gate
+early does not skip contacts. Full voyage uses a 2.52 km route and at least 210s.
 
 Drill mounts cover 240° centered outward (port −Y, starboard +Y). The selected
 fitted mount shows a subtle outline at its actual upgraded range; `coverageFor`
@@ -119,8 +122,9 @@ lets a screen absorb shots. Replacement guardians are paid new craft.
 
 `src/scenarios.ts` defines the fixed encounters: eight port raiders at 10s,
 four starboard bombers at 23s, three port armored craft at 49s, nine ahead
-raiders at 52s. Warnings give direction, class, count and time until first
-arrival. Starting salvage is 300 with no free equipment. Existing weapon,
+raiders at 52s. Healthy sensors provide direction, class, count and time until
+first arrival; damaged arrays reduce warning and targeting range. Starting salvage
+is 300 with no free equipment. Existing weapon,
 income, clearance reward, repair and Aegis values are retained. All numbers are
 provisional owner-playtest tuning. Model-level pause/focus/end guards stop
 combat, timers and economy commands; DOM buttons provide keyboard/touch orders.
@@ -134,21 +138,19 @@ salvage, repairs, pulses or upgrades. Observed outcomes:
 
 | Strategy | Result/time | Hull | Kills | Escort losses | Launches/orders | Salvage |
 | --- | --- | ---: | ---: | ---: | --- | ---: |
-| No intervention | Lost / 37s | 0 | 0 | 0 | 0 / 0 | 344 |
-| Wing defense | Lost / 72s | 0 | 17 | 3 | 2 / 2 | 395 |
-| Guardian screen | Won / 90s | 191 | 24 | 1 | 0 / 1 | 568 |
+| No intervention | Lost / 41s | 0 | 0 | 0 | 0 / 0 | 349 |
+| Wing defense | Lost / 92s | 0 | 21 | 3 | 2 / 2 | 417 |
+| Guardian screen | Won / 90s | 559 | 24 | 1 | 0 / 1 | 568 |
 
 The port wing buys time but leaves the bomber approach exposed. Reassigning a
 guardian to starboard screens that approach while the rail covers port. These
 are limited scripted comparisons, not proof of balance or enjoyable feel.
-Same-equipment controls isolate the orders: holding the purchased wing ready
-loses at 69s with 14 kills, versus 72s and 17 kills after launching. Keeping the
-guardian on port loses at 77s with 20 kills; the single starboard reassignment
-survives with 24 kills. The unarmed baseline is a simulation control; the browser
-requires at least one defense before departure.
-Hardware touch/controller checks and owner playtesting remain separate gates.
+The tests also repeat the same equipment with escort orders held, isolating the
+value of launch timing and guardian reassignment. The unarmed baseline is a
+simulation control; the browser requires at least one defense before departure.
+Physical input and owner play-feel checks remain separate from simulation evidence.
 
-## Systems Trial (phase 2, owner playtest)
+## Ship systems and Systems Trial
 
 Choose **Systems Trial** in the briefing, pause menu or result, or open
 `?mode=systems`. Fit a mixed defense with 500 salvage and complete the actual
@@ -156,7 +158,11 @@ Choose **Systems Trial** in the briefing, pause menu or result, or open
 Balanced power takes about 120 seconds of flight; fast engines can arrive early,
 but must still resolve the later contacts. A tick ending exactly at the deadline
 loses. Hull destruction also loses. Time alone cannot complete the route.
-Full voyage and the 90-second Escort Drill retain their original rules.
+These systems are active in every mode, including the default Full Voyage.
+`?mode=systems` selects the short encounter schedule; it does not enable features.
+There is no systems feature flag or opt-in. Mode choice changes encounters, route
+length, escort control style and deadline, while reactor/shields/sensors/fields
+remain available throughout.
 
 The five fixed encounters are port raiders at 8s, starboard bombers at 26s,
 port armored craft at 58s, ahead raiders at 72s and astern bombers at 98s.
@@ -213,7 +219,7 @@ already flying continue ballistically while a lock is out of range and can
 resume guidance after acquisition recovers. Independent escort self-defense
 continues. A stale priority lock drops as soon as damage removes acquisition.
 
-Systems-mode bombers fire amber array-seeking rounds. Escort interception
+Bombers fire amber array-seeking rounds. Escort interception
 consumes a round; shield absorption protects both hull and sensors. Overflow
 damages the array by up to 35 integrity per round, proportional to the fraction
 that penetrated the shield. Aegis mitigates only hull damage; its round-clearing
@@ -307,9 +313,9 @@ Engine/shield priority exercises sensor impairment and recovery; allocation
 changes warning and defensive opportunities rather than the scheduled clock.
 These examples establish explainable behavior differences, not final balance.
 
-This is the phase-2 owner playtest gate from #27/#30. Assess pacing, readability,
-touch hardware, audio and decision feel separately. Further subsystems and full
-voyage rebalancing wait for that playtest.
+Owner follow-up enables systems in every mode for rapid prototype iteration.
+Assess pacing, readability, touch hardware, audio and decision feel separately.
+The scripted runs do not establish final balance.
 
 Sound effects use local Web Audio synthesis: flak reports, railgun cracks,
 missile exhaust, escort fire, hull impacts, explosions, contact/clear signals,

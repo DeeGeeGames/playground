@@ -37,7 +37,7 @@ export const SECTOR_POINTS: Record<Sector, Point> = { port: { x: 0, y: -230 }, s
 export interface Wing { id: number; phase: 'ready' | 'launching' | 'sortie' | 'returning' | 'rearming'; timer: number; craft: Escort[]; assignment: Sector; }
 export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
 export interface State {
-	systems: SystemsState | undefined;
+	systems: SystemsState;
 	resultReason: 'hull' | 'deadline' | 'arrival' | undefined;
 	scenario: Scenario | undefined; experimental: boolean; wings: Wing[]; launches: number; orders: number; escortLosses: number; coverageDegrees: number; paused: boolean; focused: boolean;
 	time: number; hull: number; salvage: number; wave: number; nextWave: number; kills: number;
@@ -47,11 +47,11 @@ export interface State {
 	cleared: boolean; message: string; messageTime: number;
 }
 export const distance = function (a: Point, b: Point): number { return Math.hypot(a.x - b.x, a.y - b.y); };
-export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill' | 'systems'; systems?: boolean } = {}): State {
+export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill' | 'systems' } = {}): State {
 	const scenario = options.scenario === 'systems' ? SYSTEMS_TRIAL : options.scenario === 'drill' ? ESCORT_DRILL : undefined;
 	return {
 		resultReason: undefined,
-		systems: options.systems || options.scenario === 'systems' ? createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed) : undefined,
+		systems: createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed),
 		scenario, experimental: scenario !== undefined || (options.experimental ?? false), wings: [], launches: 0, orders: 0, escortLosses: 0, coverageDegrees: options.coverageDegrees ?? (scenario ? 240 : 360), paused: false, focused: true,
 		time: 0, hull: MAX_HULL, salvage: scenario?.salvage ?? 300, wave: 0, nextWave: scenario ? (scenario.encounters[0]?.at ?? Infinity) : 5, kills: 0, status: 'fitting',
 		mounts: [-1, 1].flatMap(function (side) { return [-96, -32, 32, 96].map(function (x): Mount { return { x, y: side * 43, weapon: undefined, level: 0, cooldown: 0, aim: side * Math.PI / 2 }; }); }),
@@ -62,8 +62,7 @@ export const createState = function (options: { coverageDegrees?: number; experi
 export const notify = function (state: State, message: string) { state.message = message; state.messageTime = 4; };
 const canOrder = function (state: State) { return !state.paused && state.focused && (state.status === 'fitting' || state.status === 'running'); };
 export const interdictionReason = function (state: State, point?: Point): string {
-	const interdiction = state.systems?.interdiction;
-	if (!interdiction) return 'Systems mode only';
+	const interdiction = state.systems.interdiction;
 	if (!canOrder(state)) return state.paused ? 'Paused' : !state.focused ? 'Command link unfocused' : 'Run ended';
 	if (state.status !== 'running') return 'Depart first';
 	if (interdiction.field) return 'One field already active';
@@ -78,7 +77,7 @@ export const interdictionReason = function (state: State, point?: Point): string
 	return '';
 };
 export const placeInterdiction = function (state: State, point: Point): boolean {
-	if (interdictionReason(state, point) || !state.systems) return false;
+	if (interdictionReason(state, point)) return false;
 	const systems = state.systems;
 	state.salvage -= INTERDICTION_CONFIG.cost;
 	systems.interdiction.field = { id: state.nextId++, world: { x: systems.distanceTraveled + point.x, y: point.y }, remaining: INTERDICTION_CONFIG.lifetime };
@@ -88,7 +87,7 @@ export const placeInterdiction = function (state: State, point: Point): boolean 
 };
 export const setAllocation = function (state: State, allocation: Readonly<Allocation>): boolean {
 	const systems = state.systems;
-	if (!systems || !canOrder(state)) return false;
+	if (!canOrder(state)) return false;
 	if (!POWER_CHANNELS.every(function (channel) { return Number.isInteger(allocation[channel]) && allocation[channel] >= 0; })) return false;
 	if (POWER_CHANNELS.reduce(function (sum, channel) { return sum + allocation[channel]; }, 0) !== REACTOR_UNITS) return false;
 	if (POWER_CHANNELS.every(function (channel) { return systems.allocation[channel] === allocation[channel]; })) return false;
@@ -97,7 +96,7 @@ export const setAllocation = function (state: State, allocation: Readonly<Alloca
 	return true;
 };
 export const transferPower = function (state: State, from: PowerChannel, to: PowerChannel): boolean {
-	if (!state.systems || from === to || !POWER_CHANNELS.includes(from) || !POWER_CHANNELS.includes(to)) return false;
+	if (from === to || !POWER_CHANNELS.includes(from) || !POWER_CHANNELS.includes(to)) return false;
 	const allocation = state.systems.allocation;
 	return setAllocation(state, { ...allocation, [from]: allocation[from] - 1, [to]: allocation[to] + 1 });
 };
@@ -190,8 +189,8 @@ export const repair = function (state: State): boolean {
 	state.salvage -= 80; state.hull = Math.min(MAX_HULL, state.hull + 240); state.repairCooldown = 15; notify(state, 'Repair crews restored 240 hull.'); return true;
 };
 export const repairSensors = function (state: State): boolean {
-	const sensors = state.systems?.sensors;
-	if (!sensors || !canOrder(state) || state.salvage < SENSOR_CONFIG.repairCost || sensors.integrity >= SENSOR_CONFIG.maxIntegrity || sensors.repairCooldown > 0) return false;
+	const sensors = state.systems.sensors;
+	if (!canOrder(state) || state.salvage < SENSOR_CONFIG.repairCost || sensors.integrity >= SENSOR_CONFIG.maxIntegrity || sensors.repairCooldown > 0) return false;
 	state.salvage -= SENSOR_CONFIG.repairCost;
 	sensors.integrity = SENSOR_CONFIG.maxIntegrity; sensors.repairCooldown = SENSOR_CONFIG.repairCooldown; sensors.repairs++;
 	notify(state, 'Sensors restored to 100%. Advance warning and acquisition restored.');
@@ -218,17 +217,19 @@ export const pulse = function (state: State): boolean {
 };
 export const WAVE_NAMES = ['Scouting party', 'Bomber screen', 'Ironclad advance', 'Crossfire', 'The swarm', 'The gatekeeper'];
 export const waveSide = function (wave: number): string { return ['PORT', 'STARBOARD', 'BOW', 'BOTH FLANKS', 'ASTERN', 'BOW + FLANKS'][(wave - 1) % 6] ?? 'UNKNOWN'; };
-const startWave = function (state: State) {
-	state.wave += 1; state.nextWave += WAVE_INTERVAL; state.cleared = false;
-	const wave = state.wave; const count = [8, 11, 10, 17, 24, 16][wave - 1] ?? 16;
-	for (let i = 0; i < count; i++) {
+const waveArrivals = function (wave: number, at: number): Arrival[] {
+	const count = [8, 11, 10, 17, 24, 16][wave - 1] ?? 16;
+	return Array.from({ length: count }, function (_, i) {
 		const base = wave === 1 ? -Math.PI / 2 : wave === 2 ? Math.PI / 2 : wave === 3 ? 0 : wave === 5 ? Math.PI : i % 2 === 0 ? -Math.PI / 2 : Math.PI / 2;
 		const angle = base + Math.sin(i * 2.4) * 0.65;
 		const kind: EnemyKind = wave === 6 && i === 0 ? 'flagship' : wave >= 3 && i % 5 === 0 ? 'armored' : wave >= 2 && i % 3 === 0 ? 'bomber' : 'raider';
 		const arrivalAngle = kind === 'flagship' ? 0 : angle;
-		state.arrivals.push({ at: state.time + i * (wave === 5 ? 0.45 : 0.9), kind, x: Math.cos(arrivalAngle) * 620, y: Math.sin(arrivalAngle) * 520 });
-	}
-	if (!state.systems) notify(state, `Wave ${wave}: ${WAVE_NAMES[wave - 1] ?? 'Hostile contact'} — ${waveSide(wave).toLowerCase()}.`);
+		return { at: at + i * (wave === 5 ? 0.45 : 0.9), kind, x: Math.cos(arrivalAngle) * 620, y: Math.sin(arrivalAngle) * 520 };
+	});
+};
+const startWave = function (state: State) {
+	state.wave += 1; state.nextWave += WAVE_INTERVAL; state.cleared = false;
+	state.arrivals.push(...waveArrivals(state.wave, state.time));
 };
 const startEncounter = function (state: State) {
 	const encounter = state.scenario?.encounters[state.wave]; if (!encounter) return;
@@ -238,7 +239,6 @@ const startEncounter = function (state: State) {
 		const bearing = angle + Math.sin(i * 2.4) * 0.35;
 		state.arrivals.push({ at: encounter.at + i * encounter.spacing, kind: encounter.kind, x: Math.cos(bearing) * 520, y: Math.sin(bearing) * 460 });
 	}
-	if (!state.systems) notify(state, `${encounter.sector.toUpperCase()}: ${encounter.count} ${encounter.kind} contacts.`);
 };
 export const durationFor = function (state: State): number { return state.scenario?.duration ?? ROUTE_SECONDS; };
 const contactDirection = function (point: Point): string {
@@ -246,7 +246,6 @@ const contactDirection = function (point: Point): string {
 };
 export const contactWarning = function (state: State): string {
 	const next = state.scenario?.encounters[state.wave];
-	if (!state.systems) return next ? `${next.sector.toUpperCase()} · ${next.count} ${next.kind} · arrival ${Math.max(0, Math.ceil(next.at - state.time))}s` : 'All contacts arrived · hold until 90s';
 	if (next) {
 		const bearing = SECTOR_POINTS[next.sector]; const angle = Math.atan2(bearing.y, bearing.x);
 		const range = Math.hypot(Math.cos(angle) * 520, Math.sin(angle) * 460) + ENEMIES[next.kind].speed * Math.max(0, next.at - state.time);
@@ -254,7 +253,8 @@ export const contactWarning = function (state: State): string {
 		if (intel === 'classified') return `${next.sector.toUpperCase()} · ${next.count} ${next.kind} · arrival ${Math.max(0, Math.ceil(next.at - state.time))}s`;
 		if (intel === 'detected') return `${next.sector.toUpperCase()} · unclassified contact`;
 	}
-	for (const arrival of state.arrivals) {
+	const futureWave = !state.scenario && state.wave < WAVE_COUNT && Number.isFinite(state.nextWave) ? waveArrivals(state.wave + 1, state.nextWave) : [];
+	for (const arrival of [...state.arrivals, ...futureWave]) {
 		const radius = Math.hypot(arrival.x, arrival.y);
 		const range = radius + ENEMIES[arrival.kind].speed * Math.max(0, arrival.at - state.time);
 		const intel = contactIntel(state, { x: arrival.x * range / radius, y: arrival.y * range / radius });
@@ -301,13 +301,11 @@ export const step = function (state: State, dt: number) {
 	if (deadline !== undefined && state.time >= deadline) { state.status = 'lost'; state.resultReason = state.hull <= 0 ? 'hull' : 'deadline'; state.shots = []; return; }
 	dt = Math.min(dt, 0.05, deadline === undefined ? Infinity : Math.max(0, deadline - state.time)); state.time += dt;
 	state.pulseCooldown = Math.max(0, state.pulseCooldown - dt); state.aegisRemaining = Math.max(0, state.aegisRemaining - dt); state.repairCooldown = Math.max(0, state.repairCooldown - dt); state.messageTime = Math.max(0, state.messageTime - dt);
-	const distanceBefore = state.systems?.distanceTraveled ?? 0;
-	if (state.systems) {
-		state.systems.sensors.repairCooldown = Math.max(0, state.systems.sensors.repairCooldown - dt);
-		state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
-		state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + powerOutputs(state.systems.allocation).speed * dt);
-	}
-	const fieldDrift = (state.systems?.distanceTraveled ?? 0) - distanceBefore;
+	const distanceBefore = state.systems.distanceTraveled;
+	state.systems.sensors.repairCooldown = Math.max(0, state.systems.sensors.repairCooldown - dt);
+	state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
+	state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + powerOutputs(state.systems.allocation).speed * dt);
+	const fieldDrift = (state.systems.distanceTraveled) - distanceBefore;
 	advanceInterdiction(state, dt);
 	// The reactor provides a modest income even while enemies remain outside firing range.
 	state.salvage += dt * 1.2;
@@ -317,9 +315,9 @@ export const step = function (state: State, dt: number) {
 	}
 	state.arrivals = state.arrivals.filter(function (a) { return a.at > state.time; });
 	clearLostPriority(state);
-	const weaponRate = state.systems ? powerOutputs(state.systems.allocation).weaponRate : 1;
+	const weaponRate = powerOutputs(state.systems.allocation).weaponRate;
 	for (const mount of state.mounts) {
-		mount.cooldown = state.systems ? Math.max(0, mount.cooldown - dt * weaponRate) : mount.cooldown - dt;
+		mount.cooldown = Math.max(0, mount.cooldown - dt * weaponRate);
 		if (!mount.weapon || weaponRate === 0) continue;
 		const config = WEAPONS[mount.weapon]; const candidates = state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy) && covered(state, mount, enemy); });
 		const target = candidates.find(function (enemy) { return enemy.id === state.priority; }) ?? nearest(mount, candidates, coverageFor(state, mount).range);
@@ -352,7 +350,7 @@ export const step = function (state: State, dt: number) {
 		const detouring = navigateField(state, enemy, destination, config.speed, dt, fieldDrift, distance(enemy, destination) > config.range * 0.85);
 		if (!detouring && distance(enemy, destination) > config.range * 0.85) moveToward(enemy, destination, config.speed, dt);
 		if (enemy.cooldown <= 0 && distance(enemy, destination) <= config.range && !fieldBlocks(state, enemy, destination)) {
-			fire(state, enemy, destination, config.damage, enemy.kind === 'bomber' ? 155 : 235, 'enemy', 'hostile', escort?.id, state.systems && enemy.kind === 'bomber' ? SENSOR_CONFIG.damagePerBomberHit : undefined); enemy.cooldown = config.reload;
+			fire(state, enemy, destination, config.damage, enemy.kind === 'bomber' ? 155 : 235, 'enemy', 'hostile', escort?.id, enemy.kind === 'bomber' ? SENSOR_CONFIG.damagePerBomberHit : undefined); enemy.cooldown = config.reload;
 		}
 	}
 	let arkHit = false;
@@ -372,16 +370,16 @@ export const step = function (state: State, dt: number) {
 		} else {
 			const center = fieldRelative(state);
 			const blocked = center ? circleHit({ x: before.x - fieldDrift, y: before.y }, shot, center, INTERDICTION_CONFIG.radius) : undefined;
-			if (blocked && state.systems) {
+			if (blocked) {
 				effect(state, blocked, 20, '#d7bf89', shot); shot.life = 0; state.systems.interdiction.blockedShots++; continue;
 			}
 			const hit = state.escorts.find(function (escort) { return escort.hp > 0 && segmentDistance(escort, before, shot) < (escort.kind === 'guardian' ? 20 : 12); });
 			if (hit) { hit.hp -= shot.damage; shot.life = 0; effect(state, hit, 15, '#ff897e'); }
 			else if (Math.abs(shot.x) < 145 && Math.abs(shot.y) < 40) {
-				const overflow = state.systems ? absorbShieldDamage(state.systems, shot.damage) : shot.damage;
+				const overflow = absorbShieldDamage(state.systems, shot.damage);
 				// Escort interception consumed its round above. Only shield overflow disrupts sensors;
 				// Aegis mitigates hull damage below, not the subsystem disruption.
-				if (state.systems && overflow > 0 && shot.sensorDamage !== undefined && Number.isFinite(shot.sensorDamage) && shot.sensorDamage > 0) {
+				if (overflow > 0 && shot.sensorDamage !== undefined && Number.isFinite(shot.sensorDamage) && shot.sensorDamage > 0) {
 					const sensors = state.systems.sensors; const beforeIntegrity = sensors.integrity;
 					sensors.integrity = Math.max(0, sensors.integrity - Math.min(SENSOR_CONFIG.damagePerBomberHit, shot.sensorDamage) * overflow / shot.damage);
 					if (beforeIntegrity >= SENSOR_CONFIG.healthyThreshold && sensors.integrity < SENSOR_CONFIG.healthyThreshold) sensors.impairments++;
@@ -394,7 +392,7 @@ export const step = function (state: State, dt: number) {
 			}
 		}
 	}
-	if (state.systems) advanceSystems(state.systems, dt, arkHit);
+	advanceSystems(state.systems, dt, arkHit);
 	for (const enemy of state.enemies) if (enemy.hp <= 0) { state.salvage += ENEMIES[enemy.kind].reward; state.kills += 1; effect(state, enemy, enemy.kind === 'flagship' ? 120 : 35, '#ffb87b'); }
 	for (const escort of state.escorts) if (escort.hp <= 0) { state.escortLosses++; effect(state, escort, 25, '#81cfe7'); }
 	state.enemies = state.enemies.filter(function (e) { return e.hp > 0; }); state.escorts = state.escorts.filter(function (e) { return e.hp > 0; }); state.shots = state.shots.filter(function (s) { return s.life > 0; });
@@ -408,9 +406,7 @@ export const step = function (state: State, dt: number) {
 	else if (deadline !== undefined && state.time >= deadline) { state.status = 'lost'; state.resultReason = 'deadline'; state.shots = []; }
 	else {
 		const combatResolved = state.wave === (state.scenario?.encounters.length ?? WAVE_COUNT) && state.enemies.length === 0 && state.arrivals.length === 0;
-		const complete = state.systems
-			? (deadline !== undefined || state.time >= durationFor(state)) && state.systems.distanceTraveled >= state.systems.routeLength && combatResolved
-			: state.scenario ? state.time >= state.scenario.duration : state.time >= ROUTE_SECONDS && combatResolved;
+		const complete = (deadline !== undefined || state.time >= durationFor(state)) && state.systems.distanceTraveled >= state.systems.routeLength && combatResolved;
 		if (complete) { state.status = 'won'; state.resultReason = 'arrival'; state.shots = []; }
 	}
 };

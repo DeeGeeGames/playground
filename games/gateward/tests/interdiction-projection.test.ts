@@ -21,7 +21,7 @@ test('placement ray and field ring share the flight plane after orbit and resize
 
 test('a fixed world buoy moves aft in the projected view at actual engine speed', function () {
 	for (const engines of [0, 1, 4, 10]) {
-		const state = createState({ scenario: 'drill', systems: true }); state.status = 'running'; state.nextWave = Infinity;
+		const state = createState({ scenario: 'drill' }); state.status = 'running'; state.nextWave = Infinity;
 		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 });
 		expect(placeInterdiction(state, { x: 300, y: 0 })).toBe(true);
 		const view = viewFor(1440, 900); const before = fieldRelative(state); if (!before) throw new Error('Missing field');
@@ -38,7 +38,7 @@ test('a fixed world buoy moves aft in the projected view at actual engine speed'
 });
 
 test('interdiction absorption meets an already flying hull-bound round at its rendered height', function () {
-	const state = createState({ systems: true }); state.status = 'running'; state.nextWave = Infinity;
+	const state = createState(); state.status = 'running'; state.nextWave = Infinity;
 	setAllocation(state, { engines: 0, weapons: 10, shields: 0 });
 	const shot = { id: state.nextId++, x: 415, y: 0, vx: -235, vy: 0, damage: 10, side: 'enemy' as const, weapon: 'hostile' as const, target: undefined, life: 4 - (600 - 415) / 235 };
 	const trajectory = createTrajectory(shot, state); state.shots.push(shot);

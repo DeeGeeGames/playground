@@ -82,8 +82,7 @@ export const createInterdictionPanel = function (host: HTMLElement, getState: ()
 	const reason = document.createElement('p'); reason.className = 'interdiction-reason'; reason.id = 'interdiction-reason'; reason.setAttribute('role', 'status');
 	host.append(preview, actions, instructions, reason);
 	const update = function () {
-		const state = getState(); const systems = state.systems; host.hidden = !systems;
-		if (!systems) return;
+		const state = getState(); const systems = state.systems;
 		const interdiction = systems.interdiction; const point = placement.get(); const active = !!point;
 		const hold = holdReason(state, available()); const startReason = hold || interdictionReason(state);
 		const placementReason = point ? hold || interdictionReason(state, point) : startReason;

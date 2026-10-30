@@ -26,16 +26,16 @@ test('passing scenery moves opposite the isometric bow direction at the actual t
 });
 
 
-test('state journeys preserve the original drill scenery scaling and voyage rate', function () {
-	const drill = createState({ scenario: 'drill' }); drill.status = 'running'; drill.time = 45;
-	expect(journeyFor(drill).distance).toBe(1260); expect(beaconFor(6, drill).x).toBe(1260);
-	drill.time = 90; expect(journeyFor(drill).distance).toBe(2520);
+test('every state journey uses distance from engines rather than elapsed time', function () {
+	const drill = createState({ scenario: 'drill' }); drill.status = 'running'; drill.time = 45; drill.systems.distanceTraveled = 540;
+	expect(journeyFor(drill).distance).toBe(540); expect(beaconFor(6, drill).x).toBe(540);
+	drill.time = 90; expect(journeyFor(drill).distance).toBe(540);
 	const voyage = createState(); voyage.status = 'running'; voyage.time = 45;
-	expect(journeyFor(voyage).distance).toBe(540);
+	expect(journeyFor(voyage).distance).toBe(0);
 });
 
 test('systems landmarks, ETA and route fraction use integrated distance through reallocations', function () {
-	const state = createState({ scenario: 'drill', systems: true });
+	const state = createState({ scenario: 'drill' });
 	expect(journeyFor(state)).toEqual({ distance: 0, remaining: 1080, speed: 0, progress: 0, eta: 90 });
 	state.status = 'running'; state.nextWave = Infinity;
 	for (let i = 0; i < 100; i++) step(state, 0.05);
@@ -50,7 +50,7 @@ test('systems landmarks, ETA and route fraction use integrated distance through 
 });
 
 test('actual speed stops during pause, focus loss, results and arrival while configured ETA remains useful', function () {
-	const state = createState({ systems: true }); state.status = 'running';
+	const state = createState(); state.status = 'running';
 	expect(journeyFor(state).speed).toBe(12);
 	state.paused = true; expect(journeyFor(state).speed).toBe(0); expect(journeyFor(state).eta).toBe(210);
 	state.paused = false; state.focused = false; expect(journeyFor(state).speed).toBe(0);

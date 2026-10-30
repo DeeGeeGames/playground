@@ -8,8 +8,8 @@ export interface InterdictionField { id: number; world: Point; remaining: number
 export interface Detour { fieldId: number; waypoint: Point; side: -1 | 1 }
 
 export const fieldRelative = function (state: State): Point | undefined {
-	const systems = state.systems; const field = systems?.interdiction.field;
-	return systems && field ? { x: field.world.x - systems.distanceTraveled, y: field.world.y } : undefined;
+	const systems = state.systems; const field = systems.interdiction.field;
+	return field ? { x: field.world.x - systems.distanceTraveled, y: field.world.y } : undefined;
 };
 
 // Tangency counts as blocked. Return the first hit so the absorption effect sits on the boundary.
@@ -55,8 +55,8 @@ const move = function (point: Point, target: Point, travel: number) {
 // Only detouring ships use the field's world frame. Compensating actual route drift keeps
 // even a slow capital ship outside a field that the ark passes at maximum engine power.
 export const navigateField = function (state: State, enemy: Enemy, destination: Point, speed: number, dt: number, drift: number, approaching: boolean): boolean {
-	const systems = state.systems; const field = systems?.interdiction.field; const center = fieldRelative(state);
-	if (!systems || !field || !center) { delete enemy.detour; delete enemy.interdictionSide; return false; }
+	const systems = state.systems; const field = systems.interdiction.field; const center = fieldRelative(state);
+	if (!field || !center) { delete enemy.detour; delete enemy.interdictionSide; return false; }
 	const radius = enemyClearance(enemy);
 	const compensated = { x: enemy.x - drift, y: enemy.y };
 	const blocked = circleHit(enemy, destination, center, approaching ? radius - 8 : INTERDICTION_CONFIG.radius + (enemy.detour ? 8 : 0)) !== undefined
@@ -89,8 +89,7 @@ export const navigateField = function (state: State, enemy: Enemy, destination: 
 };
 
 export const advanceInterdiction = function (state: State, dt: number) {
-	const interdiction = state.systems?.interdiction;
-	if (!interdiction) return;
+	const interdiction = state.systems.interdiction;
 	interdiction.cooldown = Math.max(0, interdiction.cooldown - dt);
 	const field = interdiction.field;
 	if (!field) return;

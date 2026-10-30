@@ -3,7 +3,7 @@ import { build, contactWarning, createState, deploy, MAX_HULL, pulse, repairSens
 import { canAcquire, contactIntel, SENSOR_CONFIG, sensorRanges } from '../src/sensors';
 
 const quiet = function () {
-	const state = createState({ systems: true, scenario: 'drill' });
+	const state = createState({ scenario: 'drill' });
 	state.status = 'running'; state.nextWave = Infinity;
 	return state;
 };
@@ -49,14 +49,16 @@ describe('range-limited sensor intelligence', function () {
 		expect(repairSensors(state)).toBe(true);
 		expect(contactWarning(state)).toContain('bomber');
 	});
-	test('legacy voyage and drill retain unrestricted intel and priority', function () {
+	test('voyage and drill both use sensors without an opt-in', function () {
 		for (const state of [createState(), createState({ scenario: 'drill' })]) {
 			const enemy = enemyAt(state, 10000);
-			expect(contactIntel(state, enemy)).toBe('classified');
-			expect(setPriority(state, enemy.id)).toBe(true);
+			expect(contactIntel(state, enemy)).toBe('unseen');
+			expect(setPriority(state, enemy.id)).toBe(false);
 			expect(repairSensors(state)).toBe(false);
 		}
-		expect(contactWarning(createState({ scenario: 'drill' }))).toBe('PORT · 8 raider · arrival 10s');
+		expect(contactWarning(createState({ scenario: 'drill' }))).toBe('Scanning for contacts');
+		const voyage = createState(); voyage.time = 4; expect(contactWarning(voyage)).toContain('raider');
+		voyage.systems.sensors.integrity = 0; expect(contactWarning(voyage)).toBe('Scanning for contacts');
 	});
 });
 
@@ -122,7 +124,7 @@ describe('interceptable bomber disruption', function () {
 		advance(state, 2); expect(systems.sensors.integrity).toBe(0);
 	});
 	test('real drill bomber rounds penetrate depleted shields and sensors can be restored', function () {
-		const state = createState({ systems: true, scenario: 'drill' }); state.status = 'running';
+		const state = createState({ scenario: 'drill' }); state.status = 'running';
 		state.wave = 1; state.time = 22.95; state.nextWave = 23;
 		const systems = systemsFor(state); systems.shield.charge = 0; systems.allocation = { engines: 4, weapons: 6, shields: 0 };
 		for (let frame = 0; frame < 400 && systems.sensors.integrity >= 50; frame++) step(state, 0.05);

@@ -84,17 +84,19 @@ export const strategyRun = function (strategy: 'baseline' | 'wings' | 'guardians
 	const s = createState({ scenario: 'drill' });
 	if (strategy !== 'baseline') { build(s, 0, 'rail'); if (strategy === 'wings') { deploy(s, 'interceptor'); build(s, 4, 'flak'); } else { deploy(s, 'guardian'); build(s, 4, 'flak'); } }
 	s.status = 'running';
-	for (let second = 0; second < 91 && s.status === 'running'; second++) {
+	for (let second = 0; second < 300 && s.status === 'running'; second++) {
 		if (issueOrders && strategy === 'wings' && [7, 42, 75].includes(second)) for (const w of s.wings) scramble(s, w.id, second === 75 ? 'ahead' : 'port');
 		if (issueOrders && strategy === 'guardians' && second === 18) for (const g of s.escorts) assignGuardian(s, g.id, 'starboard');
 		advance(s, 1);
 	}
 	return { strategy, result: s.status, time: Math.round(s.time), hull: Math.ceil(s.hull), kills: s.kills, losses: s.escortLosses, launches: s.launches, orders: s.orders, salvage: Math.floor(s.salvage) };
 };
-test('drill arrivals obey the schedule and survival at the deadline wins with remaining hostiles', function () {
+test('drill arrivals obey the schedule and require arrival plus clearance after 90 seconds', function () {
 	const s = createState({ scenario: 'drill' }); s.status = 'running'; advance(s, 9.9); expect(s.wave).toBe(0); expect(s.enemies).toHaveLength(0);
 	advance(s, .2); expect(s.wave).toBe(1); expect(s.enemies[0]?.kind).toBe('raider'); expect(s.enemies[0]?.y).toBeLessThan(0); expect(s.arrivals).toHaveLength(7);
-	s.time = 89.99; s.wave = 4; s.nextWave = Infinity; s.arrivals = []; step(s, 1 / 60); expect<State['status']>(s.status).toBe('won'); expect(s.enemies.length).toBeGreaterThan(0);
+	s.time = 89.99; s.wave = 4; s.nextWave = Infinity; s.arrivals = []; s.systems.distanceTraveled = s.systems.routeLength;
+	step(s, 1 / 60); expect<State['status']>(s.status).toBe('running'); expect(s.enemies.length).toBeGreaterThan(0);
+	s.enemies = []; step(s, 1 / 60); expect<State['status']>(s.status).toBe('won');
 	const time = s.time; advance(s, 1); expect(s.time).toBe(time);
 });
 test('paused and unfocused sorties retain their timers and positions', function () {
