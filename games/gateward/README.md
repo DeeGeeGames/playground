@@ -215,6 +215,44 @@ does not heal on its own; paused, unfocused and ended runs freeze repair timers
 and reject commands. Full voyage and Escort Drill retain their previous intel
 and targeting rules.
 
+Interdiction / **I** previews a single field after departure. Choose Ahead, Port
+or Starboard, tap/click the battlefield to aim, or use arrow keys while the
+canvas is focused (up/down ahead/astern; left/right port/starboard, 20m per press).
+**Enter** or **Place field** confirms; **Esc** cancels. A tap only updates the
+preview. Green marks a valid position, red an invalid one; the outer ring shows
+the 450m placement range. Orbit drags, pinches and pointer cancellation never
+confirm placement. Pause, focus loss, restart and result transitions discard it.
+
+A field costs 90 salvage, has a 110m radius, lasts 30 simulation seconds and has a
+40-second cooldown. Only one can be active. Its circle must clear the ark and
+hostiles at deployment, stay within 450m and start ahead/beside the ark (X ≥ −50m).
+The field stays at its deployment point along the route, so it drifts aft by the
+ark's actual distance traveled. It expires early once more than 650m astern.
+Reduced motion keeps this physical movement. Friendly fire and escort movement
+pass through; hostile firing lines and already flying rounds are blocked.
+
+Hostiles choose a stable side and tangent/arc waypoints around the field, then
+resume their approach once clear. **DETOUR** identifies detected craft being
+redirected. A hostile targeting an escort inside the field waits at the boundary
+until the target emerges or the temporary field expires. During detours, movement
+accounts for ark drift in the field's fixed frame, including slow ships passed
+by fast engines; position changes remain bounded. New arrivals covered by a
+field enter farther out on their original bearing, before first appearing.
+Expiry clears navigation state. Intercept effects preserve the round's actual
+presented trajectory while gameplay geometry remains on the 2D plane.
+
+`bun test games/gateward/tests/interdiction.test.ts` compares the same unarmed,
+stationary-ark approach with and without a field at (300, 0). A hostile starts at
+(600, 0), with no escorts. The field changes its route and delays its first shot:
+
+| Hostile | First shot without / with field | Lateral offset at 15s without / with |
+| --- | --- | --- |
+| Raider | 7.82s / 9.07s | 0m / 76.17m |
+| Bomber | 6.67s / 10.25s | 0m / 136.32m |
+
+Both detours rejoin before 15s while the field remains active. These deterministic
+examples demonstrate path shaping and blocked engagement, not feel or balance.
+
 Sound effects use local Web Audio synthesis: flak reports, railgun cracks,
 missile exhaust, escort fire, hull impacts, explosions, contact/clear signals,
 Aegis, repairs, departure and results. Sound unlocks on the first pointer or

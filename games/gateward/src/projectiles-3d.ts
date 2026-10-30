@@ -46,7 +46,13 @@ export const projectileHeight = function (point: Point, trajectory: Trajectory, 
 	return trajectory.startHeight + (trajectory.endHeight - trajectory.startHeight) * fraction;
 };
 
-export const effectHeight = function (effect: Effect): number {
+export const effectHeight = function (effect: Effect, state: State): number {
+	if (effect.sourceShot) {
+		// Interdiction stores the 2D round at impact; altitude remains presentation-only.
+		// Escort-bound rounds stay on the flight layer even if the escort has since died.
+		if (effect.sourceShot.target !== undefined) return FLIGHT_HEIGHT;
+		return projectileHeight(effect, createTrajectory(effect.sourceShot, state));
+	}
 	// These are the existing simulation's Aegis and hull-impact visual signatures.
 	return effect.color === '#88f1e4' || (effect.color === '#ff897e' && effect.radius === 22) ? DECK_HEIGHT : FLIGHT_HEIGHT;
 };

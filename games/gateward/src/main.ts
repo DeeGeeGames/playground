@@ -3,12 +3,13 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { build, contactWarning, craftCount, createState, deploy, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Weapon } from './simulation';
+import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Point, type Weapon } from './simulation';
 import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
 import { createEngineeringPanel } from './engineering-panel';
 import { powerOutputs } from './systems';
 import { contactIntel, SENSOR_CONFIG, sensorRanges } from './sensors';
+import { createInterdictionPanel } from './interdiction-panel';
 
 const element = function (id: string): HTMLElement {
 	const found = document.getElementById(id); if (!found) throw new Error(`Missing element: ${id}`); return found;
@@ -31,7 +32,7 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const mountButtons = Array.from({ length: 8 }, function (_, i) {
 		const control = document.createElement('button'); control.type = 'button'; control.setAttribute('aria-label', `Select mount ${i + 1}`);
-		control.addEventListener('click', function () { if (available()) { selected = i; rallyMode = false; } }, options);
+		control.addEventListener('click', function () { if (available()) { selected = i; rallyMode = false; placement = undefined; } }, options);
 		element('mounts').append(control); return control;
 	});
 	const buildButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-build]')];
@@ -41,6 +42,7 @@ const shutdown = await mountGame('game', async function (container) {
 	let mode = requestedMode === 'systems' ? 'systems' : requestedMode === 'drill' ? 'drill' : 'voyage';
 	const newState = function () { return createState(mode === 'voyage' ? {} : { scenario: 'drill', systems: mode === 'systems' }); };
 	let state = newState(); let selected = 0; let paused = false; let briefing = true; let rallyMode = false; let speed = 1;
+	let placement: Point | undefined;
 	let frame = 0; let previous = 0; let accumulator = 0; let disposed = false; let contextAvailable = true;
 	const pointers = new Map<number, { x: number; y: number; moved: boolean }>();
 	let multiTouch = false;
@@ -51,7 +53,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (!value && !contextAvailable) return;
 		if (value) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); }
 		audio.setActive(!value && state.focused && !document.hidden && contextAvailable);
-		paused = value; state.paused = value; rallyMode = false; accumulator = 0; ui.pausePanel.hidden = !paused;
+		paused = value; state.paused = value; rallyMode = false; placement = undefined; accumulator = 0; ui.pausePanel.hidden = !paused;
 		if (paused) button('resume').focus({ preventScroll: true }); else focusCanvas();
 	};
 	const presentation = await createPresentation(canvas);
@@ -77,7 +79,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const restart = function () {
 		audio.reset();
 		pointers.clear(); multiTouch = false;
-		state = newState(); selected = 0; paused = false; briefing = false; rallyMode = false; speed = 1; accumulator = 0;
+		placement = undefined; state = newState(); selected = 0; paused = false; briefing = false; rallyMode = false; speed = 1; accumulator = 0;
 		ui.pausePanel.hidden = true; ui.result.hidden = true; ui.brief.hidden = true; focusCanvas();
 		presentation.resetCamera();
 	};
@@ -85,6 +87,18 @@ const shutdown = await mountGame('game', async function (container) {
 		if (!available()) return;
 		if (!action()) notify(state, 'Order unavailable. Check salvage, capacity, or cooldown.');
 		else { syncAudio(); audio.play('order'); }
+	};
+	const cancelPlacement = function () { placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction(); };
+	const aimPlacement = function (point: Point) {
+		if (!available()) return;
+		const reason = interdictionReason(state); if (reason) { notify(state, reason); return; }
+		pointers.clear(); multiTouch = false; presentation.cancelInteraction();
+		placement = { ...point }; rallyMode = false; focusCanvas();
+	};
+	const confirmPlacement = function () {
+		if (!available() || !placement) return;
+		const reason = interdictionReason(state, placement); if (reason) { notify(state, reason); return; }
+		if (placeInterdiction(state, placement)) { cancelPlacement(); syncAudio(); audio.play('order'); }
 	};
 	const doBuild = function (weapon: Weapon) { order(function () { return build(state, selected, weapon); }); };
 	for (const control of buildButtons) control.addEventListener('click', function () {
@@ -109,12 +123,13 @@ const shutdown = await mountGame('game', async function (container) {
 	}, options);
 	const escortPanel = createEscortPanel(element('escort-orders'), function () { return state; }, available, abort.signal);
 	const engineeringPanel = createEngineeringPanel(element('engineering'), function () { return state; }, available, abort.signal);
+	const interdictionPanel = createInterdictionPanel(element('interdiction-panel'), function () { return state; }, available, { get: function () { return placement; }, aim: aimPlacement, cancel: cancelPlacement, confirm: confirmPlacement }, abort.signal);
 	ui.pause.addEventListener('click', function () { setPause(!paused); }, options);
 	button('help').addEventListener('click', function () { setPause(true); }, options);
 	button('resume').addEventListener('click', function () { setPause(false); }, options);
 	button('restart').addEventListener('click', restart, options); button('restart-pause').addEventListener('click', restart, options);
 	ui.speed.addEventListener('click', function () { if (available()) speed = speed === 1 ? 2 : 1; }, options);
-	ui.rally.addEventListener('click', function () { if (available()) { rallyMode = !rallyMode; focusCanvas(); } }, options);
+	ui.rally.addEventListener('click', function () { if (available()) { cancelPlacement(); rallyMode = !rallyMode; focusCanvas(); } }, options);
 	ui.clear.addEventListener('click', function () { if (available()) setPriority(state, undefined); }, options);
 	canvas.addEventListener('pointerdown', function (event) {
 		if (event.button !== 0) return;
@@ -132,6 +147,11 @@ const shutdown = await mountGame('game', async function (container) {
 		if (pointers.size === 0) multiTouch = false;
 		if (!start || start.moved || gesture || cancelled || event.button !== 0 || !available()) return;
 		const rect = canvas.getBoundingClientRect();
+		if (placement) {
+			const point = presentation.placementPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+			if (point) { placement = point; notify(state, 'Field preview updated. Enter or Place field confirms; Esc cancels.'); }
+			focusCanvas(); return;
+		}
 		const { mount, enemy, world } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
 		if (mount >= 0 && !rallyMode) selected = mount;
 		else if (enemy && !rallyMode) {
@@ -149,21 +169,28 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.target instanceof HTMLSelectElement) return;
 		// Preserve native keyboard activation when navigating DOM controls.
 		if (event.code === 'Space' && event.target instanceof HTMLButtonElement) return;
+		if (event.code === 'Escape' && placement) { event.preventDefault(); cancelPlacement(); return; }
 		if (event.code === 'Escape' || event.code === 'Space') { event.preventDefault(); setPause(!paused); return; }
 		if (!available()) return;
+		if (event.code === 'KeyI' && state.systems) { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement({ x: 300, y: 0 }); return; }
+		if (placement && event.target === canvas) {
+			const adjustment = event.code === 'ArrowUp' ? { x: 20, y: 0 } : event.code === 'ArrowDown' ? { x: -20, y: 0 } : event.code === 'ArrowLeft' ? { x: 0, y: -20 } : event.code === 'ArrowRight' ? { x: 0, y: 20 } : undefined;
+			if (adjustment) { event.preventDefault(); placement = { x: placement.x + adjustment.x, y: placement.y + adjustment.y }; return; }
+			if (event.code === 'Enter') { event.preventDefault(); confirmPlacement(); return; }
+		}
 		const index = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8'].indexOf(event.code);
-		if (index >= 0) { selected = index; rallyMode = false; event.preventDefault(); }
+		if (index >= 0) { selected = index; rallyMode = false; cancelPlacement(); event.preventDefault(); }
 		if (event.code === 'KeyQ') { event.preventDefault(); order(function () { return pulse(state); }); }
 		if (event.code === 'KeyE') { event.preventDefault(); order(function () { return repair(state); }); }
 		if (event.code === 'KeyS' && state.systems) { event.preventDefault(); order(function () { return repairSensors(state); }); }
-		if (event.code === 'KeyR' && !state.experimental) { event.preventDefault(); rallyMode = !rallyMode; }
+		if (event.code === 'KeyR' && !state.experimental) { event.preventDefault(); cancelPlacement(); rallyMode = !rallyMode; }
 	}, options);
 	window.addEventListener('blur', function () { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); rallyMode = false; setPause(true); }, options);
 	document.addEventListener('visibilitychange', function () { if (document.hidden) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); rallyMode = false; setPause(true); } }, options);
 	window.addEventListener('focus', function () { state.focused = true; }, options);
 	document.addEventListener('visibilitychange', function () { if (!document.hidden) state.focused = true; }, options);
 	const hud = function () {
-		escortPanel(); engineeringPanel();
+		escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
 		const active = available();
 		const systems = state.systems; const energyShield = systems?.shield;
 		element('sensor-panel').hidden = !systems;
@@ -236,15 +263,15 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.rally.hidden = state.experimental; label(element('escort-help'), state.experimental ? 'Buy ready wings, then scramble a sector. Guardians hold their own sector. Reserve craft count toward nine slots.' : 'Escorts engage near their shared rally point.'); ui.rally.disabled = !active; ui.rally.classList.toggle('active', rallyMode); ui.rally.setAttribute('aria-pressed', String(rallyMode));
 		label(ui.rally, rallyMode ? 'Click space to place rally point' : '⌖ Set escort rally point');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
-		label(ui.hint, state.experimental ? 'Select a mount for coverage · Click hostile for turret priority · Order escorts in bay' : rallyMode ? 'RALLY MODE · Click or tap a location for all escorts' : state.priority !== undefined ? 'PRIORITY LOCK · Weapons focus the marked hostile when in range' : 'Click mount to build · Click empty space to rally · Click hostile to focus');
+		label(ui.hint, placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.experimental ? 'Select a mount for coverage · Click hostile for turret priority · Order escorts in bay' : rallyMode ? 'RALLY MODE · Click or tap a location for all escorts' : state.priority !== undefined ? 'PRIORITY LOCK · Weapons focus the marked hostile when in range' : 'Click mount to build · Click empty space to rally · Click hostile to focus');
 		label(ui.message, state.messageTime > 0 ? state.message : ''); label(ui.speed, `${speed}×`); ui.speed.disabled = !active;
 		label(ui.pause, paused ? '▶ Resume' : 'Ⅱ Pause'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
 	};
 	const showResult = function () {
-		ui.result.hidden = false; rallyMode = false; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
+		ui.result.hidden = false; rallyMode = false; placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
 		label(element('result-title'), state.systems ? state.status === 'won' ? 'SYSTEMS LAB COMPLETE.' : 'SYSTEMS LAB LOST.' : state.scenario ? state.status === 'won' ? 'DRILL SURVIVED.' : 'DRILL LOST.' : state.status === 'won' ? 'THE ARK ARRIVES.' : 'THE LIGHTS GO OUT.');
 		label(element('result-copy'), state.systems ? state.status === 'won' ? 'Route complete and all contacts resolved. Compare reactor choices and try another allocation.' : 'The ark was destroyed before arrival and contact clearance. Try reallocating power or reinforcing the exposed flank.' : state.scenario ? 'Compare your coverage, launch timing and guardian assignments. Restart to try another defense.' : state.status === 'won' ? 'Kepler Gate opens. Your moving fortress brought its people home.' : 'The passage claimed another ship. Cover both flanks, use railguns against armor, and launch escorts to draw fire.');
-		label(element('result-stats'), `${Math.floor(journeyFor(state).progress * 100)}% of route · ${state.kills} hostiles destroyed · ${Math.ceil(state.hull / MAX_HULL * 100)}% hull remaining · ${state.escortLosses} escorts lost · ${state.launches} launches · ${state.orders} escort orders · ${Math.floor(state.salvage)} salvage · ${state.systems ? `Systems Lab · ${state.time.toFixed(1)}s · ${Math.round(state.systems.distanceTraveled)}m traveled · ${state.systems.powerChanges} power changes · ${state.systems.sensors.impairments} sensor impairments / ${state.systems.sensors.repairs} repairs · ${Math.round(state.systems.shieldAbsorbed)} shield damage absorbed` : state.scenario ? 'Escort Drill' : WAVE_NAMES[Math.max(0, state.wave - 1)] ?? ''}`);
+		label(element('result-stats'), `${Math.floor(journeyFor(state).progress * 100)}% of route · ${state.kills} hostiles destroyed · ${Math.ceil(state.hull / MAX_HULL * 100)}% hull remaining · ${state.escortLosses} escorts lost · ${state.launches} launches · ${state.orders} escort orders · ${Math.floor(state.salvage)} salvage · ${state.systems ? `Systems Lab · ${state.time.toFixed(1)}s · ${Math.round(state.systems.distanceTraveled)}m traveled · ${state.systems.powerChanges} power changes · ${state.systems.interdiction.placements} fields placed / ${state.systems.interdiction.redirected} approaches redirected · ${state.systems.sensors.impairments} sensor impairments / ${state.systems.sensors.repairs} repairs · ${Math.round(state.systems.shieldAbsorbed)} shield damage absorbed` : state.scenario ? 'Escort Drill' : WAVE_NAMES[Math.max(0, state.wave - 1)] ?? ''}`);
 		button('restart').focus({ preventScroll: true });
 	};
 	const tick = function (now: number) {
@@ -254,7 +281,7 @@ const shutdown = await mountGame('game', async function (container) {
 			accumulator += elapsed * speed;
 			while (accumulator >= 1 / 60 && state.status === 'running') { step(state, 1 / 60); syncAudio(); accumulator -= 1 / 60; if (state.status !== 'running') showResult(); }
 		} else accumulator = 0;
-		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, rallyMode, !briefing && !paused && (state.status === 'fitting' || state.status === 'running'));
+		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, rallyMode, !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement);
 		syncAudio(); hud();
 		frame = requestAnimationFrame(tick);
 	};

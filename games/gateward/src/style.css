@@ -235,6 +235,9 @@ canvas {
 	height:100%;
 	touch-action:none;
 }
+canvas.placing-field {
+	cursor:crosshair;
+}
 .sector {
 	position:absolute;
 	top:22px;
@@ -968,5 +971,74 @@ h1 em {
 @media(max-width:380px) {
 	.engineering-presets {
 		grid-template-columns:repeat(2,minmax(0,1fr));
+	}
+}
+
+.interdiction {
+	min-width:0;
+}
+.interdiction .interdiction-heading {
+	display:flex;
+	justify-content:space-between;
+	align-items:center;
+	gap:8px;
+	margin-bottom:8px;
+}
+.interdiction h2 {
+	margin:0;
+	font:10px monospace;
+	letter-spacing:1.7px;
+	color:#c5d4dc;
+}
+.interdiction .interdiction-heading>span {
+	font:10px monospace;
+	color:var(--mint);
+}
+.interdiction p {
+	margin:5px 0;
+	font:9px monospace;
+	line-height:1.6;
+	overflow-wrap:anywhere;
+	color:var(--muted);
+}
+.interdiction .interdiction-position {
+	color:var(--cyan);
+}
+.interdiction button {
+	min-width:0;
+	min-height:44px;
+	padding:7px 5px;
+	font:10px monospace;
+}
+.interdiction #interdiction-toggle {
+	width:100%;
+	margin-top:4px;
+}
+.interdiction #interdiction-toggle[aria-pressed="true"] {
+	border-color:var(--mint);
+	background:#293c35;
+	color:var(--mint);
+}
+.interdiction .interdiction-presets {
+	display:grid;
+	grid-template-columns:repeat(3,minmax(0,1fr));
+	gap:5px;
+	margin-top:5px;
+}
+.interdiction .interdiction-actions {
+	display:grid;
+	grid-template-columns:minmax(0,2fr) minmax(0,1fr);
+	gap:5px;
+}
+.interdiction #interdiction-confirm {
+	border-color:#5b8c91;
+	color:var(--mint);
+}
+.interdiction .interdiction-reason {
+	margin-bottom:0;
+}
+@media(max-width:650px) {
+	.interdiction {
+		grid-column:1/-1;
 	}
 }
