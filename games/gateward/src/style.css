@@ -218,6 +218,39 @@ nav button {
 	min-width:32px;
 	color:var(--mint);
 }
+.trial-status {
+	display:flex;
+	align-items:center;
+	gap:18px;
+	min-height:36px;
+	padding:8px 26px;
+	border-bottom:1px solid var(--line);
+	background:#10202b;
+	font:10px monospace;
+	color:var(--muted);
+}
+.trial-status b {
+	color:var(--mint);
+}
+#trial-goal {
+	flex:1;
+}
+.trial-status.urgent b,.trial-status.urgent #trial-eta {
+	color:#f1b585;
+}
+@media(min-width:651px) {
+	#game[data-mode="systems"] .layout {
+		height:calc(100svh - 192px);
+	}
+}
+@media(max-width:650px) {
+	.trial-status {
+		gap:8px;
+		padding:8px 12px;
+		font-size:8px;
+		line-height:1.5;
+	}
+}
 .layout {
 	display:grid;
 	grid-template-columns:minmax(0,1fr) 288px;
@@ -570,6 +603,17 @@ h1 em {
 	font:12px monospace;
 	color:var(--mint);
 	line-height:1.7;
+	white-space:pre-line;
+}
+#systems-help {
+	margin:18px 0;
+	font-size:12px;
+	color:var(--muted);
+}
+#systems-help summary {
+	cursor:pointer;
+	min-height:44px;
+	padding:12px 0;
 }
 #error {
 	position:fixed;

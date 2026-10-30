@@ -148,15 +148,24 @@ survives with 24 kills. The unarmed baseline is a simulation control; the browse
 requires at least one defense before departure.
 Hardware touch/controller checks and owner playtesting remain separate gates.
 
-## Systems Lab (phase 2, opt-in)
+## Systems Trial (phase 2, owner playtest)
 
-Choose **Systems Lab** in the briefing, pause menu or result, or open
-`?mode=systems`. This provisional experiment uses the 90-second drill encounters
-while ship systems are developed. Complete its actual 1.08 km route, resolve all
-scheduled contacts, and survive at least 90 seconds to win. Engine power changes
-the arrival time; elapsed time alone cannot complete the route. Full voyage and
-Escort Drill retain their original rules. The later Systems Trial will have its
-own encounters and an explicit deadline.
+Choose **Systems Trial** in the briefing, pause menu or result, or open
+`?mode=systems`. Fit a mixed defense with 500 salvage and complete the actual
+1.44 km route while resolving all required contacts **before 155 seconds**.
+Balanced power takes about 120 seconds of flight; fast engines can arrive early,
+but must still resolve the later contacts. A tick ending exactly at the deadline
+loses. Hull destruction also loses. Time alone cannot complete the route.
+Full voyage and the 90-second Escort Drill retain their original rules.
+
+The five fixed encounters are port raiders at 8s, starboard bombers at 26s,
+port armored craft at 58s, ahead raiders at 72s and astern bombers at 98s.
+Sensors still gate what the live feed reveals. The mission strip shows elapsed
+time, deadline, travel ETA and arrival/clearance status. Reactor controls move
+to the top of the command panel during flight. Results explain hull destruction,
+missed arrival, unresolved contacts at the deadline, or successful clearance.
+They record elapsed/distance/ETA, hull/shield, absorption, power changes,
+contact groups/kills, sensor impairments/repairs, fields/detours and escort losses.
 
 The ark starts with 240 of 360 energy shield HP. Hostile rounds hit escorts first,
 then consume shield charge, then damage hull with any overflow. Default recharge
@@ -252,6 +261,55 @@ stationary-ark approach with and without a field at (300, 0). A hostile starts a
 
 Both detours rejoin before 15s while the field remains active. These deterministic
 examples demonstrate path shaping and blocked engagement, not feel or balance.
+
+### Reproduce the integrated comparisons
+
+Run `bun games/gateward/tests/trial-strategy.ts` for complete JSON summaries, or
+`bun test games/gateward/tests/systems-trial.test.ts` for repeated full-state
+determinism and arrival/deadline/lifecycle assertions.
+
+Every strategy starts with port mount **1 rail**, starboard mount **5 flak**, one
+Guardian and one interceptor wing (380 of 500 salvage). The script attempts these
+orders on the first fixed step at or after each time: launch port at 7s, assign
+Guardian starboard at 23s, build rail on mount **8** at 45s, launch port at 54s,
+assign Guardian ahead at 75s and astern at 98s if it survives. Hull repair is
+attempted below 800 hull and sensor repair below 55 integrity, subject to costs
+and cooldowns. Balanced runs need neither repair. These are scripted controls;
+human input timing and physical-device feel remain separate.
+
+The field comparison adds one ahead field at (300, 0) at 70s. The reallocation
+comparison starts with weapon priority, then switches to balanced at 50s. The
+other strategies retain their preset. Rounded outcomes:
+
+| Strategy | Result / time | Distance | Kills | Hull / shield |
+| --- | --- | ---: | ---: | ---: |
+| Balanced | Won / 120.0s | 1440m | 30 | 1200 / 360 |
+| Engine priority | Deadline / 155s | 1440m | 29 | 842 / 0 |
+| Weapon priority | Deadline / 155s | 930m | 30 | 1200 / 360 |
+| Shield priority | Deadline / 155s | 930m | 29 | 845 / 0 |
+| Weapons → balanced at 50s | Won / 145.0s | 1440m | 30 | 1200 / 360 |
+| Balanced + field at 70s | Won / 120.0s | 1440m | 30 | 1200 / 360 |
+
+| Strategy | Shield absorbed | Power changes | Sensor impairments / repairs | Fields / redirected | Escort losses |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Balanced | 321 | 0 | 0 / 0 | 0 / 0 | 3 |
+| Engine priority | 611 | 1 | 4 / 3 | 0 / 0 | 4 |
+| Weapon priority | 238 | 1 | 0 / 0 | 0 / 0 | 2 |
+| Shield priority | 854 | 1 | 4 / 3 | 0 / 0 | 4 |
+| Weapons → balanced | 287 | 2 | 0 / 0 | 0 / 0 | 3 |
+| Balanced + field | 272 | 0 | 0 / 0 | 1 / 12 | 3 |
+
+Engine priority arrives early but its slower ark guns leave one hostile unresolved.
+Static weapon/shield priority travels too slowly; switching weapon priority back
+to balanced at 50s makes the deadline with the same fitting. The field redirects
+12 approaches and reduces shield damage by 49 while preserving all 30 kills.
+Engine/shield priority exercises sensor impairment and recovery; allocation
+changes warning and defensive opportunities rather than the scheduled clock.
+These examples establish explainable behavior differences, not final balance.
+
+This is the phase-2 owner playtest gate from #27/#30. Assess pacing, readability,
+touch hardware, audio and decision feel separately. Further subsystems and full
+voyage rebalancing wait for that playtest.
 
 Sound effects use local Web Audio synthesis: flak reports, railgun cracks,
 missile exhaust, escort fire, hull impacts, explosions, contact/clear signals,
