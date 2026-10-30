@@ -8,6 +8,7 @@ import { createState, coverageFor, ESCORTS, type Enemy, type Point, type State }
 import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
 import { createTrajectory, effectHeight, projectileHeight, type Trajectory } from './projectiles-3d';
 import { shieldAppearance } from './shield-view';
+import { canAcquire, contactIntel } from './sensors';
 
 type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'hull' };
 export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined }
@@ -222,8 +223,15 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			const point = toScreen(mount, view, mountHeight(mount) + 12);
 			text(String(index + 1), { x: point.x, y: point.y - 10 }, selected === index ? '#e1f3c1' : '#b4c8d4', view.width < 650 ? 10 : 11);
 		}
+		let bomberLabelShown = false;
 		for (const enemy of state.enemies) {
-			if (enemy.hp < enemy.maxHp || enemy.kind === 'flagship') {
+			const intel = contactIntel(state, enemy);
+			if (intel === 'unseen') continue;
+			if (state.systems && intel === 'detected') text('?', toScreen(enemy, view, FLIGHT_HEIGHT + 36), '#d7bf89', 12);
+			if (state.systems && intel === 'classified' && enemy.kind === 'bomber' && !bomberLabelShown) {
+				text('BOMBER · ARRAY ROUNDS', toScreen(enemy, view, FLIGHT_HEIGHT + 52), '#f59682', 9); bomberLabelShown = true;
+			}
+			if (intel === 'classified' && (enemy.hp < enemy.maxHp || enemy.kind === 'flagship')) {
 				const at = toScreen(enemy, view, FLIGHT_HEIGHT + (enemy.kind === 'flagship' ? 74 : 29)); const width = enemy.kind === 'flagship' ? 75 : 26;
 				ctx.fillStyle = '#142332'; ctx.fillRect(at.x - width / 2, at.y, width, 3);
 				ctx.fillStyle = '#e78b82'; ctx.fillRect(at.x - width / 2, at.y, width * Math.max(0, enemy.hp / enemy.maxHp), 3);
@@ -231,6 +239,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			const marker = edgeIndicator(enemy, view); if (!marker) continue;
 			ctx.save(); ctx.translate(marker.point.x, marker.point.y); ctx.rotate(marker.angle);
 			ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-6, -5); ctx.lineTo(-6, 5); ctx.closePath(); ctx.fillStyle = '#f59682'; ctx.fill(); ctx.restore();
+			if (intel === 'detected') text('?', { x: marker.point.x, y: marker.point.y - 10 }, '#d7bf89', 11);
 		}
 		for (const escort of state.escorts) if (escort.sector) text(`G${escort.id} · ${escort.sector}`, toScreen(escort, view, FLIGHT_HEIGHT + 42), '#a6d4d9', 9);
 		for (const escort of state.escorts) if (escort.hp < ESCORTS[escort.kind].hp) { const at = toScreen(escort, view, FLIGHT_HEIGHT + 29); ctx.fillStyle = '#89d5de'; ctx.fillRect(at.x - 13, at.y, 26 * Math.max(0, escort.hp / ESCORTS[escort.kind].hp), 3); }
@@ -264,7 +273,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			}
 			rally.visible = !state.experimental && (state.escorts.length > 0 || rallyMode); rally.position.set(state.rally.x, 1, state.rally.y);
 			if (rally.material instanceof MeshBasicMaterial) rally.material.color.set(rallyMode ? '#d5ed9b' : '#9edbf0');
-			const target = state.enemies.find(function (enemy) { return enemy.id === state.priority; }); priority.visible = !!target;
+			const target = state.enemies.find(function (enemy) { return enemy.id === state.priority && canAcquire(state, enemy); }); priority.visible = !!target;
 			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT, target.y); priority.scale.setScalar(target.kind === 'flagship' ? 70 : 42); }
 			const liveEnemies = new Set(state.enemies.map(function (enemy) { return enemy.id; }));
 			for (const [id, model] of enemyModels) if (!liveEnemies.has(id)) { scene.remove(model); targets.delete(model); disposeObject(model); enemyModels.delete(id); }
@@ -281,7 +290,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				const tailTime = shot.weapon === 'rail' ? 0.04 : 0.025;
 				const tail = { x: shot.x - shot.vx * tailTime, y: shot.y - shot.vy * tailTime };
 				shotPositions.set([tail.x, projectileHeight(tail, trajectory, target), tail.y, shot.x, projectileHeight(shot, trajectory, target), shot.y], index * 6);
-				color.set(shot.side === 'enemy' ? '#ff8d7f' : shot.weapon === 'rail' ? '#dbbeff' : shot.weapon === 'missile' ? '#f5ce8a' : '#99ece1'); shotColors.set([color.r, color.g, color.b, color.r, color.g, color.b], index * 6);
+				color.set(shot.side === 'enemy' ? shot.sensorDamage ? '#f7c76e' : '#ff8d7f' : shot.weapon === 'rail' ? '#dbbeff' : shot.weapon === 'missile' ? '#f5ce8a' : '#99ece1'); shotColors.set([color.r, color.g, color.b, color.r, color.g, color.b], index * 6);
 			}
 			if (shotCapacity > 0) { shotGeometry.getAttribute('position').needsUpdate = true; shotGeometry.getAttribute('color').needsUpdate = true; } shotGeometry.setDrawRange(0, state.shots.length * 2);
 			while (effects.length < state.effects.length) { const effect = circle('#ffffff', 1, 1); scene.add(effect); effects.push(effect); }

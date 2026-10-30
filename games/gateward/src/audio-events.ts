@@ -1,4 +1,5 @@
 import type { State } from './simulation';
+import { canAcquire } from './sensors';
 
 export type Sound = 'flak' | 'rail' | 'missile' | 'escort' | 'impact' | 'explosion' | 'damage' | 'contact' | 'clear' | 'pulse' | 'repair' | 'depart' | 'won' | 'lost' | 'order';
 
@@ -30,7 +31,7 @@ export const createSoundObserver = function () {
 		}
 		if (state.hull < before.hull) sounds.add('damage');
 		if (state.kills > before.kills || state.escortLosses > before.losses) sounds.add('explosion');
-		if (state.wave > before.wave) sounds.add('contact');
+		if (state.wave > before.wave && (!state.systems || state.enemies.some(function (enemy) { return enemy.id > before.lastShot && enemy.hp > 0 && canAcquire(state, enemy); }))) sounds.add('contact');
 		if (state.cleared && !before.cleared) sounds.add('clear');
 		if (state.pulseCooldown > before.pulse) sounds.add('pulse');
 		if (state.repairCooldown > before.repair) sounds.add('repair');

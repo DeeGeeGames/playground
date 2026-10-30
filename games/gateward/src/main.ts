@@ -3,11 +3,12 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { build, contactWarning, craftCount, createState, deploy, ESCORTS, invested, MAX_HULL, notify, pulse, repair, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Weapon } from './simulation';
+import { build, contactWarning, craftCount, createState, deploy, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Weapon } from './simulation';
 import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
 import { createEngineeringPanel } from './engineering-panel';
 import { powerOutputs } from './systems';
+import { contactIntel, SENSOR_CONFIG, sensorRanges } from './sensors';
 
 const element = function (id: string): HTMLElement {
 	const found = document.getElementById(id); if (!found) throw new Error(`Missing element: ${id}`); return found;
@@ -96,9 +97,10 @@ const shutdown = await mountGame('game', async function (container) {
 	ui.sell.addEventListener('click', function () { order(function () { return sell(state, selected); }); }, options);
 	ui.pulse.addEventListener('click', function () { order(function () { return pulse(state); }); }, options);
 	ui.repair.addEventListener('click', function () { order(function () { return repair(state); }); }, options);
+	button('repair-sensors').addEventListener('click', function () { order(function () { return repairSensors(state); }); }, options);
 	ui.depart.addEventListener('click', function () {
 		if (!available() || state.status !== 'fitting') return;
-		state.status = 'running'; notify(state, 'Underway. First contact on the port flank.'); accumulator = 0; focusCanvas();
+		state.status = 'running'; notify(state, state.systems ? 'Underway. Allocate power and monitor the sensor feed.' : 'Underway. First contact on the port flank.'); accumulator = 0; focusCanvas();
 	}, options);
 	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; focusCanvas(); }, options);
 	button('prepare').disabled = false;
@@ -113,7 +115,7 @@ const shutdown = await mountGame('game', async function (container) {
 	button('restart').addEventListener('click', restart, options); button('restart-pause').addEventListener('click', restart, options);
 	ui.speed.addEventListener('click', function () { if (available()) speed = speed === 1 ? 2 : 1; }, options);
 	ui.rally.addEventListener('click', function () { if (available()) { rallyMode = !rallyMode; focusCanvas(); } }, options);
-	ui.clear.addEventListener('click', function () { if (available()) state.priority = undefined; }, options);
+	ui.clear.addEventListener('click', function () { if (available()) setPriority(state, undefined); }, options);
 	canvas.addEventListener('pointerdown', function (event) {
 		if (event.button !== 0) return;
 		pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, moved: false });
@@ -132,7 +134,10 @@ const shutdown = await mountGame('game', async function (container) {
 		const rect = canvas.getBoundingClientRect();
 		const { mount, enemy, world } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
 		if (mount >= 0 && !rallyMode) selected = mount;
-		else if (enemy && !rallyMode) { state.priority = enemy.id; notify(state, `Priority target: ${enemy.kind}. Eligible weapons in range and coverage will focus fire.`); }
+		else if (enemy && !rallyMode) {
+			if (setPriority(state, enemy.id)) notify(state, `Priority target: ${contactIntel(state, enemy) === 'classified' ? enemy.kind : 'unclassified contact'}. Eligible weapons in range and coverage will focus fire.`);
+			else notify(state, 'Contact outside sensor range. Nearby defense remains automatic.');
+		}
 		else if (world && !state.experimental) { state.rally = { x: Math.max(-450, Math.min(450, world.x)), y: Math.max(-370, Math.min(370, world.y)) }; rallyMode = false; notify(state, 'Escort rally point updated.'); }
 		focusCanvas();
 	};
@@ -150,6 +155,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (index >= 0) { selected = index; rallyMode = false; event.preventDefault(); }
 		if (event.code === 'KeyQ') { event.preventDefault(); order(function () { return pulse(state); }); }
 		if (event.code === 'KeyE') { event.preventDefault(); order(function () { return repair(state); }); }
+		if (event.code === 'KeyS' && state.systems) { event.preventDefault(); order(function () { return repairSensors(state); }); }
 		if (event.code === 'KeyR' && !state.experimental) { event.preventDefault(); rallyMode = !rallyMode; }
 	}, options);
 	window.addEventListener('blur', function () { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); rallyMode = false; setPause(true); }, options);
@@ -160,6 +166,19 @@ const shutdown = await mountGame('game', async function (container) {
 		escortPanel(); engineeringPanel();
 		const active = available();
 		const systems = state.systems; const energyShield = systems?.shield;
+		element('sensor-panel').hidden = !systems;
+		if (systems) {
+			const sensors = systems.sensors; const ranges = sensorRanges(state);
+			const sensorMeter = element('sensor-meter');
+			if (sensorMeter instanceof HTMLMeterElement) { sensorMeter.max = SENSOR_CONFIG.maxIntegrity; sensorMeter.value = sensors.integrity; }
+			label(element('sensor-integrity'), `${Math.ceil(sensors.integrity)} / ${SENSOR_CONFIG.maxIntegrity}`);
+			label(element('sensor-status'), sensors.integrity <= 0 ? 'OFFLINE · nearby defense available' : sensors.integrity < SENSOR_CONFIG.healthyThreshold ? 'IMPAIRED · late and uncertain warnings' : 'HEALTHY · advance warning and acquisition');
+			label(element('sensor-range'), `Detect ${ranges.detection}m · classify ${ranges.classification}m`);
+			const why = !active ? 'Commands held' : sensors.repairCooldown > 0 ? `Repair cooldown · ${Math.ceil(sensors.repairCooldown)}s` : sensors.integrity >= SENSOR_CONFIG.maxIntegrity ? 'Array at full integrity' : state.salvage < SENSOR_CONFIG.repairCost ? `Needs ${SENSOR_CONFIG.repairCost} salvage` : `Restore array · ${SENSOR_CONFIG.repairCost} salvage`;
+			button('repair-sensors').disabled = !active || sensors.integrity >= SENSOR_CONFIG.maxIntegrity || sensors.repairCooldown > 0 || state.salvage < SENSOR_CONFIG.repairCost;
+			label(element('sensor-repair-info'), why);
+		}
+
 		element('energy-shield').hidden = !energyShield;
 		if (energyShield && systems) {
 			const chargeMeter = element('shield-meter');
@@ -175,8 +194,9 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.salvage, String(Math.floor(state.salvage))); ui.route.style.width = `${journey.progress * 100}%`;
 		label(ui.distance, `${Math.floor(journey.progress * 100)}%`);
 		label(ui.routeLabel, journey.remaining > 0 ? `KEPLER · ${(journey.remaining / 1000).toFixed(2)} KM` : 'KEPLER · ARRIVED');
-		label(ui.wave, state.status === 'fitting' ? (state.systems ? 'SYSTEMS LAB / FITTING' : state.scenario ? 'ESCORT DRILL / FITTING' : 'DRYDOCK / FITTING') : `${state.systems ? 'SYSTEMS · ' : state.scenario ? 'DRILL · ' : ''}CONTACT ${String(state.wave).padStart(2, '0')} / ${state.scenario?.encounters.length ?? 6} ${state.cleared ? '— CLEAR' : ''}`);
-		label(ui.waveInfo, state.scenario ? contactWarning(state) : state.status === 'fitting' ? 'Build your defenses. Departure is your call.' : state.wave < WAVE_COUNT ? `Next: ${waveSide(state.wave + 1)} in ${Math.max(0, Math.ceil(state.nextWave - state.time))}s · ${state.enemies.length} hostiles` : state.enemies.length + state.arrivals.length > 0 ? `${state.enemies.length} hostiles · Defeat the gatekeeper and reach the gate.` : 'Passage clear. Approaching Kepler Gate.');
+		label(ui.wave, state.systems ? state.status === 'fitting' ? 'SYSTEMS LAB / FITTING' : 'SYSTEMS LAB · SENSOR FEED' : state.status === 'fitting' ? state.scenario ? 'ESCORT DRILL / FITTING' : 'DRYDOCK / FITTING' : `${state.scenario ? 'DRILL · ' : ''}CONTACT ${String(state.wave).padStart(2, '0')} / ${state.scenario?.encounters.length ?? 6} ${state.cleared ? '— CLEAR' : ''}`);
+		label(ui.waveInfo, state.systems || state.scenario ? contactWarning(state) : state.status === 'fitting' ? 'Build your defenses. Departure is your call.' : state.wave < WAVE_COUNT ? `Next: ${waveSide(state.wave + 1)} in ${Math.max(0, Math.ceil(state.nextWave - state.time))}s · ${state.enemies.length} hostiles` : state.enemies.length + state.arrivals.length > 0 ? `${state.enemies.length} hostiles · Defeat the gatekeeper and reach the gate.` : 'Passage clear. Approaching Kepler Gate.');
+		element('wave-dots').hidden = !!state.systems;
 		for (const [i, dot] of [...element('wave-dots').children].entries()) { if (dot instanceof HTMLElement) dot.hidden = !!state.scenario && i >= state.scenario.encounters.length; dot.classList.toggle('current', i + 1 === state.wave); dot.classList.toggle('done', i + 1 < state.wave); }
 		for (const [i, control] of mountButtons.entries()) {
 			const m = state.mounts[i]; if (!m) continue;
@@ -224,7 +244,7 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.result.hidden = false; rallyMode = false; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
 		label(element('result-title'), state.systems ? state.status === 'won' ? 'SYSTEMS LAB COMPLETE.' : 'SYSTEMS LAB LOST.' : state.scenario ? state.status === 'won' ? 'DRILL SURVIVED.' : 'DRILL LOST.' : state.status === 'won' ? 'THE ARK ARRIVES.' : 'THE LIGHTS GO OUT.');
 		label(element('result-copy'), state.systems ? state.status === 'won' ? 'Route complete and all contacts resolved. Compare reactor choices and try another allocation.' : 'The ark was destroyed before arrival and contact clearance. Try reallocating power or reinforcing the exposed flank.' : state.scenario ? 'Compare your coverage, launch timing and guardian assignments. Restart to try another defense.' : state.status === 'won' ? 'Kepler Gate opens. Your moving fortress brought its people home.' : 'The passage claimed another ship. Cover both flanks, use railguns against armor, and launch escorts to draw fire.');
-		label(element('result-stats'), `${Math.floor(journeyFor(state).progress * 100)}% of route · ${state.kills} hostiles destroyed · ${Math.ceil(state.hull / MAX_HULL * 100)}% hull remaining · ${state.escortLosses} escorts lost · ${state.launches} launches · ${state.orders} escort orders · ${Math.floor(state.salvage)} salvage · ${state.systems ? `Systems Lab · ${state.time.toFixed(1)}s · ${Math.round(state.systems.distanceTraveled)}m traveled · ${state.systems.powerChanges} power changes · ${Math.round(state.systems.shieldAbsorbed)} shield damage absorbed` : state.scenario ? 'Escort Drill' : WAVE_NAMES[Math.max(0, state.wave - 1)] ?? ''}`);
+		label(element('result-stats'), `${Math.floor(journeyFor(state).progress * 100)}% of route · ${state.kills} hostiles destroyed · ${Math.ceil(state.hull / MAX_HULL * 100)}% hull remaining · ${state.escortLosses} escorts lost · ${state.launches} launches · ${state.orders} escort orders · ${Math.floor(state.salvage)} salvage · ${state.systems ? `Systems Lab · ${state.time.toFixed(1)}s · ${Math.round(state.systems.distanceTraveled)}m traveled · ${state.systems.powerChanges} power changes · ${state.systems.sensors.impairments} sensor impairments / ${state.systems.sensors.repairs} repairs · ${Math.round(state.systems.shieldAbsorbed)} shield damage absorbed` : state.scenario ? 'Escort Drill' : WAVE_NAMES[Math.max(0, state.wave - 1)] ?? ''}`);
 		button('restart').focus({ preventScroll: true });
 	};
 	const tick = function (now: number) {
