@@ -56,7 +56,7 @@ export const createTurret = function (mount: Mount): TurretVisual {
 	const edge = armor('#9babb2');
 	const podArmor = armor('#7d8079');
 	const emptyInk = light('#799eac');
-	const accents: Record<Weapon, MeshBasicMaterial> = { flak: light('#91e3da'), rail: light('#cdb6ef'), missile: light('#edc589') };
+	const accents: Record<Weapon, MeshBasicMaterial> = { beam: light('#ff86c8'), flak: light('#91e3da'), rail: light('#cdb6ef'), missile: light('#edc589') };
 	const indicator = light('#91e3da');
 
 	const pad = new Mesh(new CylinderGeometry(18, 19, 3, 12), dark);
@@ -101,6 +101,12 @@ export const createTurret = function (mount: Mount): TurretVisual {
 	addBox(rail, box, accents.rail, 45.5, 6, 0, 1.5, 3.5, 4.5);
 	pivot.add(rail);
 
+	const beam = new Group();
+	beam.name = 'Beam';
+	addBox(beam, box, dark, 22, 6, 0, 24, 8, 10);
+	addBox(beam, box, accents.beam, 35, 6, 0, 3, 7, 9);
+	pivot.add(beam);
+
 	const missile = new Group();
 	missile.name = 'Missiles';
 	const apertureGeometry = new CylinderGeometry(1.2, 1.2, 0.65, 8);
@@ -119,7 +125,7 @@ export const createTurret = function (mount: Mount): TurretVisual {
 	}
 	pivot.add(missile);
 
-	const variants: Record<Weapon, Group> = { flak, rail, missile };
+	const variants: Record<Weapon, Group> = { flak, rail, missile, beam };
 	const pips = Array.from({ length: 3 }, function (_, index) {
 		return addBox(assembly, box, indicator, (index - 1) * 5, TURRET_RISE + 1.2, 16.2, 3, 1.5, 2.5);
 	});

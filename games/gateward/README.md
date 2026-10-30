@@ -12,6 +12,7 @@ hostiles to win; losing the ark's hull ends the run.
 - Right-drag to orbit and use the wheel to zoom. On touch screens, drag to orbit
   and pinch to zoom; a tap still gives an order. Reset view and restarting restore
   the original orthographic tactical camera. The camera stays centered on the ark.
+- Beam costs 125 salvage, reaches 300m and deals 48 damage per second before armor at balanced weapon power. It automatically tracks one eligible target; upgrades and weapon power scale sustained damage.
 - Flak handles light ships; railguns ignore armor; homing missiles deal splash
   damage. All turrets fire automatically through full arcs. Upgrade to level 3
   for damage, range, and fire rate. Selling returns 70% of the investment.

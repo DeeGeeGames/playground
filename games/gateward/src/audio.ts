@@ -36,6 +36,7 @@ export const createAudio = function () {
 		const at = context.currentTime;
 		if (at - (last.get(event) ?? -10) < (event === 'damage' ? 0.3 : 0.09)) return;
 		last.set(event, at);
+		if (event === 'beam') tone(620, 420, 0.25, 0.045, 'sine');
 		if (event === 'flak') { burst(2800, 0.12, 0.19); tone(150, 45, 0.13, 0.13, 'triangle'); }
 		if (event === 'rail') { tone(1700, 90, 0.19, 0.12, 'sawtooth'); tone(95, 25, 0.5, 0.28, 'sine'); burst(5000, 0.07, 0.18); }
 		if (event === 'missile') { burst(1500, 0.55, 0.22); tone(80, 250, 0.35, 0.08, 'sawtooth'); }
