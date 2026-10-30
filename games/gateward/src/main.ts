@@ -1,3 +1,5 @@
+import { createAudio } from './audio';
+import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
@@ -46,15 +48,32 @@ const shutdown = await mountGame('game', async function (container) {
 		if (briefing || state.status === 'won' || state.status === 'lost') return;
 		if (!value && !contextAvailable) return;
 		if (value) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); }
+		audio.setActive(!value && state.focused && !document.hidden && contextAvailable);
 		paused = value; state.paused = value; rallyMode = false; accumulator = 0; ui.pausePanel.hidden = !paused;
 		if (paused) button('resume').focus({ preventScroll: true }); else focusCanvas();
 	};
 	const presentation = await createPresentation(canvas);
+	const audio = createAudio(); const observeSounds = createSoundObserver();
+	let muted = false;
+	const syncAudio = function () {
+		audio.setActive(!briefing && !paused && state.focused && !document.hidden && contextAvailable);
+		for (const sound of observeSounds(state)) audio.play(sound);
+	};
+	const unlockAudio = function () { void audio.unlock(); };
+	container.addEventListener('pointerdown', unlockAudio, { ...options, capture: true });
+	container.addEventListener('pointerup', unlockAudio, { ...options, capture: true });
+	container.addEventListener('click', unlockAudio, { ...options, capture: true });
+	container.addEventListener('keydown', unlockAudio, { ...options, capture: true });
+	button('mute').addEventListener('click', function () {
+		muted = !muted; audio.setMuted(muted); button('mute').setAttribute('aria-pressed', String(muted));
+		label(button('mute'), muted ? 'Sound off' : 'Sound on');
+	}, options);
 	const detachFullscreen = attachFullscreen(container, button('fullscreen'), element('fullscreen-status'));
 	canvas.addEventListener('webglcontextlost', function () { contextAvailable = false; setPause(true); notify(state, 'Graphics interrupted. Voyage paused until the display is restored.'); }, options);
 	canvas.addEventListener('webglcontextrestored', function () { contextAvailable = true; notify(state, 'Display restored. Resume when ready.'); }, options);
 	button('reset-camera').addEventListener('click', function () { presentation.resetCamera(); focusCanvas(); }, options);
 	const restart = function () {
+		audio.reset();
 		pointers.clear(); multiTouch = false;
 		state = newState(); selected = 0; paused = false; briefing = false; rallyMode = false; speed = 1; accumulator = 0;
 		ui.pausePanel.hidden = true; ui.result.hidden = true; ui.brief.hidden = true; focusCanvas();
@@ -63,6 +82,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const order = function (action: () => boolean) {
 		if (!available()) return;
 		if (!action()) notify(state, 'Order unavailable. Check salvage, capacity, or cooldown.');
+		else { syncAudio(); audio.play('order'); }
 	};
 	const doBuild = function (weapon: Weapon) { order(function () { return build(state, selected, weapon); }); };
 	for (const control of buildButtons) control.addEventListener('click', function () {
@@ -129,8 +149,8 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'KeyE') { event.preventDefault(); order(function () { return repair(state); }); }
 		if (event.code === 'KeyR' && !state.experimental) { event.preventDefault(); rallyMode = !rallyMode; }
 	}, options);
-	window.addEventListener('blur', function () { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; rallyMode = false; setPause(true); }, options);
-	document.addEventListener('visibilitychange', function () { if (document.hidden) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; rallyMode = false; setPause(true); } }, options);
+	window.addEventListener('blur', function () { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); rallyMode = false; setPause(true); }, options);
+	document.addEventListener('visibilitychange', function () { if (document.hidden) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); rallyMode = false; setPause(true); } }, options);
 	window.addEventListener('focus', function () { state.focused = true; }, options);
 	document.addEventListener('visibilitychange', function () { if (!document.hidden) state.focused = true; }, options);
 	const hud = function () {
@@ -208,13 +228,13 @@ const shutdown = await mountGame('game', async function (container) {
 		const elapsed = previous ? Math.min(0.1, (now - previous) / 1000) : 0; previous = now;
 		if (available() && state.status === 'running' && !document.hidden) {
 			accumulator += elapsed * speed;
-			while (accumulator >= 1 / 60 && state.status === 'running') { step(state, 1 / 60); accumulator -= 1 / 60; if (state.status !== 'running') showResult(); }
+			while (accumulator >= 1 / 60 && state.status === 'running') { step(state, 1 / 60); syncAudio(); accumulator -= 1 / 60; if (state.status !== 'running') showResult(); }
 		} else accumulator = 0;
 		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, rallyMode, !briefing && !paused && (state.status === 'fitting' || state.status === 'running'));
-		hud();
+		syncAudio(); hud();
 		frame = requestAnimationFrame(tick);
 	};
 	frame = requestAnimationFrame(tick);
-	return function () { disposed = true; cancelAnimationFrame(frame); abort.abort(); detachFullscreen(); pointers.clear(); presentation.dispose(); };
+	return function () { disposed = true; cancelAnimationFrame(frame); abort.abort(); detachFullscreen(); pointers.clear(); presentation.dispose(); void audio.dispose(); };
 });
 if (import.meta.hot) import.meta.hot.dispose(shutdown);

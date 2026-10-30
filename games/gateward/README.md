@@ -164,3 +164,11 @@ it never instantly restores. The blue charge bar and brief blue/amber impact
 shell show energy shields; the green Aegis shell shows its separate five-second
 emergency protection. Aegis still clears enemy rounds and pushes nearby enemies,
 reduces only hull overflow by 80%, and never refills energy shields.
+
+Sound effects use local Web Audio synthesis: flak reports, railgun cracks,
+missile exhaust, escort fire, hull impacts, explosions, contact/clear signals,
+Aegis, repairs, departure and results. Sound unlocks on the first pointer or
+keyboard interaction. **Sound on/off** toggles a session-only mute; restart keeps
+that choice. Pause, hidden tabs and focus loss cut active effects; resuming never
+replays missed sounds. Simultaneous cues are grouped and rate/voice limited at
+both simulation speeds. Audio is optional when browser playback is unavailable.

@@ -1,8 +1,8 @@
 import { mountGame } from '../../../shared/lifecycle';
 import { createState, distance, step, type Controls, type State } from './simulation';
-import { render } from './render';
+import { createPresentation } from './presentation';
 import { advanceGaits, createGaits } from './gait';
-import { cameraFor, screenToWorld, worldToScreen } from './projection';
+import { viewScale } from './projection-3d';
 import { createAudio } from './audio';
 
 const element = function (id: string): HTMLElement {
@@ -20,8 +20,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const canvas = container.querySelector('canvas');
 	if (!canvas) throw new Error('Missing battlefield');
 	canvas.tabIndex = 0;
-	const ctx = canvas.getContext('2d');
-	if (!ctx) throw new Error('Canvas unavailable');
+	const presentation = await createPresentation(canvas);
 	const audio = createAudio();
 	const abort = new AbortController(); const listenerOptions = { signal: abort.signal };
 	const keys = new Set<string>(); const pending = new Set<string>(); const held = new Map<number, string>();
@@ -40,7 +39,7 @@ const shutdown = await mountGame('game', async function (container) {
 	let state = createState(); let gaits = createGaits(state); let running = false; let paused = false; let muted = false;
 	let aim = { x: 900, y: 450 }; let pointer: { x: number; y: number } | undefined;
 	let frame = 0; let previous = 0; let accumulator = 0; let lastOutcome: State['outcome'] = 'playing';
-	let message = ''; let messageUntil = 0; let terminalUntil = 0; let audioAvailable = true;
+	let message = ''; let messageUntil = 0; let terminalUntil = 0; let audioAvailable = true; let contextLost = false;
 	const resetInput = function () { keys.clear(); pending.clear(); held.clear(); mousePointers.clear(); mousePressed = false; };
 	const active = function (action: string) { return ((mousePointers.size > 0 || mousePressed) && action === selectedWeapon) || keys.has(action) || pending.has(action) || [...held.values()].includes(action); };
 	const unlockSound = function () {
@@ -58,12 +57,13 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.pauseButton.setAttribute('aria-disabled', String(!running || state.outcome !== 'playing'));
 	};
 	const start = function () {
+		if (contextLost) return;
 		state = createState(); gaits = createGaits(state); selectedWeapon = 'cannon'; running = true; paused = false; lastOutcome = 'playing';
 		aim = { x: 900, y: 450 }; pointer = undefined; message = 'SYSTEMS ONLINE / DEFEND RELAY 09'; messageUntil = 4;
 		resetInput(); accumulator = 0; terminalUntil = 0; syncMenu(); canvas.focus({ preventScroll: true }); unlockSound();
 	};
 	const setPaused = function (value: boolean) {
-		if (!running || state.outcome !== 'playing') return;
+		if (!running || state.outcome !== 'playing' || (!value && contextLost)) return;
 		paused = value; resetInput(); accumulator = 0; syncMenu();
 		if (paused) { audio.update({ speed: 0, laser: false, heat: 0, active: false }); element('resume').focus({ preventScroll: true }); }
 		else { canvas.focus({ preventScroll: true }); unlockSound(); }
@@ -90,6 +90,13 @@ const shutdown = await mountGame('game', async function (container) {
 	window.addEventListener('blur', function () { resetInput(); setPaused(true); }, listenerOptions);
 	document.addEventListener('visibilitychange', function () {
 		if (document.hidden) { resetInput(); setPaused(true); audio.update({ speed: 0, laser: false, heat: 0, active: false }); }
+	}, listenerOptions);
+	canvas.addEventListener('webglcontextlost', function (event) {
+		event.preventDefault(); contextLost = true; resetInput(); setPaused(true);
+		const error = element('error'); error.textContent = 'Graphics interrupted. Waiting for recovery…'; error.hidden = false;
+	}, listenerOptions);
+	canvas.addEventListener('webglcontextrestored', function () {
+		contextLost = false; element('error').hidden = true; accumulator = 0; previous = 0;
 	}, listenerOptions);
 	const updatePointer = function (event: PointerEvent) {
 		if (paused || !running || state.outcome !== 'playing') return;
@@ -150,18 +157,15 @@ const shutdown = await mountGame('game', async function (container) {
 	const tick = function (now: number) {
 		const elapsed = previous ? Math.min((now - previous) / 1000, 0.1) : 0; previous = now;
 		const rect = canvas.getBoundingClientRect(); const width = rect.width; const height = rect.height;
-		const dpr = Math.min(devicePixelRatio, 2);
-		if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) { canvas.width = Math.round(width * dpr); canvas.height = Math.round(height * dpr); }
-		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-		const camera = cameraFor(width, height, state);
+		presentation.resize(state, width, height, reducedMotion.matches);
 		if (pointer && !paused) {
-			aim = screenToWorld(pointer, camera);
+			aim = presentation.toGround(pointer) ?? aim;
 			const cursor = pointer;
-			const picked = [...state.enemies].sort(function (a, b) { return distance(worldToScreen(a, camera, 45), cursor) - distance(worldToScreen(b, camera, 45), cursor); })[0];
-			if (picked && distance(worldToScreen(picked, camera, 45), cursor) < 42 * camera.scale) aim = { x: picked.x, y: picked.y };
+			const picked = [...state.enemies].sort(function (a, b) { return distance(presentation.toScreen(a, 45), cursor) - distance(presentation.toScreen(b, 45), cursor); })[0];
+			if (picked && distance(presentation.toScreen(picked, 45), cursor) < 42 * viewScale(width, height)) aim = { x: picked.x, y: picked.y };
 		}
 		const makeInput = function (): Controls { return { drive: Number(active('forward')) - Number(active('back')), stop: active('stop'), turn: Number(active('right')) - Number(active('left')), aim, cannon: active('cannon'), laser: active('laser'), missile: active('missile'), coolant: active('coolant') }; };
-		if (running && !paused && !document.hidden && state.outcome === 'playing') {
+		if (running && !paused && !contextLost && !document.hidden && state.outcome === 'playing') {
 			accumulator += elapsed;
 			while (accumulator >= 1 / 60 && state.outcome === 'playing') {
 				step(state, makeInput(), 1 / 60); gaits = advanceGaits(gaits, state); pending.clear(); mousePressed = false; accumulator -= 1 / 60;
@@ -177,12 +181,12 @@ const shutdown = await mountGame('game', async function (container) {
 			element('result-copy').textContent = state.outcome === 'won' ? 'All assault waves neutralized. Relay 09 is still transmitting. Bring the frame home.' : state.player.hp <= 0 ? 'Siege frame destroyed. Keep an eye on armor and recover repair salvage.' : 'The uplink has fallen. Use the radar to intercept siege units before they close in.';
 			element('result-stats').textContent = `HOSTILES ${state.kills} / 21 · TIME ${formatTime(state.time)} · RELAY ${Math.max(0, state.relay)}%`;
 		}
-		const engaged = running && !paused && !document.hidden && (state.outcome === 'playing' || now < terminalUntil);
+		const engaged = running && !paused && !contextLost && !document.hidden && (state.outcome === 'playing' || now < terminalUntil);
 		audio.update({ speed: state.outcome === 'playing' ? state.player.speed : 0, laser: state.outcome === 'playing' && !!state.beam, heat: state.player.heat, active: engaged });
-		render(ctx, width, height, state, aim, { reducedMotion: reducedMotion.matches, showRadar: width > 700 && height > 520, gaits }); updateHud();
+		if (!contextLost) presentation.render(state, aim, gaits, reducedMotion.matches); updateHud();
 		frame = requestAnimationFrame(tick);
 	};
 	syncMenu(); frame = requestAnimationFrame(tick);
-	return async function () { cancelAnimationFrame(frame); abort.abort(); resetInput(); await audio.dispose(); };
+	return async function () { cancelAnimationFrame(frame); abort.abort(); resetInput(); try { await audio.dispose(); } finally { await presentation.dispose(); } };
 });
 if (import.meta.hot) import.meta.hot.dispose(shutdown);

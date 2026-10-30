@@ -49,25 +49,82 @@ without discarding throttle. Deployments start in neutral.
 - The industrial apron and terrain marks are decorative, with no hidden cover or
   collision. The ground boundary contains the mech. Turret tracking is limited.
 
-## Implementation and validation
+## Rendering and lifecycle
 
-Canvas 2D draws raised, depth-sorted isometric geometry; simulation remains in
-world coordinates with a fixed 60 Hz timestep. Projection and inverse picking
-live in `src/projection.ts`. Touch aiming also supports a second finger while a
-control is held. Reduced motion suppresses screen shake and CSS transitions.
+ECSpresso 0.24.1's `renderer3D` plugin draws the world with the workspace's
+Three.js dependency. Player and enemy frames, relay, apron, salvage, wrecks,
+projectiles and effects share a depth buffer. Solid faces occlude naturally;
+missile ports are front-facing surface details. Mech parts use instanced
+material batches and a combined edge buffer. The decorative apron uses unlit
+vertex colors to avoid a full-screen physical lighting shader.
+
+`src/presentation.ts` owns the scene and renderer. `src/projection-3d.ts` matches
+the recorded isometric framing and raycasts the ground for aiming. Screen-space
+labels, radar and target markers use that same camera; the HTML cockpit stays
+in place. Simulation, combat, AI and planted-foot gait remain on the original
+2D ground plane at a fixed 60 Hz. Touch aiming supports a second finger while a
+control is held. Reduced motion suppresses shake, decorative bobbing and CSS
+transitions. Pause and focus loss freeze the simulation and silence audio.
+
+WebGL context loss pauses the mission; recovery leaves it paused for explicit
+resume. Final page teardown cancels frames, aborts listeners, disposes the ECS
+world, releases shared and model GPU assets, removes the overlay canvas and
+closes audio. Cached pages retain the world for browser Back. WebGL-unavailable
+startup displays an error. Everything specific to the game lives here; only
+the workspace lifecycle helper is imported.
 
 Synthesized Web Audio provides engine/footsteps, weapons, impacts, cooling,
-pickups, and alerts. Audio unlocks on deployment, supports mute, stops on pause,
-and fails gracefully when unavailable. No external assets, new dependencies,
-network services, persistence, or ECS changes. Everything specific to this game
-lives here; only the workspace lifecycle helper is imported.
+pickups and alerts. Audio unlocks on deployment, supports mute and leaves the
+game playable when audio is unavailable.
+
+## Prototype review for issue 15
+
+The initial walking/turning comparison was delivered before the remaining
+world migration. Owner feedback was: “There seems to be some artifacting going
+on at the head of the mech. Otherwise looks good”. The visor and cockpit shell
+had coincident front faces; a small physical separation fixes the artifact
+without changing the silhouette or using camera-angle ordering rules.
+
+![Canvas reference and repaired 3D mech with independent hull and turret headings](./docs/mech-comparison.png)
+
+The completed migration removes the superseded Canvas world renderer and
+comparison route. The comparison image and first-stage commit in PR #26 retain
+review evidence. The normal `games/iron-wake/` page now runs the 3D world.
+
+## Validation
 
 From the workspace root: `bun run dev`, or `bun run build` then `bun run preview`.
 Open `games/iron-wake/`. Run `bun run check` for the whole workspace, or
-`bun test games/iron-wake/tests` for combat/projection checks.
+`bun test games/iron-wake/tests` for this game.
 
-Deterministic tests cover throttle, combat, roles, salvage, coolant, spawn
-warnings, terminal behavior, isometric projection, and a viable full-mission
-strategy. Local Playwright/Chromium checks production desktop and simulated
-touch layouts, sound output/silence, input and terminal/restart flows. Physical
-touch hardware, speaker quality, and owner gameplay acceptance remain separate.
+Deterministic coverage includes combat and a winning full mission, projection
+agreement with recorded Canvas framing, ground picking after camera shake and
+resize, missile-port visibility, visor depth separation, world-space foot
+planting, instanced poses across the renderer's transform phase, overlay
+bounds, transient resets, reduced motion and GPU asset ownership.
+
+Production Chromium checks keyboard/mouse weapons, persistent throttle,
+coolant, sound/silence, pause/focus loss, simulated multitouch, portrait and
+landscape layouts, context loss/recovery, cached/final page teardown and
+fractional-DPR drawing-buffer stability. A separate presentation fixture
+renders eight mechs, all combat-object types and a simulated mission ending
+with 21 kills and 93% relay integrity. Independent reviews have no unresolved
+findings. Physical touch hardware, GPU performance, speaker quality and owner
+acceptance of the completed world remain separate from these browser checks.
+
+![Synthetic presentation fixture with all three enemy types and combat objects](./docs/world.png)
+
+The following are sequential, 120-frame samples at DPR 1 in headless Chromium
+using software rendering. The baseline was captured before migration. The
+desktop software path remains slower than Canvas; these are not hardware-GPU
+or physical-phone performance claims.
+
+| Viewport | Canvas median / p95 frame time | 3D median / p95 frame time |
+| --- | --- | --- |
+| 1440 × 900 | 16.7 / 16.8 ms | 33.3 / 33.4 ms |
+| 390 × 844 | 16.7 / 16.7 ms | 16.7 / 16.8 ms |
+
+The synthetic eight-mech desktop scene records 33.4 / 50.0 ms with 112 draw
+calls. Batching reduced it from 634 calls before optimization. Repeated scene
+resets return GPU geometry counts to the same plateau; final teardown releases
+the WebGL context and removes the labels canvas. `bun run check` passes.
