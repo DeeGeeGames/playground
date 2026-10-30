@@ -3,7 +3,7 @@ import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
 import { ESCORT_DRILL, SYSTEMS_TRIAL, type Scenario } from './scenarios';
 import { absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
 export type Point = { x: number; y: number };
-export type Weapon = 'flak' | 'rail' | 'missile';
+export type Weapon = 'flak' | 'rail' | 'missile' | 'beam';
 export type EnemyKind = 'raider' | 'bomber' | 'armored' | 'flagship';
 export type EscortKind = 'interceptor' | 'guardian';
 export const MAX_HULL = 1200;
@@ -11,6 +11,7 @@ export const ROUTE_SECONDS = 210;
 export const WAVE_INTERVAL = 34;
 export const WAVE_COUNT = 6;
 export const WEAPONS = {
+	beam: { name: 'Beam', cost: 125, range: 300, damage: 48, reload: 0.4, speed: 0, description: 'Sustained instant damage. Armor reduces damage.' },
 	flak: { name: 'Flak', cost: 75, range: 255, damage: 13, reload: 0.32, speed: 650, description: 'Rapid fire. Shreds light raiders.' },
 	rail: { name: 'Railgun', cost: 115, range: 440, damage: 95, reload: 2.2, speed: 1100, description: 'Long range. Pierces heavy armor.' },
 	missile: { name: 'Missile', cost: 135, range: 355, damage: 52, reload: 1.8, speed: 300, description: 'Homing salvo. Blasts clustered ships.' },
@@ -28,7 +29,7 @@ const ENEMIES = {
 export interface Mount extends Point { weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
 export interface Enemy extends Point { interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
 export interface Escort extends Point { wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
-export interface Shot extends Point { sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
+export interface Shot extends Point { beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
 export interface Effect extends Point { sourceShot?: Shot; radius: number; life: number; maxLife: number; color: string }
 export interface Arrival { at: number; kind: EnemyKind; x: number; y: number }
 export const SECTORS = ['port', 'starboard', 'ahead', 'astern'] as const;
@@ -315,6 +316,8 @@ export const step = function (state: State, dt: number) {
 	}
 	state.arrivals = state.arrivals.filter(function (a) { return a.at > state.time; });
 	clearLostPriority(state);
+	// Beam tracks last exactly one simulation tick; damage is applied directly.
+	state.shots = state.shots.filter(function (shot) { return shot.weapon !== 'beam'; });
 	const weaponRate = powerOutputs(state.systems.allocation).weaponRate;
 	for (const mount of state.mounts) {
 		mount.cooldown = Math.max(0, mount.cooldown - dt * weaponRate);
@@ -323,6 +326,12 @@ export const step = function (state: State, dt: number) {
 		const target = candidates.find(function (enemy) { return enemy.id === state.priority; }) ?? nearest(mount, candidates, coverageFor(state, mount).range);
 		if (!target) continue;
 		mount.aim = Math.atan2(target.y - mount.y, target.x - mount.x);
+		if (mount.weapon === 'beam') {
+			damageEnemy(target, config.damage * dt * weaponRate * (1 + (mount.level - 1) * 0.55) * (1 + (mount.level - 1) * 0.12), 'beam');
+			state.shots.push({ id: state.nextId++, x: target.x, y: target.y, beamFrom: { x: mount.x, y: mount.y }, vx: 0, vy: 0, damage: 0, side: 'player', weapon: 'beam', target: target.id, life: 4 });
+			if (mount.cooldown <= 0) mount.cooldown = config.reload;
+			continue;
+		}
 		if (mount.cooldown <= 0) { fire(state, mount, target, config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); }
 	}
 	updateWings(state, dt);
@@ -355,6 +364,7 @@ export const step = function (state: State, dt: number) {
 	}
 	let arkHit = false;
 	for (const shot of state.shots) {
+		if (shot.weapon === 'beam') continue;
 		const before = { x: shot.x, y: shot.y }; shot.life -= dt;
 		if (shot.weapon === 'missile') {
 			const target = state.enemies.find(function (e) { return e.id === shot.target && e.hp > 0 && canAcquire(state, e); });

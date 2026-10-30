@@ -104,7 +104,7 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const doBuild = function (weapon: Weapon) { order(function () { return build(state, selected, weapon); }); };
 	for (const control of buildButtons) control.addEventListener('click', function () {
-		const kind = control.dataset['build']; if (kind === 'flak' || kind === 'rail' || kind === 'missile') doBuild(kind);
+		const kind = control.dataset['build']; if (kind === 'flak' || kind === 'rail' || kind === 'missile' || kind === 'beam') doBuild(kind);
 	}, options);
 	for (const control of deployButtons) control.addEventListener('click', function () {
 		const kind = control.dataset['deploy']; if (kind === 'interceptor' || kind === 'guardian') order(function () { return deploy(state, kind); });
@@ -236,7 +236,7 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.waveInfo, contactWarning(state));
 		for (const [i, control] of mountButtons.entries()) {
 			const m = state.mounts[i]; if (!m) continue;
-			label(control, `${i + 1} ${m.weapon ? m.weapon === 'flak' ? 'F' : m.weapon === 'rail' ? 'R' : 'M' : '·'}${m.level > 1 ? ` ${'⁺'.repeat(m.level - 1)}` : ''}`);
+			label(control, `${i + 1} ${m.weapon ? m.weapon === 'flak' ? 'F' : m.weapon === 'rail' ? 'R' : m.weapon === 'beam' ? 'B' : 'M' : '·'}${m.level > 1 ? ` ${'⁺'.repeat(m.level - 1)}` : ''}`);
 			control.classList.toggle('selected', selected === i); control.classList.toggle('fitted', !!m.weapon); control.setAttribute('aria-pressed', String(selected === i)); control.disabled = !active;
 			control.setAttribute('aria-label', `Mount ${i + 1}, ${m.weapon ? `${WEAPONS[m.weapon].name} level ${m.level}` : 'empty'}`);
 		}
@@ -249,7 +249,7 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.upgrade.disabled = !active || mount.level >= 3 || state.salvage < upgradeCost(mount);
 		ui.upgrade.title = '+55% base damage, +12% range and firing speed per level';
 		label(ui.sell, `Salvage weapon · +${Math.floor(invested(mount) * 0.7)}`); ui.sell.disabled = !active;
-		for (const control of buildButtons) { const kind = control.dataset['build']; if (kind === 'flak' || kind === 'rail' || kind === 'missile') { control.disabled = !active || state.salvage < WEAPONS[kind].cost; control.title = WEAPONS[kind].description; } }
+		for (const control of buildButtons) { const kind = control.dataset['build']; if (kind === 'flak' || kind === 'rail' || kind === 'missile' || kind === 'beam') { control.disabled = !active || state.salvage < WEAPONS[kind].cost; control.title = WEAPONS[kind].description; } }
 		for (const control of deployButtons) {
 			const kind = control.dataset['deploy']; if (kind !== 'interceptor' && kind !== 'guardian') continue;
 			const reason = !active ? 'Commands held' : craftCount(state) + ESCORTS[kind].count > 9 ? `Needs ${ESCORTS[kind].count} free slots` : state.salvage < ESCORTS[kind].cost ? 'Insufficient salvage' : '';

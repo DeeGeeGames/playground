@@ -19,6 +19,7 @@ const nearest = function (point: Point, candidates: readonly Point[]): Point {
 // Altitude belongs to presentation. Gameplay continues to use its unchanged
 // ground-plane shots, hits and ranges; this track only joins the visible actors.
 export const createTrajectory = function (shot: Shot, state: State): Trajectory {
+	if (shot.beamFrom) return { from: shot.beamFrom, to: { x: shot.x, y: shot.y }, startHeight: TURRET_HEIGHT, endHeight: FLIGHT_HEIGHT };
 	// Simulation rounds start with four seconds of life. Rewind their movement,
 	// rather than associating a fast round with a hardpoint it has already passed.
 	const age = Math.max(0, 4 - shot.life);

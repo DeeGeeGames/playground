@@ -1,7 +1,7 @@
 import type { State } from './simulation';
 import { canAcquire } from './sensors';
 
-export type Sound = 'flak' | 'rail' | 'missile' | 'escort' | 'impact' | 'explosion' | 'damage' | 'contact' | 'clear' | 'pulse' | 'repair' | 'depart' | 'won' | 'lost' | 'order';
+export type Sound = 'beam' | 'flak' | 'rail' | 'missile' | 'escort' | 'impact' | 'explosion' | 'damage' | 'contact' | 'clear' | 'pulse' | 'repair' | 'depart' | 'won' | 'lost' | 'order';
 
 // Observe presentation state after every fixed step; never mutate gameplay or queue audio.
 export const createSoundObserver = function () {
@@ -27,7 +27,7 @@ export const createSoundObserver = function () {
 		}
 		for (const shot of state.shots) {
 			if (shot.id <= before.lastShot || shot.side !== 'player') continue;
-			if (shot.weapon !== 'hostile') sounds.add(shot.weapon);
+			if (shot.weapon !== 'hostile' && shot.weapon !== 'beam') sounds.add(shot.weapon);
 		}
 		if (state.hull < before.hull) sounds.add('damage');
 		if (state.kills > before.kills || state.escortLosses > before.losses) sounds.add('explosion');

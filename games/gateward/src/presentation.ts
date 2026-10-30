@@ -304,9 +304,9 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				let trajectory = trajectories.get(shot.id); if (!trajectory) { trajectory = createTrajectory(shot, state); trajectories.set(shot.id, trajectory); }
 				const target = shot.side === 'player' ? state.enemies.find(function (enemy) { return enemy.id === shot.target; }) : state.escorts.find(function (escort) { return escort.id === shot.target; });
 				const tailTime = shot.weapon === 'rail' ? 0.04 : 0.025;
-				const tail = { x: shot.x - shot.vx * tailTime, y: shot.y - shot.vy * tailTime };
+				const tail = shot.beamFrom ?? { x: shot.x - shot.vx * tailTime, y: shot.y - shot.vy * tailTime };
 				shotPositions.set([tail.x, projectileHeight(tail, trajectory, target), tail.y, shot.x, projectileHeight(shot, trajectory, target), shot.y], index * 6);
-				color.set(shot.side === 'enemy' ? shot.sensorDamage ? '#f7c76e' : '#ff8d7f' : shot.weapon === 'rail' ? '#dbbeff' : shot.weapon === 'missile' ? '#f5ce8a' : '#99ece1'); shotColors.set([color.r, color.g, color.b, color.r, color.g, color.b], index * 6);
+				color.set(shot.side === 'enemy' ? shot.sensorDamage ? '#f7c76e' : '#ff8d7f' : shot.weapon === 'beam' ? '#ff86c8' : shot.weapon === 'rail' ? '#dbbeff' : shot.weapon === 'missile' ? '#f5ce8a' : '#99ece1'); shotColors.set([color.r, color.g, color.b, color.r, color.g, color.b], index * 6);
 			}
 			if (shotCapacity > 0) { shotGeometry.getAttribute('position').needsUpdate = true; shotGeometry.getAttribute('color').needsUpdate = true; } shotGeometry.setDrawRange(0, state.shots.length * 2);
 			while (effects.length < state.effects.length) { const effect = circle('#ffffff', 1, 1); scene.add(effect); effects.push(effect); }
