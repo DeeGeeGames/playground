@@ -3,10 +3,11 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { build, contactWarning, craftCount, durationFor, createState, deploy, ESCORTS, invested, MAX_HULL, notify, pulse, repair, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Weapon } from './simulation';
+import { build, contactWarning, craftCount, createState, deploy, ESCORTS, invested, MAX_HULL, notify, pulse, repair, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Weapon } from './simulation';
 import { createPresentation } from './presentation';
-import { journeyAt } from './journey';
-import { SHIELD_CONFIG } from './systems';
+import { journeyFor } from './journey';
+import { createEngineeringPanel } from './engineering-panel';
+import { powerOutputs } from './systems';
 
 const element = function (id: string): HTMLElement {
 	const found = document.getElementById(id); if (!found) throw new Error(`Missing element: ${id}`); return found;
@@ -105,6 +106,7 @@ const shutdown = await mountGame('game', async function (container) {
 		mode = control.dataset['mode'] === 'systems' ? 'systems' : control.dataset['mode'] === 'drill' ? 'drill' : 'voyage'; restart();
 	}, options);
 	const escortPanel = createEscortPanel(element('escort-orders'), function () { return state; }, available, abort.signal);
+	const engineeringPanel = createEngineeringPanel(element('engineering'), function () { return state; }, available, abort.signal);
 	ui.pause.addEventListener('click', function () { setPause(!paused); }, options);
 	button('help').addEventListener('click', function () { setPause(true); }, options);
 	button('resume').addEventListener('click', function () { setPause(false); }, options);
@@ -139,6 +141,7 @@ const shutdown = await mountGame('game', async function (container) {
 	window.addEventListener('pointerup', function (event) { pointers.delete(event.pointerId); if (pointers.size === 0) multiTouch = false; }, options);
 	window.addEventListener('keydown', function (event) {
 		if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+		if (event.target instanceof HTMLSelectElement) return;
 		// Preserve native keyboard activation when navigating DOM controls.
 		if (event.code === 'Space' && event.target instanceof HTMLButtonElement) return;
 		if (event.code === 'Escape' || event.code === 'Space') { event.preventDefault(); setPause(!paused); return; }
@@ -154,22 +157,23 @@ const shutdown = await mountGame('game', async function (container) {
 	window.addEventListener('focus', function () { state.focused = true; }, options);
 	document.addEventListener('visibilitychange', function () { if (!document.hidden) state.focused = true; }, options);
 	const hud = function () {
-		escortPanel();
+		escortPanel(); engineeringPanel();
 		const active = available();
-		const energyShield = state.systems?.shield;
+		const systems = state.systems; const energyShield = systems?.shield;
 		element('energy-shield').hidden = !energyShield;
-		if (energyShield) {
+		if (energyShield && systems) {
 			const chargeMeter = element('shield-meter');
 			if (chargeMeter instanceof HTMLMeterElement) { chargeMeter.max = energyShield.capacity; chargeMeter.value = energyShield.charge; }
 			label(element('shield-charge'), `${Math.ceil(energyShield.charge)} / ${energyShield.capacity}`);
 			const held = briefing || paused || !state.focused || state.status !== 'running';
-			label(element('shield-status'), `${energyShield.charge === 0 ? 'DEPLETED · ' : ''}${held ? 'Recharge held' : energyShield.charge >= energyShield.capacity ? 'Fully charged' : energyShield.rechargeDelay > 0 ? `Recharge in ${Math.ceil(energyShield.rechargeDelay)}s` : `Recharging · +${SHIELD_CONFIG.rechargeRate} / s`}`);
+			const recharge = powerOutputs(systems.allocation).shieldRecharge;
+			label(element('shield-status'), `${energyShield.charge === 0 ? 'DEPLETED · ' : ''}${held ? 'Recharge held' : energyShield.charge >= energyShield.capacity ? 'Fully charged' : energyShield.rechargeDelay > 0 ? `Recharge in ${Math.ceil(energyShield.rechargeDelay)}s` : recharge > 0 ? `Recharging · +${recharge} / s` : 'Recharge stopped · no shield power'}`);
 		}
 		label(element('purchase-reason'), !active ? 'Commands held' : craftCount(state) >= 9 ? 'Bay full: nine craft slots' : state.salvage < 85 ? 'Insufficient salvage' : state.experimental ? 'Buy wing 85 · ready in bay / Guardian 105' : 'Deploy escorts'); const mount = state.mounts[selected]; if (!mount) return;
 		label(ui.hull, `${Math.ceil(state.hull)} / ${MAX_HULL}`); meter.value = state.hull;
-		label(ui.salvage, String(Math.floor(state.salvage))); ui.route.style.width = `${Math.min(100, state.time / durationFor(state) * 100)}%`;
-		label(ui.distance, `${Math.min(100, Math.floor(state.time / durationFor(state) * 100))}%`);
-		const journey = journeyAt(state.time / durationFor(state) * 210);
+		const journey = journeyFor(state);
+		label(ui.salvage, String(Math.floor(state.salvage))); ui.route.style.width = `${journey.progress * 100}%`;
+		label(ui.distance, `${Math.floor(journey.progress * 100)}%`);
 		label(ui.routeLabel, journey.remaining > 0 ? `KEPLER · ${(journey.remaining / 1000).toFixed(2)} KM` : 'KEPLER · ARRIVED');
 		label(ui.wave, state.status === 'fitting' ? (state.systems ? 'SYSTEMS LAB / FITTING' : state.scenario ? 'ESCORT DRILL / FITTING' : 'DRYDOCK / FITTING') : `${state.systems ? 'SYSTEMS · ' : state.scenario ? 'DRILL · ' : ''}CONTACT ${String(state.wave).padStart(2, '0')} / ${state.scenario?.encounters.length ?? 6} ${state.cleared ? '— CLEAR' : ''}`);
 		label(ui.waveInfo, state.scenario ? contactWarning(state) : state.status === 'fitting' ? 'Build your defenses. Departure is your call.' : state.wave < WAVE_COUNT ? `Next: ${waveSide(state.wave + 1)} in ${Math.max(0, Math.ceil(state.nextWave - state.time))}s · ${state.enemies.length} hostiles` : state.enemies.length + state.arrivals.length > 0 ? `${state.enemies.length} hostiles · Defeat the gatekeeper and reach the gate.` : 'Passage clear. Approaching Kepler Gate.');
@@ -218,9 +222,9 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const showResult = function () {
 		ui.result.hidden = false; rallyMode = false; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
-		label(element('result-title'), state.systems ? state.status === 'won' ? 'SYSTEMS LAB SURVIVED.' : 'SYSTEMS LAB LOST.' : state.scenario ? state.status === 'won' ? 'DRILL SURVIVED.' : 'DRILL LOST.' : state.status === 'won' ? 'THE ARK ARRIVES.' : 'THE LIGHTS GO OUT.');
-		label(element('result-copy'), state.scenario ? 'Compare your coverage, launch timing and guardian assignments. Restart to try another defense.' : state.status === 'won' ? 'Kepler Gate opens. Your moving fortress brought its people home.' : 'The passage claimed another ship. Cover both flanks, use railguns against armor, and launch escorts to draw fire.');
-		label(element('result-stats'), `${Math.min(100, Math.floor(state.time / durationFor(state) * 100))}% of route · ${state.kills} hostiles destroyed · ${Math.ceil(state.hull / MAX_HULL * 100)}% hull remaining · ${state.escortLosses} escorts lost · ${state.launches} launches · ${state.orders} escort orders · ${Math.floor(state.salvage)} salvage · ${state.systems ? `Systems Lab · ${Math.round(state.systems.shieldAbsorbed)} shield damage absorbed` : state.scenario ? 'Escort Drill' : WAVE_NAMES[Math.max(0, state.wave - 1)] ?? ''}`);
+		label(element('result-title'), state.systems ? state.status === 'won' ? 'SYSTEMS LAB COMPLETE.' : 'SYSTEMS LAB LOST.' : state.scenario ? state.status === 'won' ? 'DRILL SURVIVED.' : 'DRILL LOST.' : state.status === 'won' ? 'THE ARK ARRIVES.' : 'THE LIGHTS GO OUT.');
+		label(element('result-copy'), state.systems ? state.status === 'won' ? 'Route complete and all contacts resolved. Compare reactor choices and try another allocation.' : 'The ark was destroyed before arrival and contact clearance. Try reallocating power or reinforcing the exposed flank.' : state.scenario ? 'Compare your coverage, launch timing and guardian assignments. Restart to try another defense.' : state.status === 'won' ? 'Kepler Gate opens. Your moving fortress brought its people home.' : 'The passage claimed another ship. Cover both flanks, use railguns against armor, and launch escorts to draw fire.');
+		label(element('result-stats'), `${Math.floor(journeyFor(state).progress * 100)}% of route · ${state.kills} hostiles destroyed · ${Math.ceil(state.hull / MAX_HULL * 100)}% hull remaining · ${state.escortLosses} escorts lost · ${state.launches} launches · ${state.orders} escort orders · ${Math.floor(state.salvage)} salvage · ${state.systems ? `Systems Lab · ${state.time.toFixed(1)}s · ${Math.round(state.systems.distanceTraveled)}m traveled · ${state.systems.powerChanges} power changes · ${Math.round(state.systems.shieldAbsorbed)} shield damage absorbed` : state.scenario ? 'Escort Drill' : WAVE_NAMES[Math.max(0, state.wave - 1)] ?? ''}`);
 		button('restart').focus({ preventScroll: true });
 	};
 	const tick = function (now: number) {
