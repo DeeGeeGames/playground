@@ -16,7 +16,9 @@ const bindings = new Map([
 	['KeyX', 'stop'], ['Space', 'cannon'], ['KeyE', 'laser'], ['KeyQ', 'missile'], ['KeyV', 'coolant'],
 ]);
 const formatTime = function (time: number) { return `${Math.floor(time / 60)}:${Math.floor(time % 60).toString().padStart(2, '0')}`; };
-const shutdown = await mountGame('game', async function (container) {
+const shutdown = new URLSearchParams(location.search).has('mech-preview')
+	? await mountGame('game', (await import('./mech-preview')).startMechPreview)
+	: await mountGame('game', async function (container) {
 	const canvas = container.querySelector('canvas');
 	if (!canvas) throw new Error('Missing battlefield');
 	canvas.tabIndex = 0;
