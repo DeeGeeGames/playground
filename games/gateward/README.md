@@ -1,6 +1,6 @@
 # Gateward
 
-A self-contained, isometric capital-ship tower defense prototype. The ark follows
+A self-contained, 3D capital-ship tower defense prototype. The ark follows
 its route automatically; the player builds its defenses instead of piloting.
 
 Open `games/gateward/` from the launcher. Fit the ship with the starting 300
@@ -8,7 +8,10 @@ salvage, then depart. A voyage takes about 3½ minutes at 1×, or half that at 2
 Six directional waves culminate in a flagship. Reach Kepler Gate and destroy all
 hostiles to win; losing the ark's hull ends the run.
 
-- Select one of eight mounts using the ship, panel buttons, or keys 1–8.
+- Select one of eight mounts using a visible ship pad, panel buttons, or keys 1–8.
+- Right-drag to orbit and use the wheel to zoom. On touch screens, drag to orbit
+  and pinch to zoom; a tap still gives an order. Reset view and restarting restore
+  the original orthographic tactical camera. The camera stays centered on the ark.
 - Flak handles light ships; railguns ignore armor; homing missiles deal splash
   damage. All turrets fire automatically through full arcs. Upgrade to level 3
   for damage, range, and fire rate. Selling returns 70% of the investment.
@@ -28,21 +31,42 @@ hostiles to win; losing the ark's hull ends the run.
   panel. Focus loss and hidden documents pause the running voyage. Pointer/touch
   commands use the same actions. Physical touch devices are separate acceptance.
 
-Browser-independent simulation lives in `src/simulation.ts`; Canvas rendering and
-DOM input are separate. `src/projection.ts` uses the published ECSpresso isometric
-projection plugin helpers (`worldToIso` / `isoToWorld`) for the view and pointer
-coordinates. Hulls and turrets have visual elevation; selection uses their
-projected centers. Canvas draws ships back to front by world X + Y. The Pixi-only
-projection/depth-sort systems are not installed. No gameplay ECS migration, saves,
-external assets, audio, network, or shared runtime state.
-The page uses the workspace lifecycle disposer for animation and input cleanup.
+Browser-independent simulation lives in `src/simulation.ts`; Three.js presentation
+and DOM input remain separate. `src/presentation.ts` owns the scene, orthographic
+camera, OrbitControls, lights, models, visual effects, and disposal. The HTML
+command panel remains accessible with keyboard controls. A transparent Canvas
+layer draws screen-space numbers, health bars, navigation labels, and contact
+arrows. Solid world geometry shares WebGL depth testing.
 
-The ark's Canvas artwork in `src/ark.ts` uses an elongated rounded gunmetal hull,
-curved shoulders and belly, recessed light belts, four stern drives, and a low
-command housing blended into the shell. Shaded armor faces are built and projected
-once for the fixed isometric camera. Armored turret housings distinguish twin-barrel
-flak, long-barrel railguns, and paired missile pods. Artwork preserves the eight mount
-positions, selection elevations, and combat rules; the larger hull is decorative.
+`src/projection.ts` projects and raycasts through the current camera. Mount and
+hostile clicks respect visible mesh surfaces, including hull occlusion; the panel
+can select a mount hidden on the far side. Pointer release issues tap/click orders;
+orbit drags, pinches, cancellation, pause, and focus loss cannot leak into rally or
+target orders. Lost graphics contexts pause the voyage and can be resumed after
+restoration. Renderer shutdown disposes controls, geometry, materials, shadow
+buffers, labels, and its WebGL context. Gameplay still runs on the original 2D
+plane; no physics, gameplay ECS, persistence, or shared-world migration.
+
+Aircraft occupy a presentation-only flight layer above the bridge. Projectile
+trails join turret height to that layer; incoming fire descends to the existing
+hull collision boundary. Ranges, damage, targeting, and movement stay planar.
+
+The ark is a Blender-authored, faceted armored model with a broad chamfered prow,
+segmented shoulder and belly armor, recessed warm lights, a stepped aft bridge,
+and four stern drives. Dynamic turrets retain the eight original mount positions
+and firing rules. The shipped model is `public/models/gateward-ark.glb`; editable
+source is `assets/gateward-ark.blend`. It has about 8,800 triangles, eight materials,
+and no external textures. `tools/build-ark.py` reproduces it in an isolated Blender
+scene and preserves an existing user document when called from live Blender.
+
+To rebuild the source and runtime asset with Blender on your PATH:
+
+```sh
+blender --background --factory-startup --python games/gateward/tools/build-ark.py -- --gateward-export /tmp/gateward-asset
+cp /tmp/gateward-asset/gateward-ark.blend games/gateward/assets/gateward-ark.blend
+bunx @gltf-transform/cli@4.5.1 dedup /tmp/gateward-asset/gateward-ark.glb /tmp/gateward-asset/dedup.glb
+bunx @gltf-transform/cli@4.5.1 prune /tmp/gateward-asset/dedup.glb games/gateward/public/models/gateward-ark.glb
+```
 
 The camera follows the ark along a 2.52 km route at 12 m/s. Fixed navigation
 beacons, a scrolling lattice, distant debris, and layered star parallax communicate
@@ -52,6 +76,7 @@ departure. Reduced motion disables decorative parallax and engine flicker while
 keeping navigation and the gate tied to route progress.
 
 `bun test games/gateward/tests` exercises economy, combat, escort losses, support
-systems, failure, and a complete salvage-funded victory. `bun run check` validates
+systems, failure, a complete salvage-funded victory, camera-aware picking,
+orbital projection, resize, model hardpoints, and shield clearance. `bun run check` validates
 the whole workspace. Production preview and owner judgment establish visual and
 play-feel evidence separately from deterministic tests.

@@ -756,3 +756,33 @@ h1 em {
 		scroll-behavior:auto!important;
 	}
 }
+.tactical-labels {
+	position:absolute;
+	inset:0;
+	pointer-events:none;
+}
+.camera-tools {
+	position:absolute;
+	top:18px;
+	right:18px;
+	z-index:2;
+	display:flex;
+	flex-direction:column;
+	align-items:flex-end;
+	gap:7px;
+}
+.camera-tools button {
+	font:10px monospace;
+	min-height:34px;
+	background:#101e2ae0;
+}
+.camera-tools span {
+	font:8px monospace;
+	color:var(--muted);
+	pointer-events:none;
+}
+@media(max-width:650px) {
+	.camera-tools { top:70px; right:12px; }
+	.camera-tools button { min-height:38px; }
+	.camera-tools span { display:none; }
+}
