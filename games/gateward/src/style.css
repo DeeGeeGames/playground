@@ -130,6 +130,20 @@ header {
 .energy-shield {
 	margin-bottom:16px;
 }
+.sensor-panel meter::-webkit-meter-optimum-value {
+	background:#d7bf89;
+}
+.sensor-panel meter::-moz-meter-bar {
+	background:#d7bf89;
+}
+.sensor-panel button {
+	min-height:44px;
+}
+@media(max-width:650px) {
+	.sensor-panel {
+		grid-column:1/-1;
+	}
+}
 .energy-shield meter::-webkit-meter-optimum-value {
 	background:#75bfe8;
 }

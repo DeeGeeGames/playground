@@ -39,3 +39,14 @@ test('point-blank railgun fire is audible even when its projectile hits in the s
 	expect(read(state)).toEqual(['rail', 'impact']);
 	expect(read(state)).toEqual([]);
 });
+
+test('a hidden systems encounter does not leak its arrival through the contact cue', function () {
+	const state = createState({ scenario: 'drill', systems: true }); const sensors = state.systems?.sensors;
+	if (!sensors) throw new Error('Missing sensors');
+	sensors.integrity = 0; state.status = 'running'; state.time = 9.99;
+	state.enemies.push({ id: state.nextId++, kind: 'raider', x: 0, y: -100, hp: 45, maxHp: 45, cooldown: 99 });
+	const read = createSoundObserver(); read(state); step(state, 1 / 60);
+	expect(state.wave).toBe(1); expect(read(state)).not.toContain('contact');
+	const healthy = createState({ scenario: 'drill', systems: true }); healthy.status = 'running'; healthy.time = 9.99;
+	read(healthy); step(healthy, 1 / 60); expect(read(healthy)).toContain('contact');
+});

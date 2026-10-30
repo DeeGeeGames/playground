@@ -189,6 +189,32 @@ independent. The engineering panel's travel ETA excludes combat clearance.
 Navigation beacons, gate position, route percentage and drive plumes share the
 same actual distance/speed. Reduced motion retains physical route progress.
 
+Sensors start at 100 integrity. At 50 or more, they detect contacts at 760m and
+classify them at 640m; below 50, those ranges fall to 330m and 230m. At zero,
+nearby defense still acquires contacts within 200m, with no classification.
+Only classified contacts provide class/count/arrival hints. Unknown detections
+show their direction and a question mark; undetected craft have no radar arrows,
+labels or health readout, but their physical models remain visible. The next
+scheduled approach is modeled beyond its spawn radius at that class's closing
+speed so healthy sensors give advance warning. This is a tactical prototype,
+not a generalized fog-of-war or line-of-sight system.
+
+Ark turret acquisition and missile guidance respect sensor range. Missiles
+already flying continue ballistically while a lock is out of range and can
+resume guidance after acquisition recovers. Independent escort self-defense
+continues. A stale priority lock drops as soon as damage removes acquisition.
+
+Systems-mode bombers fire amber array-seeking rounds. Escort interception
+consumes a round; shield absorption protects both hull and sensors. Overflow
+damages the array by up to 35 integrity per round, proportional to the fraction
+that penetrated the shield. Aegis mitigates only hull damage; its round-clearing
+pulse can prevent disruption. No ordinary round or random event damages sensors.
+Repair Sensors / **S** spends 70 salvage to restore 100 integrity with an
+18-second cooldown, competing with hull repairs and new defenses. Sensor damage
+does not heal on its own; paused, unfocused and ended runs freeze repair timers
+and reject commands. Full voyage and Escort Drill retain their previous intel
+and targeting rules.
+
 Sound effects use local Web Audio synthesis: flak reports, railgun cracks,
 missile exhaust, escort fire, hull impacts, explosions, contact/clear signals,
 Aegis, repairs, departure and results. Sound unlocks on the first pointer or

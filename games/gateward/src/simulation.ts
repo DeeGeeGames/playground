@@ -1,3 +1,4 @@
+import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
 import { ESCORT_DRILL, type Scenario } from './scenarios';
 import { absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
 export type Point = { x: number; y: number };
@@ -26,7 +27,7 @@ const ENEMIES = {
 export interface Mount extends Point { weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
 export interface Enemy extends Point { id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
 export interface Escort extends Point { wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
-export interface Shot extends Point { id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
+export interface Shot extends Point { sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
 export interface Effect extends Point { radius: number; life: number; maxLife: number; color: string }
 export interface Arrival { at: number; kind: EnemyKind; x: number; y: number }
 export const SECTORS = ['port', 'starboard', 'ahead', 'astern'] as const;
@@ -160,6 +161,23 @@ export const repair = function (state: State): boolean {
 	if (!canOrder(state) || state.salvage < 80 || state.hull >= MAX_HULL || state.repairCooldown > 0) return false;
 	state.salvage -= 80; state.hull = Math.min(MAX_HULL, state.hull + 240); state.repairCooldown = 15; notify(state, 'Repair crews restored 240 hull.'); return true;
 };
+export const repairSensors = function (state: State): boolean {
+	const sensors = state.systems?.sensors;
+	if (!sensors || !canOrder(state) || state.salvage < SENSOR_CONFIG.repairCost || sensors.integrity >= SENSOR_CONFIG.maxIntegrity || sensors.repairCooldown > 0) return false;
+	state.salvage -= SENSOR_CONFIG.repairCost;
+	sensors.integrity = SENSOR_CONFIG.maxIntegrity; sensors.repairCooldown = SENSOR_CONFIG.repairCooldown; sensors.repairs++;
+	notify(state, 'Sensors restored to 100%. Advance warning and acquisition restored.');
+	return true;
+};
+export const setPriority = function (state: State, id: number | undefined): boolean {
+	if (!canOrder(state)) return false;
+	if (id !== undefined && !state.enemies.some(function (enemy) { return enemy.id === id && enemy.hp > 0 && canAcquire(state, enemy); })) return false;
+	state.priority = id;
+	return true;
+};
+const clearLostPriority = function (state: State) {
+	if (state.priority !== undefined && !state.enemies.some(function (enemy) { return enemy.id === state.priority && enemy.hp > 0 && canAcquire(state, enemy); })) state.priority = undefined;
+};
 export const pulse = function (state: State): boolean {
 	if (!canOrder(state) || state.status !== 'running' || state.pulseCooldown > 0) return false;
 	state.pulseCooldown = 32; state.aegisRemaining = 5; state.shots = state.shots.filter(function (shot) { return shot.side !== 'enemy'; });
@@ -182,7 +200,7 @@ const startWave = function (state: State) {
 		const arrivalAngle = kind === 'flagship' ? 0 : angle;
 		state.arrivals.push({ at: state.time + i * (wave === 5 ? 0.45 : 0.9), kind, x: Math.cos(arrivalAngle) * 620, y: Math.sin(arrivalAngle) * 520 });
 	}
-	notify(state, `Wave ${wave}: ${WAVE_NAMES[wave - 1] ?? 'Hostile contact'} — ${waveSide(wave).toLowerCase()}.`);
+	if (!state.systems) notify(state, `Wave ${wave}: ${WAVE_NAMES[wave - 1] ?? 'Hostile contact'} — ${waveSide(wave).toLowerCase()}.`);
 };
 const startEncounter = function (state: State) {
 	const encounter = state.scenario?.encounters[state.wave]; if (!encounter) return;
@@ -192,19 +210,42 @@ const startEncounter = function (state: State) {
 		const bearing = angle + Math.sin(i * 2.4) * 0.35;
 		state.arrivals.push({ at: encounter.at + i * encounter.spacing, kind: encounter.kind, x: Math.cos(bearing) * 520, y: Math.sin(bearing) * 460 });
 	}
-	notify(state, `${encounter.sector.toUpperCase()}: ${encounter.count} ${encounter.kind} contacts.`);
+	if (!state.systems) notify(state, `${encounter.sector.toUpperCase()}: ${encounter.count} ${encounter.kind} contacts.`);
 };
 export const durationFor = function (state: State): number { return state.scenario?.duration ?? ROUTE_SECONDS; };
+const contactDirection = function (point: Point): string {
+	return Math.abs(point.x) > Math.abs(point.y) ? point.x > 0 ? 'AHEAD' : 'ASTERN' : point.y > 0 ? 'STARBOARD' : 'PORT';
+};
 export const contactWarning = function (state: State): string {
 	const next = state.scenario?.encounters[state.wave];
-	return next ? `${next.sector.toUpperCase()} · ${next.count} ${next.kind} · arrival ${Math.max(0, Math.ceil(next.at - state.time))}s` : state.systems ? 'Clear remaining contacts and reach gate' : 'All contacts arrived · hold until 90s';
+	if (!state.systems) return next ? `${next.sector.toUpperCase()} · ${next.count} ${next.kind} · arrival ${Math.max(0, Math.ceil(next.at - state.time))}s` : 'All contacts arrived · hold until 90s';
+	if (next) {
+		const bearing = SECTOR_POINTS[next.sector]; const angle = Math.atan2(bearing.y, bearing.x);
+		const range = Math.hypot(Math.cos(angle) * 520, Math.sin(angle) * 460) + ENEMIES[next.kind].speed * Math.max(0, next.at - state.time);
+		const intel = contactIntel(state, { x: Math.cos(angle) * range, y: Math.sin(angle) * range });
+		if (intel === 'classified') return `${next.sector.toUpperCase()} · ${next.count} ${next.kind} · arrival ${Math.max(0, Math.ceil(next.at - state.time))}s`;
+		if (intel === 'detected') return `${next.sector.toUpperCase()} · unclassified contact`;
+	}
+	for (const arrival of state.arrivals) {
+		const radius = Math.hypot(arrival.x, arrival.y);
+		const range = radius + ENEMIES[arrival.kind].speed * Math.max(0, arrival.at - state.time);
+		const intel = contactIntel(state, { x: arrival.x * range / radius, y: arrival.y * range / radius });
+		if (intel === 'classified') return `${contactDirection(arrival)} · ${arrival.kind} · arrival ${Math.max(0, Math.ceil(arrival.at - state.time))}s`;
+		if (intel === 'detected') return `${contactDirection(arrival)} · unclassified contact`;
+	}
+	const contacts = state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy); });
+	const contact = contacts[0];
+	if (!contact) return 'Scanning for contacts';
+	if (contactIntel(state, contact) === 'detected') return `${contactDirection(contact)} · unclassified contact`;
+	const count = contacts.filter(function (enemy) { return enemy.kind === contact.kind && contactDirection(enemy) === contactDirection(contact) && contactIntel(state, enemy) === 'classified'; }).length;
+	return `${contactDirection(contact)} · ${count} ${contact.kind} · in range`;
 };
 const effect = function (state: State, point: Point, radius: number, color: string) {
 	state.effects.push({ x: point.x, y: point.y, radius, life: 0.45, maxLife: 0.45, color });
 };
-const fire = function (state: State, from: Point, to: Point, damage: number, speed: number, side: Shot['side'], weapon: Shot['weapon'], target: number | undefined) {
+const fire = function (state: State, from: Point, to: Point, damage: number, speed: number, side: Shot['side'], weapon: Shot['weapon'], target: number | undefined, sensorDamage?: number) {
 	const angle = Math.atan2(to.y - from.y, to.x - from.x);
-	state.shots.push({ id: state.nextId++, x: from.x, y: from.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, damage, side, weapon, target, life: 4 });
+	state.shots.push({ id: state.nextId++, x: from.x, y: from.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, damage, side, weapon, target, life: 4, ...(sensorDamage === undefined ? {} : { sensorDamage }) });
 };
 const nearest = function <T extends Point>(from: Point, targets: readonly T[], range: number): T | undefined {
 	let best: T | undefined; let closest = range;
@@ -230,6 +271,7 @@ export const step = function (state: State, dt: number) {
 	dt = Math.min(dt, 0.05); state.time += dt;
 	state.pulseCooldown = Math.max(0, state.pulseCooldown - dt); state.aegisRemaining = Math.max(0, state.aegisRemaining - dt); state.repairCooldown = Math.max(0, state.repairCooldown - dt); state.messageTime = Math.max(0, state.messageTime - dt);
 	if (state.systems) {
+		state.systems.sensors.repairCooldown = Math.max(0, state.systems.sensors.repairCooldown - dt);
 		state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
 		state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + powerOutputs(state.systems.allocation).speed * dt);
 	}
@@ -240,11 +282,12 @@ export const step = function (state: State, dt: number) {
 		const config = ENEMIES[arrival.kind]; state.enemies.push({ id: state.nextId++, kind: arrival.kind, x: arrival.x, y: arrival.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8 });
 	}
 	state.arrivals = state.arrivals.filter(function (a) { return a.at > state.time; });
+	clearLostPriority(state);
 	const weaponRate = state.systems ? powerOutputs(state.systems.allocation).weaponRate : 1;
 	for (const mount of state.mounts) {
 		mount.cooldown = state.systems ? Math.max(0, mount.cooldown - dt * weaponRate) : mount.cooldown - dt;
 		if (!mount.weapon || weaponRate === 0) continue;
-		const config = WEAPONS[mount.weapon]; const candidates = state.enemies.filter(function (enemy) { return enemy.hp > 0 && covered(state, mount, enemy); });
+		const config = WEAPONS[mount.weapon]; const candidates = state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy) && covered(state, mount, enemy); });
 		const target = candidates.find(function (enemy) { return enemy.id === state.priority; }) ?? nearest(mount, candidates, coverageFor(state, mount).range);
 		if (!target) continue;
 		mount.aim = Math.atan2(target.y - mount.y, target.x - mount.x);
@@ -274,14 +317,14 @@ export const step = function (state: State, dt: number) {
 		const destination = escort ?? { x: Math.max(-110, Math.min(110, enemy.x)), y: Math.max(-30, Math.min(30, enemy.y)) };
 		if (distance(enemy, destination) > config.range * 0.85) moveToward(enemy, destination, config.speed, dt);
 		if (enemy.cooldown <= 0 && distance(enemy, destination) <= config.range) {
-			fire(state, enemy, destination, config.damage, enemy.kind === 'bomber' ? 155 : 235, 'enemy', 'hostile', escort?.id); enemy.cooldown = config.reload;
+			fire(state, enemy, destination, config.damage, enemy.kind === 'bomber' ? 155 : 235, 'enemy', 'hostile', escort?.id, state.systems && enemy.kind === 'bomber' ? SENSOR_CONFIG.damagePerBomberHit : undefined); enemy.cooldown = config.reload;
 		}
 	}
 	let arkHit = false;
 	for (const shot of state.shots) {
 		const before = { x: shot.x, y: shot.y }; shot.life -= dt;
 		if (shot.weapon === 'missile') {
-			const target = state.enemies.find(function (e) { return e.id === shot.target && e.hp > 0; });
+			const target = state.enemies.find(function (e) { return e.id === shot.target && e.hp > 0 && canAcquire(state, e); });
 			if (target) { const angle = Math.atan2(target.y - shot.y, target.x - shot.x); shot.vx = Math.cos(angle) * 300; shot.vy = Math.sin(angle) * 300; }
 		}
 		shot.x += shot.vx * dt; shot.y += shot.vy * dt;
@@ -296,6 +339,15 @@ export const step = function (state: State, dt: number) {
 			if (hit) { hit.hp -= shot.damage; shot.life = 0; effect(state, hit, 15, '#ff897e'); }
 			else if (Math.abs(shot.x) < 145 && Math.abs(shot.y) < 40) {
 				const overflow = state.systems ? absorbShieldDamage(state.systems, shot.damage) : shot.damage;
+				// Escort interception consumed its round above. Only shield overflow disrupts sensors;
+				// Aegis mitigates hull damage below, not the subsystem disruption.
+				if (state.systems && overflow > 0 && shot.sensorDamage !== undefined && Number.isFinite(shot.sensorDamage) && shot.sensorDamage > 0) {
+					const sensors = state.systems.sensors; const beforeIntegrity = sensors.integrity;
+					sensors.integrity = Math.max(0, sensors.integrity - Math.min(SENSOR_CONFIG.damagePerBomberHit, shot.sensorDamage) * overflow / shot.damage);
+					if (beforeIntegrity >= SENSOR_CONFIG.healthyThreshold && sensors.integrity < SENSOR_CONFIG.healthyThreshold) sensors.impairments++;
+					clearLostPriority(state);
+					notify(state, sensors.integrity === 0 ? 'Array-seeking round penetrated: sensors offline. Local defense active. Repair sensors.' : 'Array-seeking round penetrated: sensor integrity damaged. Repair sensors.');
+				}
 				state.hull = Math.max(0, state.hull - overflow * (state.aegisRemaining > 0 ? 0.2 : 1));
 				arkHit ||= shot.damage > 0;
 				shot.life = 0; effect(state, shot, 22, '#ff897e');
@@ -308,7 +360,7 @@ export const step = function (state: State, dt: number) {
 	state.enemies = state.enemies.filter(function (e) { return e.hp > 0; }); state.escorts = state.escorts.filter(function (e) { return e.hp > 0; }); state.shots = state.shots.filter(function (s) { return s.life > 0; });
 	for (const wing of state.wings) wing.craft = wing.craft.filter(function (craft) { return craft.hp > 0; });
 	state.effects = state.effects.filter(function (e) { e.life -= dt; return e.life > 0; });
-	if (state.priority !== undefined && !state.enemies.some(function (e) { return e.id === state.priority; })) state.priority = undefined;
+	clearLostPriority(state);
 	if (state.hull > 0 && state.wave > 0 && !state.cleared && state.enemies.length === 0 && state.arrivals.length === 0) {
 		state.cleared = true; state.salvage += 50; state.hull = Math.min(MAX_HULL, state.hull + 60); notify(state, 'Sector secured. +50 salvage · +60 hull. Refit for the next contact.');
 	}
