@@ -1,6 +1,6 @@
 import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fieldBlocks, fieldRelative, INTERDICTION_CONFIG, navigateField, type Detour } from './interdiction';
 import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
-import { ESCORT_DRILL, type Scenario } from './scenarios';
+import { ESCORT_DRILL, SYSTEMS_TRIAL, type Scenario } from './scenarios';
 import { absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
 export type Point = { x: number; y: number };
 export type Weapon = 'flak' | 'rail' | 'missile';
@@ -38,6 +38,7 @@ export interface Wing { id: number; phase: 'ready' | 'launching' | 'sortie' | 'r
 export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
 export interface State {
 	systems: SystemsState | undefined;
+	resultReason: 'hull' | 'deadline' | 'arrival' | undefined;
 	scenario: Scenario | undefined; experimental: boolean; wings: Wing[]; launches: number; orders: number; escortLosses: number; coverageDegrees: number; paused: boolean; focused: boolean;
 	time: number; hull: number; salvage: number; wave: number; nextWave: number; kills: number;
 	status: 'fitting' | 'running' | 'won' | 'lost'; mounts: Mount[]; enemies: Enemy[]; escorts: Escort[];
@@ -46,12 +47,13 @@ export interface State {
 	cleared: boolean; message: string; messageTime: number;
 }
 export const distance = function (a: Point, b: Point): number { return Math.hypot(a.x - b.x, a.y - b.y); };
-export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill'; systems?: boolean } = {}): State {
-	const scenario = options.scenario === 'drill' ? ESCORT_DRILL : undefined;
+export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill' | 'systems'; systems?: boolean } = {}): State {
+	const scenario = options.scenario === 'systems' ? SYSTEMS_TRIAL : options.scenario === 'drill' ? ESCORT_DRILL : undefined;
 	return {
-		systems: options.systems ? createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed) : undefined,
-		scenario, experimental: options.scenario === 'drill' || (options.experimental ?? false), wings: [], launches: 0, orders: 0, escortLosses: 0, coverageDegrees: options.coverageDegrees ?? (options.scenario === 'drill' ? 240 : 360), paused: false, focused: true,
-		time: 0, hull: MAX_HULL, salvage: options.scenario === 'drill' ? ESCORT_DRILL.salvage : 300, wave: 0, nextWave: options.scenario === 'drill' ? (ESCORT_DRILL.encounters[0]?.at ?? 10) : 5, kills: 0, status: 'fitting',
+		resultReason: undefined,
+		systems: options.systems || options.scenario === 'systems' ? createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed) : undefined,
+		scenario, experimental: scenario !== undefined || (options.experimental ?? false), wings: [], launches: 0, orders: 0, escortLosses: 0, coverageDegrees: options.coverageDegrees ?? (scenario ? 240 : 360), paused: false, focused: true,
+		time: 0, hull: MAX_HULL, salvage: scenario?.salvage ?? 300, wave: 0, nextWave: scenario ? (scenario.encounters[0]?.at ?? Infinity) : 5, kills: 0, status: 'fitting',
 		mounts: [-1, 1].flatMap(function (side) { return [-96, -32, 32, 96].map(function (x): Mount { return { x, y: side * 43, weapon: undefined, level: 0, cooldown: 0, aim: side * Math.PI / 2 }; }); }),
 		enemies: [], escorts: [], shots: [], effects: [], arrivals: [], nextId: 1, rally: { x: 0, y: 0 }, priority: undefined,
 		pulseCooldown: 0, aegisRemaining: 0, repairCooldown: 0, cleared: false, message: 'Fit your ship, then depart. Weapons fire automatically.', messageTime: 8,
@@ -294,7 +296,10 @@ const segmentDistance = function (point: Point, a: Point, b: Point): number {
 };
 export const step = function (state: State, dt: number) {
 	if (!canOrder(state) || state.status !== 'running' || !Number.isFinite(dt) || dt <= 0) return;
-	dt = Math.min(dt, 0.05); state.time += dt;
+	// The deadline is strict: the tick ending exactly there loses, even if it clears combat.
+	const deadline = state.scenario?.deadline;
+	if (deadline !== undefined && state.time >= deadline) { state.status = 'lost'; state.resultReason = state.hull <= 0 ? 'hull' : 'deadline'; state.shots = []; return; }
+	dt = Math.min(dt, 0.05, deadline === undefined ? Infinity : Math.max(0, deadline - state.time)); state.time += dt;
 	state.pulseCooldown = Math.max(0, state.pulseCooldown - dt); state.aegisRemaining = Math.max(0, state.aegisRemaining - dt); state.repairCooldown = Math.max(0, state.repairCooldown - dt); state.messageTime = Math.max(0, state.messageTime - dt);
 	const distanceBefore = state.systems?.distanceTraveled ?? 0;
 	if (state.systems) {
@@ -399,12 +404,13 @@ export const step = function (state: State, dt: number) {
 	if (state.hull > 0 && state.wave > 0 && !state.cleared && state.enemies.length === 0 && state.arrivals.length === 0) {
 		state.cleared = true; state.salvage += 50; state.hull = Math.min(MAX_HULL, state.hull + 60); notify(state, 'Sector secured. +50 salvage · +60 hull. Refit for the next contact.');
 	}
-	if (state.hull <= 0) { state.status = 'lost'; state.shots = []; }
+	if (state.hull <= 0) { state.status = 'lost'; state.resultReason = 'hull'; state.shots = []; }
+	else if (deadline !== undefined && state.time >= deadline) { state.status = 'lost'; state.resultReason = 'deadline'; state.shots = []; }
 	else {
 		const combatResolved = state.wave === (state.scenario?.encounters.length ?? WAVE_COUNT) && state.enemies.length === 0 && state.arrivals.length === 0;
 		const complete = state.systems
-			? state.time >= durationFor(state) && state.systems.distanceTraveled >= state.systems.routeLength && combatResolved
+			? (deadline !== undefined || state.time >= durationFor(state)) && state.systems.distanceTraveled >= state.systems.routeLength && combatResolved
 			: state.scenario ? state.time >= state.scenario.duration : state.time >= ROUTE_SECONDS && combatResolved;
-		if (complete) { state.status = 'won'; state.shots = []; }
+		if (complete) { state.status = 'won'; state.resultReason = 'arrival'; state.shots = []; }
 	}
 };
