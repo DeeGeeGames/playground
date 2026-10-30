@@ -1,5 +1,6 @@
 import { BoxGeometry, BufferGeometry, CylinderGeometry, ExtrudeGeometry, Group, Line, Material, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Points, Shape, TorusGeometry } from 'three';
 import { DECK_HEIGHT, TURRET_HEIGHT } from './projection';
+import { TURRET_RISE, TURRET_SCALE } from './ship-config';
 import type { Enemy, Escort, Mount, Weapon } from './simulation';
 
 type Outline = readonly (readonly [number, number])[];
@@ -68,13 +69,16 @@ export const createTurret = function (mount: Mount): TurretVisual {
 	addBox(empty, box, emptyInk, 0, 1.4, 0, 1.3, 0.7, 9);
 	root.add(empty);
 
-	const barbette = new Mesh(new CylinderGeometry(15, 17, TURRET_HEIGHT - DECK_HEIGHT, 16), steel);
-	barbette.position.y = (TURRET_HEIGHT - DECK_HEIGHT) / 2;
-	root.add(barbette);
+	const assembly = new Group();
+	assembly.scale.setScalar(TURRET_SCALE);
+	root.add(assembly);
+	const barbette = new Mesh(new CylinderGeometry(15, 17, TURRET_RISE, 16), steel);
+	barbette.position.y = TURRET_RISE / 2;
+	assembly.add(barbette);
 	const pivot = new Group();
 	pivot.name = 'TurretAim';
-	pivot.position.y = TURRET_HEIGHT - DECK_HEIGHT;
-	root.add(pivot);
+	pivot.position.y = TURRET_RISE;
+	assembly.add(pivot);
 	addHull(pivot, [[-13, -10], [7, -10], [13, -5], [13, 5], [7, 10], [-13, 10]], 8, steel, 5);
 	addBox(pivot, box, edge, -5, 9.5, 0, 10, 1.2, 12);
 
@@ -115,7 +119,7 @@ export const createTurret = function (mount: Mount): TurretVisual {
 
 	const variants: Record<Weapon, Group> = { flak, rail, missile };
 	const pips = Array.from({ length: 3 }, function (_, index) {
-		return addBox(root, box, indicator, (index - 1) * 5, TURRET_HEIGHT - DECK_HEIGHT + 1.2, 16.2, 3, 1.5, 2.5);
+		return addBox(assembly, box, indicator, (index - 1) * 5, TURRET_RISE + 1.2, 16.2, 3, 1.5, 2.5);
 	});
 	const update = function (next: Mount, selected: boolean) {
 		root.position.set(next.x, DECK_HEIGHT, next.y);
@@ -124,7 +128,8 @@ export const createTurret = function (mount: Mount): TurretVisual {
 		barbette.visible = fitted;
 		pivot.visible = fitted;
 		pivot.rotation.y = -next.aim;
-		ring.position.y = fitted ? TURRET_HEIGHT - DECK_HEIGHT + 0.5 : 1.6;
+		ring.position.y = fitted ? TURRET_HEIGHT - DECK_HEIGHT + 0.5 * TURRET_SCALE : 1.6;
+		ring.scale.setScalar(fitted ? TURRET_SCALE : 1);
 		indicator.color.set(selected ? '#d6efad' : next.weapon === 'rail' ? '#cdb6ef' : next.weapon === 'missile' ? '#edc589' : '#91e3da');
 		for (const [weapon, model] of Object.entries(variants)) model.visible = weapon === next.weapon;
 		for (const [index, pip] of pips.entries()) pip.visible = fitted && index < next.level;

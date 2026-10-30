@@ -1,8 +1,9 @@
 import { OrthographicCamera, Plane, Raycaster, Vector2, Vector3 } from 'three';
 import { distance, type Enemy, type Mount, type Point } from './simulation';
+import { TURRET_RISE, TURRET_SCALE } from './ship-config';
 
 export const DECK_HEIGHT = 22;
-export const TURRET_HEIGHT = 40;
+export const TURRET_HEIGHT = DECK_HEIGHT + TURRET_RISE * TURRET_SCALE;
 export const FLIGHT_HEIGHT = 130;
 
 export interface View {
