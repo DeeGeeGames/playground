@@ -1,8 +1,7 @@
 import { mountGame } from '../../../shared/lifecycle';
 import { build, createState, deploy, ESCORTS, invested, MAX_HULL, notify, pulse, repair, ROUTE_SECONDS, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Weapon } from './simulation';
-import { render } from './render';
+import { createPresentation } from './presentation';
 import { journeyAt } from './journey';
-import { pickEnemy, pickMount, toWorld, viewFor } from './projection';
 
 const element = function (id: string): HTMLElement {
 	const found = document.getElementById(id); if (!found) throw new Error(`Missing element: ${id}`); return found;
@@ -14,7 +13,6 @@ const label = function (target: HTMLElement, value: string) { if (target.textCon
 const shutdown = await mountGame('game', async function (container) {
 	const canvas = container.querySelector('canvas'); const meter = element('hull-meter');
 	if (!canvas || !(meter instanceof HTMLMeterElement)) throw new Error('Missing tactical display');
-	const ctx = canvas.getContext('2d'); if (!ctx) throw new Error('Canvas unavailable');
 	const abort = new AbortController(); const options = { signal: abort.signal };
 	const ui = {
 		hull: element('hull'), salvage: element('salvage'), route: element('route-progress'), routeLabel: element('route-label'), distance: element('distance'),
@@ -33,17 +31,27 @@ const shutdown = await mountGame('game', async function (container) {
 	const deployButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-deploy]')];
 	const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 	let state = createState(); let selected = 0; let paused = false; let briefing = true; let rallyMode = false; let speed = 1;
-	let frame = 0; let previous = 0; let accumulator = 0; let disposed = false;
-	const available = function () { return !briefing && !paused && (state.status === 'fitting' || state.status === 'running'); };
+	let frame = 0; let previous = 0; let accumulator = 0; let disposed = false; let contextAvailable = true;
+	const pointers = new Map<number, { x: number; y: number; moved: boolean }>();
+	let multiTouch = false;
+	const available = function () { return contextAvailable && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'); };
 	const focusCanvas = function () { canvas.focus({ preventScroll: true }); };
 	const setPause = function (value: boolean) {
 		if (briefing || state.status === 'won' || state.status === 'lost') return;
+		if (!value && !contextAvailable) return;
+		if (value) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); }
 		paused = value; rallyMode = false; accumulator = 0; ui.pausePanel.hidden = !paused;
 		if (paused) button('resume').focus({ preventScroll: true }); else focusCanvas();
 	};
+	const presentation = await createPresentation(canvas);
+	canvas.addEventListener('webglcontextlost', function () { contextAvailable = false; setPause(true); notify(state, 'Graphics interrupted. Voyage paused until the display is restored.'); }, options);
+	canvas.addEventListener('webglcontextrestored', function () { contextAvailable = true; notify(state, 'Display restored. Resume when ready.'); }, options);
+	button('reset-camera').addEventListener('click', function () { presentation.resetCamera(); focusCanvas(); }, options);
 	const restart = function () {
+		pointers.clear(); multiTouch = false;
 		state = createState(); selected = 0; paused = false; briefing = false; rallyMode = false; speed = 1; accumulator = 0;
 		ui.pausePanel.hidden = true; ui.result.hidden = true; ui.brief.hidden = true; focusCanvas();
+		presentation.resetCamera();
 	};
 	const order = function (action: () => boolean) {
 		if (!available()) return;
@@ -65,6 +73,7 @@ const shutdown = await mountGame('game', async function (container) {
 		state.status = 'running'; notify(state, 'Underway. First contact on the port flank.'); accumulator = 0; focusCanvas();
 	}, options);
 	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; focusCanvas(); }, options);
+	button('prepare').disabled = false;
 	ui.pause.addEventListener('click', function () { setPause(!paused); }, options);
 	button('help').addEventListener('click', function () { setPause(true); }, options);
 	button('resume').addEventListener('click', function () { setPause(false); }, options);
@@ -73,17 +82,30 @@ const shutdown = await mountGame('game', async function (container) {
 	ui.rally.addEventListener('click', function () { if (available()) { rallyMode = !rallyMode; focusCanvas(); } }, options);
 	ui.clear.addEventListener('click', function () { if (available()) state.priority = undefined; }, options);
 	canvas.addEventListener('pointerdown', function (event) {
-		if (!available() || event.button !== 0) return;
-		const rect = canvas.getBoundingClientRect(); const view = viewFor(rect.width, rect.height);
-		const screen = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-		const point = toWorld(screen, view);
-		const mount = pickMount(screen, view, state.mounts);
-		const enemy = pickEnemy(screen, view, state.enemies);
+		if (event.button !== 0) return;
+		pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, moved: false });
+		if (pointers.size > 1) multiTouch = true;
+	}, options);
+	canvas.addEventListener('pointermove', function (event) {
+		const start = pointers.get(event.pointerId);
+		if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) start.moved = true;
+	}, options);
+	const releasePointer = function (event: PointerEvent, cancelled: boolean) {
+		const start = pointers.get(event.pointerId);
+		const gesture = multiTouch;
+		pointers.delete(event.pointerId);
+		if (pointers.size === 0) multiTouch = false;
+		if (!start || start.moved || gesture || cancelled || event.button !== 0 || !available()) return;
+		const rect = canvas.getBoundingClientRect();
+		const { mount, enemy, world } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
 		if (mount >= 0 && !rallyMode) selected = mount;
 		else if (enemy && !rallyMode) { state.priority = enemy.id; notify(state, `Priority target: ${enemy.kind}. All weapons in range will focus fire.`); }
-		else { state.rally = { x: Math.max(-450, Math.min(450, point.x)), y: Math.max(-370, Math.min(370, point.y)) }; rallyMode = false; notify(state, 'Escort rally point updated.'); }
+		else if (world) { state.rally = { x: Math.max(-450, Math.min(450, world.x)), y: Math.max(-370, Math.min(370, world.y)) }; rallyMode = false; notify(state, 'Escort rally point updated.'); }
 		focusCanvas();
-	}, options);
+	};
+	canvas.addEventListener('pointerup', function (event) { releasePointer(event, false); }, options);
+	canvas.addEventListener('pointercancel', function (event) { releasePointer(event, true); pointers.clear(); multiTouch = false; presentation.cancelInteraction(); }, options);
+	window.addEventListener('pointerup', function (event) { pointers.delete(event.pointerId); if (pointers.size === 0) multiTouch = false; }, options);
 	window.addEventListener('keydown', function (event) {
 		if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
 		// Preserve native keyboard activation when navigating DOM controls.
@@ -96,8 +118,8 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'KeyE') { event.preventDefault(); order(function () { return repair(state); }); }
 		if (event.code === 'KeyR') { event.preventDefault(); rallyMode = !rallyMode; }
 	}, options);
-	window.addEventListener('blur', function () { if (state.status === 'running') setPause(true); }, options);
-	document.addEventListener('visibilitychange', function () { if (document.hidden && state.status === 'running') setPause(true); }, options);
+	window.addEventListener('blur', function () { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); if (state.status === 'running') setPause(true); }, options);
+	document.addEventListener('visibilitychange', function () { if (document.hidden) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); if (state.status === 'running') setPause(true); } }, options);
 	const hud = function () {
 		const active = available(); const mount = state.mounts[selected]; if (!mount) return;
 		label(ui.hull, `${Math.ceil(state.hull)} / ${MAX_HULL}`); meter.value = state.hull;
@@ -153,13 +175,11 @@ const shutdown = await mountGame('game', async function (container) {
 			accumulator += elapsed * speed;
 			while (accumulator >= 1 / 60 && state.status === 'running') { step(state, 1 / 60); accumulator -= 1 / 60; if (state.status !== 'running') showResult(); }
 		} else accumulator = 0;
-		const rect = canvas.getBoundingClientRect(); const dpr = Math.min(devicePixelRatio, 2);
-		const width = Math.round(rect.width * dpr); const height = Math.round(rect.height * dpr);
-		if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
-		ctx.setTransform(dpr, 0, 0, dpr, 0, 0); render(ctx, viewFor(rect.width, rect.height), state, selected, reducedMotion.matches, rallyMode); hud();
+		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, rallyMode, !briefing && !paused && (state.status === 'fitting' || state.status === 'running'));
+		hud();
 		frame = requestAnimationFrame(tick);
 	};
 	frame = requestAnimationFrame(tick);
-	return function () { disposed = true; cancelAnimationFrame(frame); abort.abort(); };
+	return function () { disposed = true; cancelAnimationFrame(frame); abort.abort(); pointers.clear(); presentation.dispose(); };
 });
 if (import.meta.hot) import.meta.hot.dispose(shutdown);
