@@ -234,8 +234,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			const intel = contactIntel(state, enemy);
 			if (intel === 'unseen') continue;
 			if (enemy.detour) text('DETOUR', toScreen(enemy, view, FLIGHT_HEIGHT + 20), '#d7bf89', 9);
-			if (state.systems && intel === 'detected') text('?', toScreen(enemy, view, FLIGHT_HEIGHT + 36), '#d7bf89', 12);
-			if (state.systems && intel === 'classified' && enemy.kind === 'bomber' && !bomberLabelShown) {
+			if (intel === 'detected') text('?', toScreen(enemy, view, FLIGHT_HEIGHT + 36), '#d7bf89', 12);
+			if (intel === 'classified' && enemy.kind === 'bomber' && !bomberLabelShown) {
 				text('BOMBER · ARRAY ROUNDS', toScreen(enemy, view, FLIGHT_HEIGHT + 52), '#f59682', 9); bomberLabelShown = true;
 			}
 			if (intel === 'classified' && (enemy.hp < enemy.maxHp || enemy.kind === 'flagship')) {
@@ -250,7 +250,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		}
 		for (const escort of state.escorts) if (escort.sector) text(`G${escort.id} · ${escort.sector}`, toScreen(escort, view, FLIGHT_HEIGHT + 42), '#a6d4d9', 9);
 		for (const escort of state.escorts) if (escort.hp < ESCORTS[escort.kind].hp) { const at = toScreen(escort, view, FLIGHT_HEIGHT + 29); ctx.fillStyle = '#89d5de'; ctx.fillRect(at.x - 13, at.y, 26 * Math.max(0, escort.hp / ESCORTS[escort.kind].hp), 3); }
-		const position = fieldRelative(state); const activeField = state.systems?.interdiction.field;
+		const position = fieldRelative(state); const activeField = state.systems.interdiction.field;
 		if (position && activeField) text(`INTERDICTION · ${Math.ceil(activeField.remaining)}s`, toScreen(position, view, FLIGHT_HEIGHT + 30), '#d7bf89', 10);
 		for (let i = 0; i <= 6; i++) { const point = beaconFor(i, state); if (Math.abs(point.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: 180 }, view, -5), '#6e939f', 9); }
 		if (journeyFor(state).remaining <= 1100) text('KEPLER GATE', toScreen({ x: journeyFor(state).remaining, y: 0 }, view, 220), '#83dfcb');
@@ -293,7 +293,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT, target.y); priority.scale.setScalar(target.kind === 'flagship' ? 70 : 42); }
 			const liveEnemies = new Set(state.enemies.map(function (enemy) { return enemy.id; }));
 			for (const [id, model] of enemyModels) if (!liveEnemies.has(id)) { scene.remove(model); targets.delete(model); disposeObject(model); enemyModels.delete(id); }
-			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); const heading = enemy.detour ? { x: enemy.detour.waypoint.x - (state.systems?.distanceTraveled ?? 0), y: enemy.detour.waypoint.y } : { x: 0, y: 0 }; model.rotation.y = -Math.atan2(heading.y - enemy.y, heading.x - enemy.x); }
+			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); const heading = enemy.detour ? { x: enemy.detour.waypoint.x - state.systems.distanceTraveled, y: enemy.detour.waypoint.y } : { x: 0, y: 0 }; model.rotation.y = -Math.atan2(heading.y - enemy.y, heading.x - enemy.x); }
 			const liveEscorts = new Set(state.escorts.map(function (escort) { return escort.id; }));
 			for (const [id, model] of escortModels) if (!liveEscorts.has(id)) { scene.remove(model); disposeObject(model); escortModels.delete(id); }
 			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } model.position.set(escort.x, FLIGHT_HEIGHT, escort.y); model.rotation.y = -escort.angle; }

@@ -34,7 +34,7 @@ describe('combat and voyage', function () {
 		state.shots.push({ id: 100, x: 0, y: 0, vx: 0, vy: 0, damage: 100, side: 'enemy', weapon: 'hostile', target: undefined, life: 3 });
 		expect(pulse(state)).toBe(true); expect(state.shots).toHaveLength(0); expect(pulse(state)).toBe(false);
 		state.shots.push({ id: 101, x: 0, y: 0, vx: 0, vy: 0, damage: 100, side: 'enemy', weapon: 'hostile', target: undefined, life: 3 });
-		step(state, 1 / 60); expect(state.hull).toBe(1180);
+		step(state, 1 / 60); expect(state.hull).toBe(MAX_HULL); expect(state.systems.shield.charge).toBe(140);
 	});
 	test('escorts draw fire, can be destroyed, and release bay capacity', function () {
 		const state = createState(); deploy(state, 'guardian'); state.status = 'running';
@@ -84,7 +84,7 @@ describe('combat and voyage', function () {
 		expect<State['status']>(state.status).toBe('won'); expect(state.time).toBeGreaterThanOrEqual(ROUTE_SECONDS); expect(state.wave).toBe(6); expect(state.kills).toBe(86); expect(state.hull).toBeGreaterThan(0); expect(state.enemies).toHaveLength(0);
 	});
 	test('a wave-clear repair cannot revive a hull destroyed during the final exchange', function () {
-		const state = createState(); state.status = 'running'; state.wave = 6; state.time = ROUTE_SECONDS; state.hull = 10;
+		const state = createState(); state.status = 'running'; state.wave = 6; state.time = ROUTE_SECONDS; state.hull = 10; state.systems.shield.charge = 0;
 		state.enemies.push({ id: 99, x: 250, y: 0, kind: 'raider', hp: 1, maxHp: 45, cooldown: 99 });
 		state.shots.push({ id: 100, x: 240, y: 0, vx: 600, vy: 0, damage: 10, side: 'player', weapon: 'rail', target: 99, life: 3 });
 		state.shots.push({ id: 101, x: 0, y: 0, vx: 0, vy: 0, damage: 10, side: 'enemy', weapon: 'hostile', target: undefined, life: 3 });

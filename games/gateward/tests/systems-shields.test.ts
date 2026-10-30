@@ -3,13 +3,13 @@ import { createState, deploy, MAX_HULL, pulse, step, type Shot, type State } fro
 import { absorbShieldDamage, SHIELD_CONFIG, type SystemsState } from '../src/systems';
 
 const quiet = function (): State {
-	const state = createState({ scenario: 'drill', systems: true });
+	const state = createState({ scenario: 'drill' });
 	state.nextWave = Infinity;
 	state.status = 'running';
 	return state;
 };
 const systemsFor = function (state: State): SystemsState {
-	if (!state.systems) throw new Error('Missing opt-in ship systems');
+	if (!state.systems) throw new Error('Missing ship systems');
 	return state.systems;
 };
 const advance = function (state: State, frames: number) {
@@ -21,11 +21,11 @@ const shot = function (state: State, damage: number, side: Shot['side'] = 'enemy
 	return projectile;
 };
 
-describe('opt-in shield state and damage conservation', function () {
-	test('original voyage and escort drill have no systems; enabled states own independent charge', function () {
-		expect(createState().systems).toBeUndefined();
-		expect(createState({ scenario: 'drill' }).systems).toBeUndefined();
-		expect(createState({ systems: false }).systems).toBeUndefined();
+describe('shield state and damage conservation', function () {
+	test('every mode owns independent systems without an opt-in', function () {
+		for (const state of [createState(), createState({ scenario: 'drill' }), createState({ scenario: 'systems' })]) {
+			expect(state.systems.shield.charge).toBe(240); expect(state.systems.allocation).toEqual({ engines: 4, weapons: 4, shields: 2 });
+		}
 		const first = systemsFor(quiet());
 		const second = systemsFor(quiet());
 		expect(first.shield).toEqual({ charge: 240, capacity: 360, rechargeDelay: 0, hitFlash: 0 });

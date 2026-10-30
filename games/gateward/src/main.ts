@@ -3,7 +3,7 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Point, type Weapon } from './simulation';
+import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
 import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
 import { createEngineeringPanel } from './engineering-panel';
@@ -116,7 +116,7 @@ const shutdown = await mountGame('game', async function (container) {
 	button('repair-sensors').addEventListener('click', function () { order(function () { return repairSensors(state); }); }, options);
 	ui.depart.addEventListener('click', function () {
 		if (!available() || state.status !== 'fitting') return;
-		state.status = 'running'; notify(state, state.systems ? 'Underway. Allocate power and monitor the sensor feed.' : 'Underway. First contact on the port flank.'); accumulator = 0; focusCanvas();
+		state.status = 'running'; notify(state, 'Underway. Allocate power and monitor the sensor feed.'); accumulator = 0; focusCanvas();
 	}, options);
 	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; focusCanvas(); }, options);
 	button('prepare').disabled = false;
@@ -174,7 +174,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'Escape' && placement) { event.preventDefault(); cancelPlacement(); return; }
 		if (event.code === 'Escape' || event.code === 'Space') { event.preventDefault(); setPause(!paused); return; }
 		if (!available()) return;
-		if (event.code === 'KeyI' && state.systems) { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement({ x: 300, y: 0 }); return; }
+		if (event.code === 'KeyI') { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement({ x: 300, y: 0 }); return; }
 		if (placement && event.target === canvas) {
 			const adjustment = event.code === 'ArrowUp' ? { x: 20, y: 0 } : event.code === 'ArrowDown' ? { x: -20, y: 0 } : event.code === 'ArrowLeft' ? { x: 0, y: -20 } : event.code === 'ArrowRight' ? { x: 0, y: 20 } : undefined;
 			if (adjustment) { event.preventDefault(); placement = { x: placement.x + adjustment.x, y: placement.y + adjustment.y }; return; }
@@ -184,7 +184,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (index >= 0) { selected = index; rallyMode = false; cancelPlacement(); event.preventDefault(); }
 		if (event.code === 'KeyQ') { event.preventDefault(); order(function () { return pulse(state); }); }
 		if (event.code === 'KeyE') { event.preventDefault(); order(function () { return repair(state); }); }
-		if (event.code === 'KeyS' && state.systems) { event.preventDefault(); order(function () { return repairSensors(state); }); }
+		if (event.code === 'KeyS') { event.preventDefault(); order(function () { return repairSensors(state); }); }
 		if (event.code === 'KeyR' && !state.experimental) { event.preventDefault(); cancelPlacement(); rallyMode = !rallyMode; }
 	}, options);
 	window.addEventListener('blur', function () { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); rallyMode = false; setPause(true); }, options);
@@ -193,36 +193,30 @@ const shutdown = await mountGame('game', async function (container) {
 	document.addEventListener('visibilitychange', function () { if (!document.hidden) state.focused = true; }, options);
 	const hud = function () {
 		if (container.dataset['mode'] !== mode) container.dataset['mode'] = mode;
-		const prioritizeEngineering = !!state.systems && state.status !== 'fitting';
+		const prioritizeEngineering = state.status !== 'fitting';
 		if (engineeringFirst !== prioritizeEngineering) {
 			engineeringFirst = prioritizeEngineering;
 			if (engineeringFirst) ui.depart.after(element('engineering')); else element('interdiction-panel').after(element('engineering'));
 		}
 		escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
 		const active = available();
-		const systems = state.systems; const energyShield = systems?.shield;
-		element('sensor-panel').hidden = !systems;
-		if (systems) {
-			const sensors = systems.sensors; const ranges = sensorRanges(state);
-			const sensorMeter = element('sensor-meter');
-			if (sensorMeter instanceof HTMLMeterElement) { sensorMeter.max = SENSOR_CONFIG.maxIntegrity; sensorMeter.value = sensors.integrity; }
-			label(element('sensor-integrity'), `${Math.ceil(sensors.integrity)} / ${SENSOR_CONFIG.maxIntegrity}`);
-			label(element('sensor-status'), sensors.integrity <= 0 ? 'OFFLINE · nearby defense available' : sensors.integrity < SENSOR_CONFIG.healthyThreshold ? 'IMPAIRED · late and uncertain warnings' : 'HEALTHY · advance warning and acquisition');
-			label(element('sensor-range'), `Detect ${ranges.detection}m · classify ${ranges.classification}m`);
-			const why = !active ? 'Commands held' : sensors.repairCooldown > 0 ? `Repair cooldown · ${Math.ceil(sensors.repairCooldown)}s` : sensors.integrity >= SENSOR_CONFIG.maxIntegrity ? 'Array at full integrity' : state.salvage < SENSOR_CONFIG.repairCost ? `Needs ${SENSOR_CONFIG.repairCost} salvage` : `Restore array · ${SENSOR_CONFIG.repairCost} salvage`;
-			button('repair-sensors').disabled = !active || sensors.integrity >= SENSOR_CONFIG.maxIntegrity || sensors.repairCooldown > 0 || state.salvage < SENSOR_CONFIG.repairCost;
-			label(element('sensor-repair-info'), why);
-		}
+		const systems = state.systems; const energyShield = systems.shield;
+		const sensors = systems.sensors; const ranges = sensorRanges(state);
+		const sensorMeter = element('sensor-meter');
+		if (sensorMeter instanceof HTMLMeterElement) { sensorMeter.max = SENSOR_CONFIG.maxIntegrity; sensorMeter.value = sensors.integrity; }
+		label(element('sensor-integrity'), `${Math.ceil(sensors.integrity)} / ${SENSOR_CONFIG.maxIntegrity}`);
+		label(element('sensor-status'), sensors.integrity <= 0 ? 'OFFLINE · nearby defense available' : sensors.integrity < SENSOR_CONFIG.healthyThreshold ? 'IMPAIRED · late and uncertain warnings' : 'HEALTHY · advance warning and acquisition');
+		label(element('sensor-range'), `Detect ${ranges.detection}m · classify ${ranges.classification}m`);
+		const why = !active ? 'Commands held' : sensors.repairCooldown > 0 ? `Repair cooldown · ${Math.ceil(sensors.repairCooldown)}s` : sensors.integrity >= SENSOR_CONFIG.maxIntegrity ? 'Array at full integrity' : state.salvage < SENSOR_CONFIG.repairCost ? `Needs ${SENSOR_CONFIG.repairCost} salvage` : `Restore array · ${SENSOR_CONFIG.repairCost} salvage`;
+		button('repair-sensors').disabled = !active || sensors.integrity >= SENSOR_CONFIG.maxIntegrity || sensors.repairCooldown > 0 || state.salvage < SENSOR_CONFIG.repairCost;
+		label(element('sensor-repair-info'), why);
 
-		element('energy-shield').hidden = !energyShield;
-		if (energyShield && systems) {
-			const chargeMeter = element('shield-meter');
-			if (chargeMeter instanceof HTMLMeterElement) { chargeMeter.max = energyShield.capacity; chargeMeter.value = energyShield.charge; }
-			label(element('shield-charge'), `${Math.ceil(energyShield.charge)} / ${energyShield.capacity}`);
-			const held = briefing || paused || !state.focused || state.status !== 'running';
-			const recharge = powerOutputs(systems.allocation).shieldRecharge;
-			label(element('shield-status'), `${energyShield.charge === 0 ? 'DEPLETED · ' : ''}${held ? 'Recharge held' : energyShield.charge >= energyShield.capacity ? 'Fully charged' : energyShield.rechargeDelay > 0 ? `Recharge in ${Math.ceil(energyShield.rechargeDelay)}s` : recharge > 0 ? `Recharging · +${recharge} / s` : 'Recharge stopped · no shield power'}`);
-		}
+		const chargeMeter = element('shield-meter');
+		if (chargeMeter instanceof HTMLMeterElement) { chargeMeter.max = energyShield.capacity; chargeMeter.value = energyShield.charge; }
+		label(element('shield-charge'), `${Math.ceil(energyShield.charge)} / ${energyShield.capacity}`);
+		const held = briefing || paused || !state.focused || state.status !== 'running';
+		const recharge = powerOutputs(systems.allocation).shieldRecharge;
+		label(element('shield-status'), `${energyShield.charge === 0 ? 'DEPLETED · ' : ''}${held ? 'Recharge held' : energyShield.charge >= energyShield.capacity ? 'Fully charged' : energyShield.rechargeDelay > 0 ? `Recharge in ${Math.ceil(energyShield.rechargeDelay)}s` : recharge > 0 ? `Recharging · +${recharge} / s` : 'Recharge stopped · no shield power'}`);
 		label(element('purchase-reason'), !active ? 'Commands held' : craftCount(state) >= 9 ? 'Bay full: nine craft slots' : state.salvage < 85 ? 'Insufficient salvage' : state.experimental ? 'Buy wing 85 · ready in bay / Guardian 105' : 'Deploy escorts'); const mount = state.mounts[selected]; if (!mount) return;
 		label(ui.hull, `${Math.ceil(state.hull)} / ${MAX_HULL}`); meter.value = state.hull;
 		const journey = journeyFor(state);
@@ -236,12 +230,10 @@ const shutdown = await mountGame('game', async function (container) {
 			label(element('trial-eta'), journey.eta === Infinity ? 'TRAVEL STALLED' : `TRAVEL ETA ${clockTime(Math.ceil(journey.eta))}`);
 			element('trial-status').classList.toggle('urgent', state.status === 'running' && (deadline - state.time < 30 || journey.eta > deadline - state.time));
 		}
-		element('systems-help').hidden = !state.systems;
-		label(button('prepare'), state.systems ? 'PREPARE SYSTEMS TRIAL →' : state.scenario ? 'PREPARE ESCORT DRILL →' : 'PREPARE FULL VOYAGE →');
-		label(ui.wave, state.systems ? state.status === 'fitting' ? 'SYSTEMS TRIAL / FITTING' : 'SYSTEMS TRIAL · SENSOR FEED' : state.status === 'fitting' ? state.scenario ? 'ESCORT DRILL / FITTING' : 'DRYDOCK / FITTING' : `${state.scenario ? 'DRILL · ' : ''}CONTACT ${String(state.wave).padStart(2, '0')} / ${state.scenario?.encounters.length ?? 6} ${state.cleared ? '— CLEAR' : ''}`);
-		label(ui.waveInfo, state.systems || state.scenario ? contactWarning(state) : state.status === 'fitting' ? 'Build your defenses. Departure is your call.' : state.wave < WAVE_COUNT ? `Next: ${waveSide(state.wave + 1)} in ${Math.max(0, Math.ceil(state.nextWave - state.time))}s · ${state.enemies.length} hostiles` : state.enemies.length + state.arrivals.length > 0 ? `${state.enemies.length} hostiles · Defeat the gatekeeper and reach the gate.` : 'Passage clear. Approaching Kepler Gate.');
-		element('wave-dots').hidden = !!state.systems;
-		for (const [i, dot] of [...element('wave-dots').children].entries()) { if (dot instanceof HTMLElement) dot.hidden = !!state.scenario && i >= state.scenario.encounters.length; dot.classList.toggle('current', i + 1 === state.wave); dot.classList.toggle('done', i + 1 < state.wave); }
+		label(button('prepare'), mode === 'systems' ? 'PREPARE SYSTEMS TRIAL →' : state.scenario ? 'PREPARE ESCORT DRILL →' : 'PREPARE FULL VOYAGE →');
+		const modeName = mode === 'systems' ? 'SYSTEMS TRIAL' : mode === 'drill' ? 'ESCORT DRILL' : 'FULL VOYAGE';
+		label(ui.wave, `${modeName} · ${state.status === 'fitting' ? 'FITTING' : 'SENSOR FEED'}`);
+		label(ui.waveInfo, contactWarning(state));
 		for (const [i, control] of mountButtons.entries()) {
 			const m = state.mounts[i]; if (!m) continue;
 			label(control, `${i + 1} ${m.weapon ? m.weapon === 'flak' ? 'F' : m.weapon === 'rail' ? 'R' : 'M' : '·'}${m.level > 1 ? ` ${'⁺'.repeat(m.level - 1)}` : ''}`);
@@ -267,9 +259,9 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.escorts, `${craftCount(state)} / 9 CRAFT`);
 		const canvasHelp = `Tactical view. Click a numbered mount to build. Click an enemy for turret priority. ${state.experimental ? 'Use the escort bay sector buttons to scramble wings and assign guardians.' : 'Click empty space to rally escorts.'} Right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
 		if (canvas.getAttribute('aria-label') !== canvasHelp) canvas.setAttribute('aria-label', canvasHelp);
-		label(ui.depart, state.systems ? 'START SYSTEMS TRIAL →' : state.scenario ? 'START ESCORT DRILL →' : 'DEPART FOR KEPLER →');
-		label(button('restart-pause'), state.systems ? 'Restart Systems Trial' : state.scenario ? 'Restart drill' : 'Restart voyage');
-		label(button('restart'), state.systems ? 'RETRY SYSTEMS TRIAL →' : state.scenario ? 'RETRY ESCORT DRILL →' : 'ANOTHER VOYAGE →');
+		label(ui.depart, mode === 'systems' ? 'START SYSTEMS TRIAL →' : state.scenario ? 'START ESCORT DRILL →' : 'DEPART FOR KEPLER →');
+		label(button('restart-pause'), mode === 'systems' ? 'Restart Systems Trial' : state.scenario ? 'Restart drill' : 'Restart voyage');
+		label(button('restart'), mode === 'systems' ? 'RETRY SYSTEMS TRIAL →' : state.scenario ? 'RETRY ESCORT DRILL →' : 'ANOTHER VOYAGE →');
 		ui.depart.hidden = state.status !== 'fitting'; ui.depart.disabled = !active || (!state.mounts.some(function (m) { return !!m.weapon; }) && craftCount(state) === 0);
 		ui.depart.title = ui.depart.disabled ? 'Build a turret or deploy an escort before departure.' : 'Begin the voyage';
 		ui.pulse.disabled = !active || state.status !== 'running' || state.pulseCooldown > 0;
@@ -286,23 +278,18 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const showResult = function () {
 		ui.result.hidden = false; rallyMode = false; placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
-		label(element('result-title'), state.systems ? state.status === 'won' ? 'SYSTEMS TRIAL COMPLETE.' : 'SYSTEMS TRIAL LOST.' : state.scenario ? state.status === 'won' ? 'DRILL SURVIVED.' : 'DRILL LOST.' : state.status === 'won' ? 'THE ARK ARRIVES.' : 'THE LIGHTS GO OUT.');
+		label(element('result-title'), mode === 'systems' ? state.status === 'won' ? 'SYSTEMS TRIAL COMPLETE.' : 'SYSTEMS TRIAL LOST.' : state.scenario ? state.status === 'won' ? 'DRILL COMPLETE.' : 'DRILL LOST.' : state.status === 'won' ? 'THE ARK ARRIVES.' : 'THE LIGHTS GO OUT.');
 		const summary = systemsSummary(state);
-		if (summary) {
-			label(element('result-copy'), systemsResultMessage(state));
-			label(element('result-stats'), [
-				`${summary.elapsed.toFixed(1)}s elapsed · ${Math.round(summary.distance)} / ${summary.routeLength}m · travel ETA ${summary.eta === null ? 'stalled' : clockTime(Math.ceil(summary.eta))}`,
-				`Hull ${Math.ceil(summary.hull)} / ${MAX_HULL} · shield ${Math.ceil(summary.shield)} / ${state.systems?.shield.capacity ?? 0}`,
-				`${Math.round(summary.shieldAbsorbed)} shield damage absorbed · ${summary.powerChanges} power changes`,
-				`${summary.contacts} / ${summary.totalContacts} contact groups arrived · ${summary.kills} hostiles destroyed`,
-				`Sensors: ${summary.sensorImpairments} impairments · ${summary.sensorRepairs} repairs`,
-				`Fields: ${summary.fieldPlacements} placed · ${summary.redirected} approaches redirected`,
-				`${summary.escortLosses} escorts lost · ${Math.floor(summary.salvage)} salvage remaining`,
-			].join('\n'));
-		} else {
-			label(element('result-copy'), state.scenario ? 'Compare your coverage, launch timing and guardian assignments. Restart to try another defense.' : state.status === 'won' ? 'Kepler Gate opens. Your moving fortress brought its people home.' : 'The passage claimed another ship. Cover both flanks, use railguns against armor, and launch escorts to draw fire.');
-			label(element('result-stats'), `${Math.floor(journeyFor(state).progress * 100)}% of route · ${state.kills} hostiles destroyed · ${Math.ceil(state.hull / MAX_HULL * 100)}% hull remaining · ${state.escortLosses} escorts lost · ${state.launches} launches · ${state.orders} escort orders · ${Math.floor(state.salvage)} salvage · ${state.scenario ? 'Escort Drill' : WAVE_NAMES[Math.max(0, state.wave - 1)] ?? ''}`);
-		}
+		label(element('result-copy'), systemsResultMessage(state));
+		label(element('result-stats'), [
+			`${summary.elapsed.toFixed(1)}s elapsed · ${Math.round(summary.distance)} / ${summary.routeLength}m · travel ETA ${summary.eta === null ? 'stalled' : clockTime(Math.ceil(summary.eta))}`,
+			`Hull ${Math.ceil(summary.hull)} / ${MAX_HULL} · shield ${Math.ceil(summary.shield)} / ${state.systems.shield.capacity}`,
+			`${Math.round(summary.shieldAbsorbed)} shield damage absorbed · ${summary.powerChanges} power changes`,
+			`${summary.contacts} / ${summary.totalContacts} contact groups arrived · ${summary.kills} hostiles destroyed`,
+			`Sensors: ${summary.sensorImpairments} impairments · ${summary.sensorRepairs} repairs`,
+			`Fields: ${summary.fieldPlacements} placed · ${summary.redirected} approaches redirected`,
+			`${summary.escortLosses} escorts lost · ${Math.floor(summary.salvage)} salvage remaining`,
+		].join('\n'));
 		ui.result.scrollTop = 0;
 		button('restart').focus({ preventScroll: true });
 	};

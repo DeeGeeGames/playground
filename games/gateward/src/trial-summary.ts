@@ -10,9 +10,8 @@ export interface SystemsSummary {
 	redirected: number; escortLosses: number; salvage: number;
 }
 
-export const systemsSummary = function (state: State): SystemsSummary | undefined {
+export const systemsSummary = function (state: State): SystemsSummary {
 	const systems = state.systems;
-	if (!systems) return undefined;
 	const remaining = Math.max(0, systems.routeLength - systems.distanceTraveled);
 	const speed = powerOutputs(systems.allocation).speed;
 	return {
@@ -30,8 +29,8 @@ export const systemsSummary = function (state: State): SystemsSummary | undefine
 
 export const systemsResultMessage = function (state: State): string {
 	const systems = state.systems;
-	if (!systems || (state.status !== 'won' && state.status !== 'lost')) return '';
-	if (state.status === 'won') return 'Kepler reached and every required contact resolved before the deadline.';
+	if (state.status !== 'won' && state.status !== 'lost') return '';
+	if (state.status === 'won') return `Kepler reached and every required contact resolved${state.scenario?.deadline === undefined ? '.' : ' before the deadline.'}`;
 	if (state.resultReason !== 'deadline') return 'Ark destroyed before arrival and contact clearance. Review shields, coverage and repair timing.';
 	const remaining = Math.max(0, systems.routeLength - systems.distanceTraveled);
 	if (remaining > 0) return `Deadline missed with ${Math.ceil(remaining)}m left to travel. More engine power shortens arrival time.`;

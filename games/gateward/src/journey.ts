@@ -1,5 +1,5 @@
 import { powerOutputs } from './systems';
-import { ROUTE_SECONDS, durationFor, type State } from './simulation';
+import { ROUTE_SECONDS, type State } from './simulation';
 
 export const ROUTE_LENGTH = 2520;
 export const CRUISE_SPEED = ROUTE_LENGTH / ROUTE_SECONDS;
@@ -21,19 +21,18 @@ export const beaconAt = function (index: number, time: number) {
 // It remains useful for fitting and paused planning; displayed speed is actual motion.
 export const journeyFor = function (state: State) {
 	const systems = state.systems;
-	const legacy = journeyAt(state.time / durationFor(state) * ROUTE_SECONDS);
-	const distance = systems?.distanceTraveled ?? legacy.distance;
-	const remaining = systems ? Math.max(0, systems.routeLength - distance) : legacy.remaining;
-	const configuredSpeed = systems ? powerOutputs(systems.allocation).speed : CRUISE_SPEED;
+	const distance = systems.distanceTraveled;
+	const remaining = Math.max(0, systems.routeLength - distance);
+	const configuredSpeed = powerOutputs(systems.allocation).speed;
 	const moving = state.status === 'running' && !state.paused && state.focused && remaining > 0;
 	return {
 		distance, remaining,
 		speed: moving ? configuredSpeed : 0,
-		progress: distance / (systems?.routeLength ?? ROUTE_LENGTH),
+		progress: distance / systems.routeLength,
 		eta: remaining === 0 ? 0 : configuredSpeed > 0 ? remaining / configuredSpeed : Infinity,
 	};
 };
 
 export const beaconFor = function (index: number, state: State) {
-	return { x: index * (state.systems?.routeLength ?? ROUTE_LENGTH) / 6 - journeyFor(state).distance, y: 0 };
+	return { x: index * state.systems.routeLength / 6 - journeyFor(state).distance, y: 0 };
 };

@@ -71,8 +71,7 @@ export const createEngineeringPanel = function (host: HTMLElement, getState: () 
 	transfer.append(transferButton); host.append(transfer);
 	const reason = document.createElement('p'); reason.className = 'engineering-reason'; reason.id = 'engineering-reason'; reason.setAttribute('role', 'status'); host.append(reason);
 	const update = function () {
-		const state = getState(); const systems = state.systems; host.hidden = !systems;
-		if (!systems) return;
+		const state = getState(); const systems = state.systems;
 		const allocation = systems.allocation; const output = powerOutputs(allocation); const journey = journeyFor(state);
 		const hold = heldReason(state, available());
 		text(budget, `${allocation.engines + allocation.weapons + allocation.shields} / ${REACTOR_UNITS} units`);

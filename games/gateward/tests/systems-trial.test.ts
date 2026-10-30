@@ -22,8 +22,8 @@ describe('Systems Trial route and results', function () {
 		state.time = 7; expect(contactWarning(state)).toContain('PORT'); expect(contactWarning(state)).toContain('raider');
 		state.status = 'running'; placeInterdiction(state, { x: 300, y: 0 }); setAllocation(state, POWER_PRESETS.engines); step(state, 0.05);
 		expect(createState({ scenario: 'systems' })).toEqual(fresh);
-		expect(createState().systems).toBeUndefined(); expect(createState({ scenario: 'drill' }).systems).toBeUndefined();
-		expect(createState({ scenario: 'drill', systems: true }).scenario?.duration).toBe(90);
+		expect(createState().systems.routeLength).toBe(2520); expect(createState({ scenario: 'drill' }).systems.routeLength).toBe(1080);
+		expect(createState({ scenario: 'drill' }).scenario?.duration).toBe(90);
 	});
 	test('early route completion waits for future, pending and live contacts without a duration minimum', function () {
 		const state = trial(); systemsFor(state).distanceTraveled = 1440; state.time = 97.9; state.wave = 4; state.nextWave = 98;
@@ -80,7 +80,7 @@ describe('Systems Trial route and results', function () {
 		step(state, 0.05); expect(state).toEqual(before);
 	});
 	test('summary is a pure serializable snapshot, including stalled ETA, results and reset', function () {
-		expect(systemsSummary(createState())).toBeUndefined(); const state = trial();
+		expect(systemsSummary(createState()).result).toBe('fitting'); const state = trial();
 		setAllocation(state, { engines: 0, weapons: 8, shields: 2 }); const before = structuredClone(state);
 		const summary = systemsSummary(state); expect(summary?.eta).toBeNull(); expect(state).toEqual(before);
 		expect(JSON.stringify(summary)).toContain('"eta":null');

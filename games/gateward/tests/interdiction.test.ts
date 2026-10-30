@@ -4,7 +4,7 @@ import { createState, deploy, interdictionReason, placeInterdiction, step, type 
 
 const systemsFor = function (state: State) { if (!state.systems) throw new Error('Expected systems'); return state.systems; };
 const quiet = function (engines = 0) {
-	const state = createState({ systems: true }); state.status = 'running'; state.nextWave = Infinity;
+	const state = createState(); state.status = 'running'; state.nextWave = Infinity;
 	systemsFor(state).allocation = { engines, weapons: 10 - engines, shields: 0 };
 	return state;
 };
@@ -21,7 +21,7 @@ describe('interdiction placement and lifecycle', function () {
 		for (let i = 0; i < 20; i++) expect(placeInterdiction(state, { x: 0, y: 250 })).toBe(false);
 		expect(state.salvage).toBe(before - INTERDICTION_CONFIG.cost);
 		expect(systemsFor(state).interdiction).toMatchObject({ placements: 1, cooldown: 40, field: { world: { x: 300, y: 0 }, remaining: 30 } });
-		expect(systemsFor(createState({ systems: true })).interdiction).toEqual({ field: undefined, cooldown: 0, placements: 0, redirected: 0, blockedShots: 0 });
+		expect(systemsFor(createState()).interdiction).toEqual({ field: undefined, cooldown: 0, placements: 0, redirected: 0, blockedShots: 0 });
 	});
 	test('invalid finite/bounded points and circle-versus-ark overlap spend nothing', function () {
 		const state = quiet();
