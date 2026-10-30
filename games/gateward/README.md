@@ -148,6 +148,23 @@ survives with 24 kills. The unarmed baseline is a simulation control; the browse
 requires at least one defense before departure.
 Hardware touch/controller checks and owner playtesting remain separate gates.
 
+## Systems Lab (phase 2, opt-in)
+
+Choose **Systems Lab** in the briefing, pause menu or result, or open
+`?mode=systems`. This provisional experiment uses the 90-second drill encounters
+and survival rule while ship systems are developed. Full voyage and Escort Drill
+retain their original rules. A later Systems Trial will add a real-distance
+arrival requirement and deadline.
+
+The ark starts with 240 of 360 energy shield HP. Hostile rounds hit escorts first,
+then consume shield charge, then damage hull with any overflow. Recharge is 8 HP/s
+after three simulation seconds without a positive-damage ark hit. Fitting,
+pause/focus loss and results freeze recharge. A depleted shield must recharge;
+it never instantly restores. The blue charge bar and brief blue/amber impact
+shell show energy shields; the green Aegis shell shows its separate five-second
+emergency protection. Aegis still clears enemy rounds and pushes nearby enemies,
+reduces only hull overflow by 80%, and never refills energy shields.
+
 Sound effects use local Web Audio synthesis: flak reports, railgun cracks,
 missile exhaust, escort fire, hull impacts, explosions, contact/clear signals,
 Aegis, repairs, departure and results. Sound unlocks on the first pointer or

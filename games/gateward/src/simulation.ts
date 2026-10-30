@@ -1,4 +1,5 @@
 import { ESCORT_DRILL, type Scenario } from './scenarios';
+import { absorbShieldDamage, advanceSystems, createSystems, type SystemsState } from './systems';
 export type Point = { x: number; y: number };
 export type Weapon = 'flak' | 'rail' | 'missile';
 export type EnemyKind = 'raider' | 'bomber' | 'armored' | 'flagship';
@@ -34,21 +35,23 @@ export const SECTOR_POINTS: Record<Sector, Point> = { port: { x: 0, y: -230 }, s
 export interface Wing { id: number; phase: 'ready' | 'launching' | 'sortie' | 'returning' | 'rearming'; timer: number; craft: Escort[]; assignment: Sector; }
 export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
 export interface State {
+	systems: SystemsState | undefined;
 	scenario: Scenario | undefined; experimental: boolean; wings: Wing[]; launches: number; orders: number; escortLosses: number; coverageDegrees: number; paused: boolean; focused: boolean;
 	time: number; hull: number; salvage: number; wave: number; nextWave: number; kills: number;
 	status: 'fitting' | 'running' | 'won' | 'lost'; mounts: Mount[]; enemies: Enemy[]; escorts: Escort[];
 	shots: Shot[]; effects: Effect[]; arrivals: Arrival[]; nextId: number;
-	rally: Point; priority: number | undefined; pulseCooldown: number; shield: number; repairCooldown: number;
+	rally: Point; priority: number | undefined; pulseCooldown: number; aegisRemaining: number; repairCooldown: number;
 	cleared: boolean; message: string; messageTime: number;
 }
 export const distance = function (a: Point, b: Point): number { return Math.hypot(a.x - b.x, a.y - b.y); };
-export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill' } = {}): State {
+export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill'; systems?: boolean } = {}): State {
 	return {
+		systems: options.systems ? createSystems() : undefined,
 		scenario: options.scenario === 'drill' ? ESCORT_DRILL : undefined, experimental: options.scenario === 'drill' || (options.experimental ?? false), wings: [], launches: 0, orders: 0, escortLosses: 0, coverageDegrees: options.coverageDegrees ?? (options.scenario === 'drill' ? 240 : 360), paused: false, focused: true,
 		time: 0, hull: MAX_HULL, salvage: options.scenario === 'drill' ? ESCORT_DRILL.salvage : 300, wave: 0, nextWave: options.scenario === 'drill' ? (ESCORT_DRILL.encounters[0]?.at ?? 10) : 5, kills: 0, status: 'fitting',
 		mounts: [-1, 1].flatMap(function (side) { return [-96, -32, 32, 96].map(function (x): Mount { return { x, y: side * 43, weapon: undefined, level: 0, cooldown: 0, aim: side * Math.PI / 2 }; }); }),
 		enemies: [], escorts: [], shots: [], effects: [], arrivals: [], nextId: 1, rally: { x: 0, y: 0 }, priority: undefined,
-		pulseCooldown: 0, shield: 0, repairCooldown: 0, cleared: false, message: 'Fit your ship, then depart. Weapons fire automatically.', messageTime: 8,
+		pulseCooldown: 0, aegisRemaining: 0, repairCooldown: 0, cleared: false, message: 'Fit your ship, then depart. Weapons fire automatically.', messageTime: 8,
 	};
 };
 export const notify = function (state: State, message: string) { state.message = message; state.messageTime = 4; };
@@ -143,7 +146,7 @@ export const repair = function (state: State): boolean {
 };
 export const pulse = function (state: State): boolean {
 	if (!canOrder(state) || state.status !== 'running' || state.pulseCooldown > 0) return false;
-	state.pulseCooldown = 32; state.shield = 5; state.shots = state.shots.filter(function (shot) { return shot.side !== 'enemy'; });
+	state.pulseCooldown = 32; state.aegisRemaining = 5; state.shots = state.shots.filter(function (shot) { return shot.side !== 'enemy'; });
 	state.effects.push({ x: 0, y: 0, radius: 310, life: 0.8, maxLife: 0.8, color: '#88f1e4' });
 	for (const enemy of state.enemies) {
 		const d = distance(enemy, { x: 0, y: 0 });
@@ -209,7 +212,8 @@ const segmentDistance = function (point: Point, a: Point, b: Point): number {
 export const step = function (state: State, dt: number) {
 	if (!canOrder(state) || state.status !== 'running' || !Number.isFinite(dt) || dt <= 0) return;
 	dt = Math.min(dt, 0.05); state.time += dt;
-	state.pulseCooldown = Math.max(0, state.pulseCooldown - dt); state.shield = Math.max(0, state.shield - dt); state.repairCooldown = Math.max(0, state.repairCooldown - dt); state.messageTime = Math.max(0, state.messageTime - dt);
+	state.pulseCooldown = Math.max(0, state.pulseCooldown - dt); state.aegisRemaining = Math.max(0, state.aegisRemaining - dt); state.repairCooldown = Math.max(0, state.repairCooldown - dt); state.messageTime = Math.max(0, state.messageTime - dt);
+	if (state.systems) state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
 	// The reactor provides a modest income even while enemies remain outside firing range.
 	state.salvage += dt * 1.2;
 	if (state.time >= state.nextWave) { if (state.scenario) startEncounter(state); else if (state.wave < WAVE_COUNT) startWave(state); }
@@ -252,6 +256,7 @@ export const step = function (state: State, dt: number) {
 			fire(state, enemy, destination, config.damage, enemy.kind === 'bomber' ? 155 : 235, 'enemy', 'hostile', escort?.id); enemy.cooldown = config.reload;
 		}
 	}
+	let arkHit = false;
 	for (const shot of state.shots) {
 		const before = { x: shot.x, y: shot.y }; shot.life -= dt;
 		if (shot.weapon === 'missile') {
@@ -268,9 +273,15 @@ export const step = function (state: State, dt: number) {
 		} else {
 			const hit = state.escorts.find(function (escort) { return escort.hp > 0 && segmentDistance(escort, before, shot) < (escort.kind === 'guardian' ? 20 : 12); });
 			if (hit) { hit.hp -= shot.damage; shot.life = 0; effect(state, hit, 15, '#ff897e'); }
-			else if (Math.abs(shot.x) < 145 && Math.abs(shot.y) < 40) { state.hull = Math.max(0, state.hull - shot.damage * (state.shield > 0 ? 0.2 : 1)); shot.life = 0; effect(state, shot, 22, '#ff897e'); }
+			else if (Math.abs(shot.x) < 145 && Math.abs(shot.y) < 40) {
+				const overflow = state.systems ? absorbShieldDamage(state.systems, shot.damage) : shot.damage;
+				state.hull = Math.max(0, state.hull - overflow * (state.aegisRemaining > 0 ? 0.2 : 1));
+				arkHit ||= shot.damage > 0;
+				shot.life = 0; effect(state, shot, 22, '#ff897e');
+			}
 		}
 	}
+	if (state.systems) advanceSystems(state.systems, dt, arkHit);
 	for (const enemy of state.enemies) if (enemy.hp <= 0) { state.salvage += ENEMIES[enemy.kind].reward; state.kills += 1; effect(state, enemy, enemy.kind === 'flagship' ? 120 : 35, '#ffb87b'); }
 	for (const escort of state.escorts) if (escort.hp <= 0) { state.escortLosses++; effect(state, escort, 25, '#81cfe7'); }
 	state.enemies = state.enemies.filter(function (e) { return e.hp > 0; }); state.escorts = state.escorts.filter(function (e) { return e.hp > 0; }); state.shots = state.shots.filter(function (s) { return s.life > 0; });
