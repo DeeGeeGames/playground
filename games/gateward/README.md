@@ -87,3 +87,63 @@ systems, failure, a complete salvage-funded victory, camera-aware picking,
 orbital projection, resize, model hardpoints, and shield clearance. `bun run check` validates
 the whole workspace. Production preview and owner judgment establish visual and
 play-feel evidence separately from deterministic tests.
+
+## Escort Drill (experimental)
+
+Choose **Escort Drill** in the briefing, pause menu or result, or open
+`?mode=drill`. Restart retains the selected mode. Full voyage remains the default
+with its original full arcs, permanent escorts, shared rally and victory rules.
+The drill ends at 90 seconds if the ark survives, even with remaining hostiles.
+
+Drill mounts cover 240° centered outward (port −Y, starboard +Y). The selected
+fitted mount shows a subtle outline at its actual upgraded range; `coverageFor`
+drives both presentation and acquisition. Inclusive angle/range boundaries apply
+to priority targets too. Fore/aft overlap is intentional.
+
+Buy a three-fighter wing for 85 salvage, then use its four sector buttons to
+scramble after departure. One order commits the entire wing: 2s launching, 18s
+sortie, physical return to the stern, 10s rearming, ready. Only sortie craft fire.
+Sector assignments stay fixed if local enemies disappear; the timed sortie ends
+rather than following a disappearing target. Craft engage within 180 units of
+that sector, independently of turret priority. Survivors retain damage. Lost
+fighters never regenerate: replacing missing craft costs 30 each while ready.
+Ready, flying and rearming craft share nine slots with guardians; losses free
+slots. A completely lost wing remains a replaceable empty bay entry.
+
+Guardians cost 105 and start assigned to port. Each has its own sector buttons
+and visible ID/sector label. Port/starboard offsets are ±230 on Y; ahead/astern
+are ±280 on X. Guardians travel at the existing 85 units/s, hold their assignment
+between contacts, and acquire only enemies within 180 of the assigned position.
+There is no shared rally in the drill. Existing nearby-escort enemy targeting
+lets a screen absorb shots. Replacement guardians are paid new craft.
+
+`src/scenarios.ts` defines the fixed encounters: eight port raiders at 10s,
+four starboard bombers at 23s, three port armored craft at 49s, nine ahead
+raiders at 52s. Warnings give direction, class, count and time until first
+arrival. Starting salvage is 300 with no free equipment. Existing weapon,
+income, clearance reward, repair and Aegis values are retained. All numbers are
+provisional owner-playtest tuning. Model-level pause/focus/end guards stop
+combat, timers and economy commands; DOM buttons provide keyboard/touch orders.
+
+Reproduce the comparisons with `bun test games/gateward/tests/drill.test.ts`.
+The test prints a table and repeats each run for determinism. Baseline buys
+nothing. Both defenses fit port mount 1 rail and starboard mount 5 flak; wings
+buy one wing and attempt port launches at 7s/42s and ahead at 75s, while guardians
+buy one guardian and redirect it to starboard at 18s. Neither spends earned
+salvage, repairs, pulses or upgrades. Observed outcomes:
+
+| Strategy | Result/time | Hull | Kills | Escort losses | Launches/orders | Salvage |
+| --- | --- | ---: | ---: | ---: | --- | ---: |
+| No intervention | Lost / 37s | 0 | 0 | 0 | 0 / 0 | 344 |
+| Wing defense | Lost / 72s | 0 | 17 | 3 | 2 / 2 | 395 |
+| Guardian screen | Won / 90s | 191 | 24 | 1 | 0 / 1 | 568 |
+
+The port wing buys time but leaves the bomber approach exposed. Reassigning a
+guardian to starboard screens that approach while the rail covers port. These
+are limited scripted comparisons, not proof of balance or enjoyable feel.
+Same-equipment controls isolate the orders: holding the purchased wing ready
+loses at 69s with 14 kills, versus 72s and 17 kills after launching. Keeping the
+guardian on port loses at 77s with 20 kills; the single starboard reassignment
+survives with 24 kills. The unarmed baseline is a simulation control; the browser
+requires at least one defense before departure.
+Hardware touch/controller checks and owner playtesting remain separate gates.

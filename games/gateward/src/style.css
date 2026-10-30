@@ -786,3 +786,8 @@ h1 em {
 	.camera-tools button { min-height:38px; }
 	.camera-tools span { display:none; }
 }
+
+#escort-orders fieldset { margin: 10px 0; padding: 6px; border: 1px solid var(--line); min-width: 0; }
+#escort-orders legend { font: 10px monospace; line-height: 1.5; overflow-wrap: anywhere; }
+#escort-orders button { font-size: 10px; min-height: 44px; padding: 6px; margin: 2px; }
+#escort-orders button[aria-pressed="true"] { border-color: var(--mint); }
