@@ -4,6 +4,7 @@ import { mountGame } from '../../../shared/lifecycle';
 import { build, contactWarning, craftCount, durationFor, createState, deploy, ESCORTS, invested, MAX_HULL, notify, pulse, repair, sell, step, upgrade, upgradeCost, waveSide, WEAPONS, WAVE_COUNT, WAVE_NAMES, type Weapon } from './simulation';
 import { createPresentation } from './presentation';
 import { journeyAt } from './journey';
+import { SHIELD_CONFIG } from './systems';
 
 const element = function (id: string): HTMLElement {
 	const found = document.getElementById(id); if (!found) throw new Error(`Missing element: ${id}`); return found;
@@ -32,8 +33,10 @@ const shutdown = await mountGame('game', async function (container) {
 	const buildButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-build]')];
 	const deployButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-deploy]')];
 	const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-	let drill = new URLSearchParams(location.search).get('mode') === 'drill';
-	let state = createState(drill ? { scenario: 'drill' } : {}); let selected = 0; let paused = false; let briefing = true; let rallyMode = false; let speed = 1;
+	const requestedMode = new URLSearchParams(location.search).get('mode');
+	let mode = requestedMode === 'systems' ? 'systems' : requestedMode === 'drill' ? 'drill' : 'voyage';
+	const newState = function () { return createState(mode === 'voyage' ? {} : { scenario: 'drill', systems: mode === 'systems' }); };
+	let state = newState(); let selected = 0; let paused = false; let briefing = true; let rallyMode = false; let speed = 1;
 	let frame = 0; let previous = 0; let accumulator = 0; let disposed = false; let contextAvailable = true;
 	const pointers = new Map<number, { x: number; y: number; moved: boolean }>();
 	let multiTouch = false;
@@ -53,7 +56,7 @@ const shutdown = await mountGame('game', async function (container) {
 	button('reset-camera').addEventListener('click', function () { presentation.resetCamera(); focusCanvas(); }, options);
 	const restart = function () {
 		pointers.clear(); multiTouch = false;
-		state = createState(drill ? { scenario: 'drill' } : {}); selected = 0; paused = false; briefing = false; rallyMode = false; speed = 1; accumulator = 0;
+		state = newState(); selected = 0; paused = false; briefing = false; rallyMode = false; speed = 1; accumulator = 0;
 		ui.pausePanel.hidden = true; ui.result.hidden = true; ui.brief.hidden = true; focusCanvas();
 		presentation.resetCamera();
 	};
@@ -78,7 +81,9 @@ const shutdown = await mountGame('game', async function (container) {
 	}, options);
 	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; focusCanvas(); }, options);
 	button('prepare').disabled = false;
-	for (const control of container.querySelectorAll<HTMLButtonElement>('[data-mode]')) control.addEventListener('click', function () { drill = control.dataset['mode'] === 'drill'; restart(); }, options);
+	for (const control of container.querySelectorAll<HTMLButtonElement>('[data-mode]')) control.addEventListener('click', function () {
+		mode = control.dataset['mode'] === 'systems' ? 'systems' : control.dataset['mode'] === 'drill' ? 'drill' : 'voyage'; restart();
+	}, options);
 	const escortPanel = createEscortPanel(element('escort-orders'), function () { return state; }, available, abort.signal);
 	ui.pause.addEventListener('click', function () { setPause(!paused); }, options);
 	button('help').addEventListener('click', function () { setPause(true); }, options);
@@ -131,13 +136,22 @@ const shutdown = await mountGame('game', async function (container) {
 	const hud = function () {
 		escortPanel();
 		const active = available();
+		const energyShield = state.systems?.shield;
+		element('energy-shield').hidden = !energyShield;
+		if (energyShield) {
+			const chargeMeter = element('shield-meter');
+			if (chargeMeter instanceof HTMLMeterElement) { chargeMeter.max = energyShield.capacity; chargeMeter.value = energyShield.charge; }
+			label(element('shield-charge'), `${Math.ceil(energyShield.charge)} / ${energyShield.capacity}`);
+			const held = briefing || paused || !state.focused || state.status !== 'running';
+			label(element('shield-status'), `${energyShield.charge === 0 ? 'DEPLETED · ' : ''}${held ? 'Recharge held' : energyShield.charge >= energyShield.capacity ? 'Fully charged' : energyShield.rechargeDelay > 0 ? `Recharge in ${Math.ceil(energyShield.rechargeDelay)}s` : `Recharging · +${SHIELD_CONFIG.rechargeRate} / s`}`);
+		}
 		label(element('purchase-reason'), !active ? 'Commands held' : craftCount(state) >= 9 ? 'Bay full: nine craft slots' : state.salvage < 85 ? 'Insufficient salvage' : state.experimental ? 'Buy wing 85 · ready in bay / Guardian 105' : 'Deploy escorts'); const mount = state.mounts[selected]; if (!mount) return;
 		label(ui.hull, `${Math.ceil(state.hull)} / ${MAX_HULL}`); meter.value = state.hull;
 		label(ui.salvage, String(Math.floor(state.salvage))); ui.route.style.width = `${Math.min(100, state.time / durationFor(state) * 100)}%`;
 		label(ui.distance, `${Math.min(100, Math.floor(state.time / durationFor(state) * 100))}%`);
 		const journey = journeyAt(state.time / durationFor(state) * 210);
 		label(ui.routeLabel, journey.remaining > 0 ? `KEPLER · ${(journey.remaining / 1000).toFixed(2)} KM` : 'KEPLER · ARRIVED');
-		label(ui.wave, state.status === 'fitting' ? (state.scenario ? 'ESCORT DRILL / FITTING' : 'DRYDOCK / FITTING') : `${state.scenario ? 'DRILL · ' : ''}CONTACT ${String(state.wave).padStart(2, '0')} / ${state.scenario?.encounters.length ?? 6} ${state.cleared ? '— CLEAR' : ''}`);
+		label(ui.wave, state.status === 'fitting' ? (state.systems ? 'SYSTEMS LAB / FITTING' : state.scenario ? 'ESCORT DRILL / FITTING' : 'DRYDOCK / FITTING') : `${state.systems ? 'SYSTEMS · ' : state.scenario ? 'DRILL · ' : ''}CONTACT ${String(state.wave).padStart(2, '0')} / ${state.scenario?.encounters.length ?? 6} ${state.cleared ? '— CLEAR' : ''}`);
 		label(ui.waveInfo, state.scenario ? contactWarning(state) : state.status === 'fitting' ? 'Build your defenses. Departure is your call.' : state.wave < WAVE_COUNT ? `Next: ${waveSide(state.wave + 1)} in ${Math.max(0, Math.ceil(state.nextWave - state.time))}s · ${state.enemies.length} hostiles` : state.enemies.length + state.arrivals.length > 0 ? `${state.enemies.length} hostiles · Defeat the gatekeeper and reach the gate.` : 'Passage clear. Approaching Kepler Gate.');
 		for (const [i, dot] of [...element('wave-dots').children].entries()) { if (dot instanceof HTMLElement) dot.hidden = !!state.scenario && i >= state.scenario.encounters.length; dot.classList.toggle('current', i + 1 === state.wave); dot.classList.toggle('done', i + 1 < state.wave); }
 		for (const [i, control] of mountButtons.entries()) {
@@ -165,14 +179,14 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.escorts, `${craftCount(state)} / 9 CRAFT`);
 		const canvasHelp = `Tactical view. Click a numbered mount to build. Click an enemy for turret priority. ${state.experimental ? 'Use the escort bay sector buttons to scramble wings and assign guardians.' : 'Click empty space to rally escorts.'} Right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
 		if (canvas.getAttribute('aria-label') !== canvasHelp) canvas.setAttribute('aria-label', canvasHelp);
-		label(ui.depart, state.scenario ? 'START ESCORT DRILL →' : 'DEPART FOR KEPLER →');
-		label(button('restart-pause'), state.scenario ? 'Restart drill' : 'Restart voyage');
-		label(button('restart'), state.scenario ? 'RETRY ESCORT DRILL →' : 'ANOTHER VOYAGE →');
+		label(ui.depart, state.systems ? 'START SYSTEMS LAB →' : state.scenario ? 'START ESCORT DRILL →' : 'DEPART FOR KEPLER →');
+		label(button('restart-pause'), state.systems ? 'Restart Systems Lab' : state.scenario ? 'Restart drill' : 'Restart voyage');
+		label(button('restart'), state.systems ? 'RETRY SYSTEMS LAB →' : state.scenario ? 'RETRY ESCORT DRILL →' : 'ANOTHER VOYAGE →');
 		ui.depart.hidden = state.status !== 'fitting'; ui.depart.disabled = !active || (!state.mounts.some(function (m) { return !!m.weapon; }) && craftCount(state) === 0);
 		ui.depart.title = ui.depart.disabled ? 'Build a turret or deploy an escort before departure.' : 'Begin the voyage';
 		ui.pulse.disabled = !active || state.status !== 'running' || state.pulseCooldown > 0;
 		label(ui.pulseState, state.pulseCooldown > 0 ? `${Math.ceil(state.pulseCooldown)}s` : 'READY');
-		label(ui.pulseInfo, state.shield > 0 ? `Shield active · ${Math.ceil(state.shield)}s remaining` : 'Clear rounds · 5s protection');
+		label(ui.pulseInfo, state.aegisRemaining > 0 ? `Aegis · ${Math.ceil(state.aegisRemaining)}s hull protection` : 'Clear rounds · 5s hull protection');
 		ui.repair.disabled = !active || state.salvage < 80 || state.hull >= MAX_HULL || state.repairCooldown > 0;
 		label(ui.repairInfo, state.repairCooldown > 0 ? `Crews working · ${Math.ceil(state.repairCooldown)}s` : '+240 hull · 15s cooldown');
 		ui.rally.hidden = state.experimental; label(element('escort-help'), state.experimental ? 'Buy ready wings, then scramble a sector. Guardians hold their own sector. Reserve craft count toward nine slots.' : 'Escorts engage near their shared rally point.'); ui.rally.disabled = !active; ui.rally.classList.toggle('active', rallyMode); ui.rally.setAttribute('aria-pressed', String(rallyMode));
@@ -184,9 +198,9 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const showResult = function () {
 		ui.result.hidden = false; rallyMode = false; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
-		label(element('result-title'), state.scenario ? state.status === 'won' ? 'DRILL SURVIVED.' : 'DRILL LOST.' : state.status === 'won' ? 'THE ARK ARRIVES.' : 'THE LIGHTS GO OUT.');
+		label(element('result-title'), state.systems ? state.status === 'won' ? 'SYSTEMS LAB SURVIVED.' : 'SYSTEMS LAB LOST.' : state.scenario ? state.status === 'won' ? 'DRILL SURVIVED.' : 'DRILL LOST.' : state.status === 'won' ? 'THE ARK ARRIVES.' : 'THE LIGHTS GO OUT.');
 		label(element('result-copy'), state.scenario ? 'Compare your coverage, launch timing and guardian assignments. Restart to try another defense.' : state.status === 'won' ? 'Kepler Gate opens. Your moving fortress brought its people home.' : 'The passage claimed another ship. Cover both flanks, use railguns against armor, and launch escorts to draw fire.');
-		label(element('result-stats'), `${Math.min(100, Math.floor(state.time / durationFor(state) * 100))}% of route · ${state.kills} hostiles destroyed · ${Math.ceil(state.hull / MAX_HULL * 100)}% hull remaining · ${state.escortLosses} escorts lost · ${state.launches} launches · ${state.orders} escort orders · ${Math.floor(state.salvage)} salvage · ${state.scenario ? 'Escort Drill' : WAVE_NAMES[Math.max(0, state.wave - 1)] ?? ''}`);
+		label(element('result-stats'), `${Math.min(100, Math.floor(state.time / durationFor(state) * 100))}% of route · ${state.kills} hostiles destroyed · ${Math.ceil(state.hull / MAX_HULL * 100)}% hull remaining · ${state.escortLosses} escorts lost · ${state.launches} launches · ${state.orders} escort orders · ${Math.floor(state.salvage)} salvage · ${state.systems ? `Systems Lab · ${Math.round(state.systems.shieldAbsorbed)} shield damage absorbed` : state.scenario ? 'Escort Drill' : WAVE_NAMES[Math.max(0, state.wave - 1)] ?? ''}`);
 		button('restart').focus({ preventScroll: true });
 	};
 	const tick = function (now: number) {

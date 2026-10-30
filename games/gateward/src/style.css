@@ -127,6 +127,15 @@ header {
 	color:#d5e2e9;
 	font-weight:400;
 }
+.energy-shield {
+	margin-bottom:16px;
+}
+.energy-shield meter::-webkit-meter-optimum-value {
+	background:#75bfe8;
+}
+.energy-shield meter::-moz-meter-bar {
+	background:#75bfe8;
+}
 meter {
 	width:100%;
 	height:7px;

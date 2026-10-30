@@ -7,6 +7,7 @@ import { beaconAt, journeyAt } from './journey';
 import { createState, coverageFor, durationFor, ESCORTS, type Enemy, type Point, type State } from './simulation';
 import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
 import { createTrajectory, effectHeight, projectileHeight, type Trajectory } from './projectiles-3d';
+import { shieldAppearance } from './shield-view';
 
 type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'hull' };
 export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined }
@@ -127,6 +128,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	});
 	const shield = new Mesh(new SphereGeometry(1, 40, 24), new MeshBasicMaterial({ color: '#88f1e4', transparent: true, opacity: 0.065, depthWrite: false, blending: AdditiveBlending }));
 	shield.scale.set(SHIELD_RADII.x, SHIELD_RADII.y, SHIELD_RADII.z); shield.position.set(SHIELD_CENTER.x, SHIELD_CENTER.y, SHIELD_CENTER.z); shield.visible = false; scene.add(shield);
+	const energyShield = new Mesh(new SphereGeometry(1, 40, 24), new MeshBasicMaterial({ color: '#75bfe8', transparent: true, opacity: 0.012, depthWrite: false, blending: AdditiveBlending }));
+	energyShield.scale.copy(shield.scale).multiplyScalar(1.015); energyShield.position.copy(shield.position); energyShield.visible = false; scene.add(energyShield);
 	const range = new Line(new BufferGeometry(), new LineBasicMaterial({ color: '#77dec8', transparent: true, opacity: 0.22, depthWrite: false })); scene.add(range);
 	let coverageSignature = '';
 	const rally = circle('#b7dbe4', 25, 0.7, 1); scene.add(rally);
@@ -245,7 +248,9 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			const flicker = reducedMotion ? 0 : Math.sin(state.time * 17) * 4;
 			for (const drive of drives) if (drive) drive.traverse(function (object) { if (object instanceof Mesh) { const materials = Array.isArray(object.material) ? object.material : [object.material]; for (const material of materials) if (material instanceof MeshStandardMaterial) material.emissiveIntensity = journey.speed > 0 ? 3.2 + flicker * 0.05 : 1.5; } });
 			for (const { plume, origin } of plumes) { const length = 58 + flicker; plume.visible = journey.speed > 0; plume.scale.y = length; plume.position.set(origin.x - length / 2 - 2, origin.y, origin.z); }
-			shield.visible = state.shield > 0;
+			const shieldView = shieldAppearance(state);
+			shield.visible = shieldView.aegisVisible; energyShield.visible = shieldView.energyVisible;
+			energyShield.material.opacity = shieldView.energyOpacity; energyShield.material.color.set(shieldView.energyColor);
 			const mount = state.mounts[selected];
 			range.visible = !!mount?.weapon;
 			if (mount?.weapon) {
