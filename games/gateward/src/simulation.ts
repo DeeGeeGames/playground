@@ -35,7 +35,11 @@ export type BomberAttack = { phase: 'windup'; remaining: number; target: number 
 export interface Enemy extends Point { bomberAttack?: BomberAttack; turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
 export interface Escort extends Point { turretAim?: CraftAim; flight?: Flight; wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
 export interface Shot extends Point { originHeight?: number; origin?: Point; sourceVelocity?: Point; beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
-export interface Effect extends Point { sourceShot?: Shot; radius: number; life: number; maxLife: number; color: string }
+export type CombatFeedback =
+	| { kind: 'muzzle'; mount: number; weapon: Weapon; aim: number }
+	| { kind: 'impact'; shield: number; armor: number; hull: number; deck: boolean }
+	| { kind: 'destruction' };
+export interface Effect extends Point { feedback?: CombatFeedback; sourceShot?: Shot; radius: number; life: number; maxLife: number; color: string }
 export interface Arrival { at: number; kind: EnemyKind; x: number; y: number }
 export const SECTORS = ['port', 'starboard', 'ahead', 'astern'] as const;
 export type Sector = typeof SECTORS[number];
@@ -348,6 +352,13 @@ const targetFor = function (state: State, from: Point, range: number): Enemy | u
 	return priority ?? nearest(from, state.enemies.filter(function (enemy) { return enemy.hp > 0; }), range);
 };
 const damageEnemy = function (enemy: Enemy, damage: number, weapon: Shot['weapon']) { enemy.hp -= damage * (weapon === 'rail' ? 1 : ENEMIES[enemy.kind].armor); };
+const impactFeedback = function (state: State, point: Point, hull: number, armor = 0, shield = 0, deck = false) {
+	state.effects.push({ x: point.x, y: point.y, radius: 18, life: 0.3, maxLife: 0.3, color: '#ffb87b', feedback: { kind: 'impact', shield, armor, hull, deck } });
+};
+const enemyFeedback = function (state: State, enemy: Enemy, damage: number, weapon: Shot['weapon']) {
+	const hull = damage * (weapon === 'rail' ? 1 : ENEMIES[enemy.kind].armor);
+	impactFeedback(state, enemy, hull, damage - hull);
+};
 const segmentDistance = function (point: Point, a: Point, b: Point): number {
 	const dx = b.x - a.x; const dy = b.y - a.y; const length = dx * dx + dy * dy;
 	const t = length > 0 ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length)) : 0;
@@ -400,7 +411,7 @@ export const step = function (state: State, dt: number) {
 	// Beam tracks last exactly one simulation tick; damage is applied directly.
 	state.shots = state.shots.filter(function (shot) { return shot.weapon !== 'beam'; });
 	const weaponRate = powerOutputs(state.systems.allocation).weaponRate;
-	for (const mount of state.mounts) {
+	for (const [mountIndex, mount] of state.mounts.entries()) {
 		mount.cooldown = Math.max(0, mount.cooldown - dt * weaponRate);
 		if (!mount.weapon || weaponRate === 0) continue;
 		const config = WEAPONS[mount.weapon];
@@ -416,12 +427,13 @@ export const step = function (state: State, dt: number) {
 		mount.aim += Math.max(-travel, Math.min(travel, error));
 		if (Math.abs(error) > travel) continue;
 		if (mount.weapon === 'beam') {
-			damageEnemy(target, config.damage * dt * weaponRate * (1 + (mount.level - 1) * 0.55) * (1 + (mount.level - 1) * 0.12), 'beam');
+			const damage = config.damage * dt * weaponRate * (1 + (mount.level - 1) * 0.55) * (1 + (mount.level - 1) * 0.12);
+			damageEnemy(target, damage, 'beam');
 			state.shots.push({ id: state.nextId++, x: target.x, y: target.y, beamFrom: origin, vx: 0, vy: 0, damage: 0, side: 'player', weapon: 'beam', target: target.id, life: 4 });
-			if (mount.cooldown <= 0) mount.cooldown = config.reload;
+			if (mount.cooldown <= 0) { enemyFeedback(state, target, damage, 'beam'); mount.cooldown = config.reload; }
 			continue;
 		}
-		if (mount.cooldown <= 0) { fire(state, origin, aim, config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id, carrierVelocity); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); }
+		if (mount.cooldown <= 0) { fire(state, origin, aim, config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id, carrierVelocity); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); state.effects.push({ ...origin, radius: 1, life: 0.18, maxLife: 0.18, color: '#ffffff', feedback: { kind: 'muzzle', mount: mountIndex, weapon: mount.weapon, aim: mount.aim } }); }
 	}
 	updateWings(state, dt);
 	for (const [i, escort] of state.escorts.entries()) {
@@ -509,8 +521,8 @@ export const step = function (state: State, dt: number) {
 			const hit = state.enemies.find(function (enemy) { return enemy.hp > 0 && movingContact(enemy, previousEnemies.get(enemy.id) ?? enemy, before, shot, enemy.kind === 'flagship' ? 38 : enemy.kind === 'armored' ? 23 : 15); });
 			if (!hit) continue;
 			shot.life = 0;
-			if (shot.weapon === 'missile') { for (const enemy of state.enemies) if (distance(hit, enemy) < MISSILE_SPLASH_RADIUS) damageEnemy(enemy, shot.damage, shot.weapon); effect(state, hit, MISSILE_SPLASH_RADIUS, '#f9c875'); }
-			else { damageEnemy(hit, shot.damage, shot.weapon); effect(state, hit, 10, '#a6efe5'); }
+			if (shot.weapon === 'missile') { for (const enemy of state.enemies) if (distance(hit, enemy) < MISSILE_SPLASH_RADIUS) { enemyFeedback(state, enemy, shot.damage, shot.weapon); damageEnemy(enemy, shot.damage, shot.weapon); } effect(state, hit, MISSILE_SPLASH_RADIUS, '#f9c875'); }
+			else { enemyFeedback(state, hit, shot.damage, shot.weapon); damageEnemy(hit, shot.damage, shot.weapon); effect(state, hit, 10, '#a6efe5'); }
 		} else {
 			const center = state.systems.interdiction.field?.world;
 			const blocked = center ? circleHit(before, shot, center, INTERDICTION_CONFIG.radius) : undefined;
@@ -518,11 +530,12 @@ export const step = function (state: State, dt: number) {
 				effect(state, blocked, 20, '#d7bf89', shot); shot.life = 0; state.systems.interdiction.blockedShots++; continue;
 			}
 			const hit = state.escorts.find(function (escort) { return escort.hp > 0 && movingContact(escort, previousEscorts.get(escort.id) ?? escort, before, shot, escort.kind === 'guardian' ? 20 : 12); });
-			if (hit) { hit.hp -= shot.damage; shot.life = 0; effect(state, hit, 15, '#ff897e'); }
+			if (hit) { impactFeedback(state, hit, shot.damage); hit.hp -= shot.damage; shot.life = 0; effect(state, hit, 15, '#ff897e'); }
 			else {
 				const impact = hullContact(state, previousArk, before, shot);
 				if (!impact) continue;
 				const overflow = absorbShieldDamage(state.systems, shot.damage);
+				impactFeedback(state, impact, overflow * (state.aegisRemaining > 0 ? 0.2 : 1), 0, shot.damage - overflow, true);
 				// Escort interception consumed its round above. Only shield overflow disrupts sensors;
 				// Aegis mitigates hull damage below, not the subsystem disruption.
 				if (overflow > 0 && shot.sensorDamage !== undefined && Number.isFinite(shot.sensorDamage) && shot.sensorDamage > 0) {
@@ -539,8 +552,8 @@ export const step = function (state: State, dt: number) {
 		}
 	}
 	advanceSystems(state.systems, dt, arkHit);
-	for (const enemy of state.enemies) if (enemy.hp <= 0) { state.salvage += ENEMIES[enemy.kind].reward; state.kills += 1; effect(state, enemy, enemy.kind === 'flagship' ? 120 : 35, '#ffb87b'); }
-	for (const escort of state.escorts) if (escort.hp <= 0) { state.escortLosses++; effect(state, escort, 25, '#81cfe7'); }
+	for (const enemy of state.enemies) if (enemy.hp <= 0) { state.salvage += ENEMIES[enemy.kind].reward; state.kills += 1; state.effects.push({ x: enemy.x, y: enemy.y, radius: enemy.kind === 'flagship' ? 95 : enemy.kind === 'armored' ? 38 : 24, life: 0.65, maxLife: 0.65, color: '#ffb87b', feedback: { kind: 'destruction' } }); }
+	for (const escort of state.escorts) if (escort.hp <= 0) { state.escortLosses++; state.effects.push({ x: escort.x, y: escort.y, radius: 22, life: 0.65, maxLife: 0.65, color: '#81cfe7', feedback: { kind: 'destruction' } }); }
 	state.enemies = state.enemies.filter(function (e) { return e.hp > 0; }); state.escorts = state.escorts.filter(function (e) { return e.hp > 0; }); state.shots = state.shots.filter(function (s) { return s.life > 0; });
 	for (const wing of state.wings) wing.craft = wing.craft.filter(function (craft) { return craft.hp > 0; });
 	state.effects = state.effects.filter(function (e) { e.life -= dt; return e.life > 0; });

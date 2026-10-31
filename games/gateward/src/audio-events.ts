@@ -22,7 +22,7 @@ export const createSoundObserver = function () {
 			if (cooldown !== undefined && craft.cooldown > cooldown) sounds.add('escort');
 		}
 		for (const effect of state.effects) {
-			if (!effects.has(effect) && (effect.radius === 10 || effect.radius === 15 || effect.radius === 85)) sounds.add('impact');
+			if (!effects.has(effect) && (effect.feedback?.kind === 'impact' || effect.radius === 10 || effect.radius === 15 || effect.radius === 85)) sounds.add('impact');
 			effects.add(effect);
 		}
 		for (const shot of state.shots) {

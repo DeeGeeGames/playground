@@ -1,4 +1,4 @@
-import { BoxGeometry, BufferGeometry, CylinderGeometry, ExtrudeGeometry, Group, Line, Material, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Points, Shape, TorusGeometry } from 'three';
+import { BoxGeometry, SphereGeometry, BufferGeometry, CylinderGeometry, ExtrudeGeometry, Group, Line, Material, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, Points, Shape, TorusGeometry } from 'three';
 import { DECK_HEIGHT, TURRET_HEIGHT } from './projection';
 import { TURRET_RISE, TURRET_SCALE } from './ship-config';
 import type { Mount, Weapon } from './simulation';
@@ -10,7 +10,7 @@ type SolidMaterial = MeshStandardMaterial | MeshBasicMaterial;
 
 export interface TurretVisual {
 	readonly root: Group;
-	readonly update: (mount: Mount, selected: boolean) => void;
+	readonly update: (mount: Mount, selected: boolean, firing?: { strength: number; beam: boolean }, reducedMotion?: boolean) => void;
 }
 
 const armor = function (color: string, emissive = '#000000'): MeshStandardMaterial {
@@ -125,11 +125,14 @@ export const createTurret = function (mount: Mount): TurretVisual {
 	}
 	pivot.add(missile);
 
+	const flash = new Mesh(new SphereGeometry(1, 8, 6), new MeshBasicMaterial({ color: '#ffffff', transparent: true, depthWrite: false }));
+	const secondFlash = new Mesh(flash.geometry, flash.material); pivot.add(secondFlash);
+	flash.name = 'MuzzleFlash'; flash.visible = false; pivot.add(flash);
 	const variants: Record<Weapon, Group> = { flak, rail, missile, beam };
 	const pips = Array.from({ length: 3 }, function (_, index) {
 		return addBox(assembly, box, indicator, (index - 1) * 5, TURRET_RISE + 1.2, 16.2, 3, 1.5, 2.5);
 	});
-	const update = function (next: Mount, selected: boolean) {
+	const update = function (next: Mount, selected: boolean, firing?: { strength: number; beam: boolean }, reducedMotion = false) {
 		root.position.set(next.x, DECK_HEIGHT, next.y);
 		const fitted = next.weapon !== undefined;
 		empty.visible = !fitted;
@@ -139,7 +142,16 @@ export const createTurret = function (mount: Mount): TurretVisual {
 		ring.position.y = fitted ? TURRET_HEIGHT - DECK_HEIGHT + 0.5 * TURRET_SCALE : 1.6;
 		ring.scale.setScalar(fitted ? TURRET_SCALE : 1);
 		indicator.color.set(selected ? '#d6efad' : next.weapon === 'rail' ? '#cdb6ef' : next.weapon === 'missile' ? '#edc589' : '#91e3da');
-		for (const [weapon, model] of Object.entries(variants)) model.visible = weapon === next.weapon;
+		const strength = firing?.strength ?? 0;
+		const recoil = reducedMotion || firing?.beam ? 0 : strength * (next.weapon === 'rail' ? 5 : next.weapon === 'missile' ? 1.5 : 2.5);
+		for (const [weapon, model] of Object.entries(variants)) { model.visible = weapon === next.weapon; model.position.x = -recoil; }
+		flash.visible = fitted && strength > 0;
+		flash.position.set((next.weapon === 'rail' ? 47 : next.weapon === 'missile' ? 16 : 36) - recoil, next.weapon === 'missile' ? 9 : 6, next.weapon === 'flak' ? -5 : next.weapon === 'missile' ? -8 : 0);
+		flash.scale.set(next.weapon === 'rail' ? 13 : next.weapon === 'missile' ? 10 : 6, firing?.beam ? 4 : 3, firing?.beam ? 4 : 3);
+		flash.material.opacity = strength * (reducedMotion ? 0.35 : 0.85);
+		if (next.weapon) flash.material.color.copy(accents[next.weapon].color);
+		secondFlash.visible = flash.visible && (next.weapon === 'flak' || next.weapon === 'missile');
+		secondFlash.position.copy(flash.position); secondFlash.position.z *= -1; secondFlash.scale.copy(flash.scale);
 		for (const [index, pip] of pips.entries()) pip.visible = fitted && index < next.level;
 	};
 	update(mount, false);
