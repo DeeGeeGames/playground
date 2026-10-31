@@ -2,6 +2,7 @@ import { enemyClearance } from '../src/interdiction';
 import { expect, test } from 'bun:test';
 import { avoidTraffic, hullClearance, resolveTraffic, traffic, type Hull } from '../src/ship-traffic';
 import { fly } from '../src/flight';
+import { flightVelocity } from '../src/space';
 import { createState, deploy, scramble, step, type State } from '../src/simulation';
 
 const quiet = function (): State {
@@ -35,10 +36,10 @@ test('head-on craft steer apart before contact and pass rather than deadlock', f
 	for (let frame = 0; frame < 600; frame++) {
 		const da = avoidTraffic(a, { x: 50, y: 0 }, [a, b], 50);
 		const db = avoidTraffic(b, { x: -50, y: 0 }, [a, b], 50);
-		fly(a.point, flightA, da, 50, 3, 1 / 60); fly(b.point, flightB, db, 50, 3, 1 / 60);
+		fly(a.point, flightA, da, 50, 3, 1 / 60, true); fly(b.point, flightB, db, 50, 3, 1 / 60, true);
 		a.angle = flightA.angle; b.angle = flightB.angle;
-		a.velocity = { x: Math.cos(a.angle) * flightA.speed, y: Math.sin(a.angle) * flightA.speed };
-		b.velocity = { x: Math.cos(b.angle) * flightB.speed, y: Math.sin(b.angle) * flightB.speed };
+		a.velocity = flightVelocity(flightA);
+		b.velocity = flightVelocity(flightB);
 		lateral = Math.max(lateral, Math.abs(a.point.y));
 		expect(hullClearance(a, b).gap).toBeGreaterThan(0);
 	}

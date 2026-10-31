@@ -19,6 +19,6 @@ export const arkVelocity = function (state: State): Point {
 	return { x: Math.cos(state.ark.angle) * state.ark.speed, y: Math.sin(state.ark.angle) * state.ark.speed };
 };
 export const flightVelocity = function (flight: Flight | undefined): Point {
-	return flight ? { x: Math.cos(flight.angle) * flight.speed, y: Math.sin(flight.angle) * flight.speed, z: flight.vz ?? 0 } : { x: 0, y: 0 };
+	return flight ? { x: flight.vx ?? Math.cos(flight.angle) * flight.speed, y: flight.vy ?? Math.sin(flight.angle) * flight.speed, z: flight.vz ?? 0 } : { x: 0, y: 0 };
 };
 export const mountWorld = function (state: State, mount: Mount): Point { return { ...worldPoint(state, mount), z: DECK_HEIGHT + TURRET_RISE * TURRET_SCALE - FLIGHT_HEIGHT }; };

@@ -528,3 +528,18 @@ blender --background --factory-startup --python games/gateward/tools/build-carri
 Copy the generated GLB and blend into their respective directories. Preview
 lighting and cameras are stored in the blend but excluded from the GLB. Meshes
 are batched by material, use no textures, and need no runtime compression decoder.
+
+### Small-craft acceleration
+
+Escorts (including guardians), raiders and bombers keep world velocity separately
+from hull heading. Thrusters accelerate or brake at up to 0.65 times their speed
+limit per second, shared across horizontal and vertical steering. Yaw accelerates
+at 0.8 times the configured turn rate per second and caps at 55% of that rate.
+Ships drift through turns and counter-thrust before settling on a new course;
+weapon lead and traffic prediction use that actual velocity. Capital ships retain
+their previous handling. Small craft advance interdiction corners with a short
+lookahead so slower turning does not strand them at a waypoint. Existing solid
+hull and altitude boundaries still constrain movement.
+
+These values are an initial handling pass. Simulation and browser checks establish
+navigation behavior; owner playtesting remains the acceptance check for feel.

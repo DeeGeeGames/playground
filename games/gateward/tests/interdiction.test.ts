@@ -154,7 +154,8 @@ describe('deterministic approach shaping', function () {
 		for (let frame = 0; frame < 1500; frame++) { escort.x = 300; escort.y = 0; step(state, 1 / 60); }
 		expect(enemy.detour).toBeDefined(); const before = { x: enemy.x, y: enemy.y };
 		for (let frame = 0; frame < 120; frame++) { escort.x = 300; escort.y = 0; step(state, 1 / 60); }
-		expect(enemy.x).toBeCloseTo(before.x); expect(enemy.y).toBeCloseTo(before.y); expect(state.shots).toHaveLength(0);
+		// Thrusters settle with sub-decimeter drift rather than snapping to rest.
+		expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeLessThan(0.05); expect(state.shots).toHaveLength(0);
 		advance(state, 3.1); expect(enemy.detour).toBeUndefined(); expect(enemy.x).not.toBe(before.x); expect(systemsFor(state).interdiction.field).toBeUndefined();
 	});
 

@@ -74,7 +74,8 @@ export const navigateField = function (state: State, enemy: Enemy, destination: 
 	// A target inside the field cannot be engaged. Wait at the boundary until it emerges;
 	// repeatedly circling an unreachable escort would otherwise create an infinite orbit.
 	const targetInside = Math.hypot(destination.x - center.x, destination.y - center.y) <= INTERDICTION_CONFIG.radius;
-	if (Math.hypot(enemy.x - waypoint.x, enemy.y - waypoint.y) <= Math.max(8, speed * dt + 0.1) && !targetInside) {
+	// Inertial craft lead the next corner instead of braking to each exact waypoint.
+	if (Math.hypot(enemy.x - waypoint.x, enemy.y - waypoint.y) <= Math.max(8, speed * dt + 0.1, turnRate === 3 ? speed * 0.4 : 0) && !targetInside) {
 		const angle = Math.atan2(waypoint.y - center.y, waypoint.x - center.x) + detour.side * 0.25;
 		detour.waypoint = { x: field.world.x + Math.cos(angle) * radius, y: field.world.y + Math.sin(angle) * radius };
 		waypoint = detour.waypoint;
