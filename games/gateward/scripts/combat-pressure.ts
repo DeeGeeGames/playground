@@ -12,7 +12,7 @@ interface ControlResult {
 	purchases: { time: number; mount: number; action: string; cost: number }[];
 	samples: { time: number; hull: number; shield: number; sensors: number; salvage: number }[];
 }
-export const runSpendingControl = function (coverageDegrees: 240 | 360 = 360): ControlResult {
+export const runSpendingControl = function (coverageDegrees: 120 | 240 | 360 = 360): ControlResult {
 	const state = createState({ coverageDegrees });
 	for (const [mount, weapon] of initial) build(state, mount, weapon);
 	state.status = 'running';

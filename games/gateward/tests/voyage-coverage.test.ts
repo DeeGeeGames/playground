@@ -1,15 +1,14 @@
 import { expect, test } from 'bun:test';
-import { voyageCoverage, priorityCoverage } from '../src/play-screen';
+import { priorityCoverage } from '../src/play-screen';
 import { build, covered, coverageFor, createState, deploy, setPriority, setRally, step, upgrade } from '../src/simulation';
 import { worldPoint } from '../src/space';
 import { runFlankComparison } from '../scripts/coverage-comparison';
 import { runSpendingControl } from '../scripts/combat-pressure';
 
-test('voyage opt-in is explicit and leaves the control and scenario defaults intact', function () {
-	for (const query of ['', '?coverage=360', '?coverage=bad', '?coverage=241']) expect(voyageCoverage(query)).toBe(360);
-	expect(voyageCoverage('?coverage=240')).toBe(240);
+test('voyage defaults to 120 degrees while scenarios keep 240 and voyage escorts remain permanent', function () {
 	for (const scenario of ['drill', 'systems'] as const) expect(createState({ scenario }).coverageDegrees).toBe(240);
-	const state = createState({ coverageDegrees: voyageCoverage('?coverage=240') });
+	const state = createState();
+	expect(state.coverageDegrees).toBe(120);
 	expect(state.experimental).toBe(false);
 	deploy(state, 'interceptor'); deploy(state, 'guardian');
 	expect(state.wings).toHaveLength(0); expect(state.escorts).toHaveLength(4);
@@ -18,7 +17,7 @@ test('voyage opt-in is explicit and leaves the control and scenario defaults int
 });
 
 test('voyage eligibility and priority explanations follow travel, rotation, upgrades and inclusive boundaries', function () {
-	const state = createState({ coverageDegrees: 240 }); state.salvage = 1000; build(state, 0, 'rail');
+	const state = createState(); state.salvage = 1000; build(state, 0, 'rail');
 	const mount = state.mounts[0]; if (!mount) throw new Error('Missing mount');
 	state.ark = { x: 900, y: -350, angle: 1.2, speed: 12 };
 	const arc = coverageFor(state, mount);
@@ -34,36 +33,41 @@ test('voyage eligibility and priority explanations follow travel, rotation, upgr
 	expect(priorityCoverage(state, 0)).toContain('outside range');
 	upgrade(state, 0); expect(covered(state, mount, enemy)).toBe(true);
 	expect(priorityCoverage(state, 0)).toContain('within range and coverage');
-	for (const x of [-300, 200]) expect(covered(state, mount, worldPoint(state, { x, y: 0 }))).toBe(true);
+	// A 120° arc leaves fore/aft blind spots, unlike the previous 240° trial.
+	for (const x of [-300, 200]) expect(covered(state, mount, worldPoint(state, { x, y: 0 }))).toBe(false);
 });
 
 test('out-of-arc priority cannot acquire; an eligible alternative still fires after turning', function () {
-	for (const coverageDegrees of [240, 360] as const) {
+	for (const coverageDegrees of [120, 240, 360] as const) {
 		const state = createState({ coverageDegrees }); build(state, 0, 'rail'); state.nextWave = Infinity;
 		state.systems.allocation = { engines: 0, weapons: 5, shields: 5 };
 		state.enemies.push({ id: 99, x: -96, y: 220, hp: 9999, maxHp: 9999, kind: 'armored', cooldown: 99 }, { id: 100, x: -96, y: -220, hp: 9999, maxHp: 9999, kind: 'armored', cooldown: 99 });
 		setPriority(state, 99); state.status = 'running';
 		const targets: (number | undefined)[] = [];
 		for (let tick = 0; tick < 180; tick++) { step(state, 1 / 60); targets.push(...state.shots.filter(function (shot) { return shot.side === 'player'; }).map(function (shot) { return shot.target; })); }
-		expect(targets).toContain(coverageDegrees === 240 ? 100 : 99);
-		if (coverageDegrees === 240) expect(targets).not.toContain(99);
+		expect(targets).toContain(coverageDegrees < 360 ? 100 : 99);
+		if (coverageDegrees < 360) expect(targets).not.toContain(99);
 	}
 });
 
 test('equal-cost paired attacks expose wrong-flank pressure and a split fitting covers both', function () {
 	for (const flank of [-1, 1] as const) {
-		const correct = runFlankComparison(240, flank < 0 ? 'port' : 'starboard', flank);
-		const wrong = runFlankComparison(240, flank < 0 ? 'starboard' : 'port', flank);
-		const split = runFlankComparison(240, 'split', flank);
+		const correct = runFlankComparison(120, flank < 0 ? 'port' : 'starboard', flank);
+		const wrong = runFlankComparison(120, flank < 0 ? 'starboard' : 'port', flank);
+		const split = runFlankComparison(120, 'split', flank);
 		expect(correct.spent).toBe(230); expect(wrong.spent).toBe(correct.spent); expect(split.spent).toBe(correct.spent);
 		expect(wrong.minimumShield).toBeLessThan(correct.minimumShield); expect(split.minimumShield).toBe(correct.minimumShield);
 		expect(runFlankComparison(360, 'port', flank).minimumShield).toBe(240);
 	}
 });
 
-test('issue 51 spending policy is rerun at both arcs without a budget increase', function () {
-	const control = runSpendingControl(); const trial = runSpendingControl(240);
-	for (const result of [control, trial]) { expect(result.status).toBe('won'); expect(result.kills).toBe(86); expect(result.minimumHull).toBe(1200); }
+test('the historical spending policy exposes the tighter default arc without a budget increase', function () {
+	const control = runSpendingControl(360); const voyage = runSpendingControl(120);
+	expect(control.status).toBe('won'); expect(control.kills).toBe(86);
+	expect(voyage.status).toBe('lost'); expect(voyage.kills).toBe(69);
+	expect(voyage.time).toBeCloseTo(189 + 1 / 3, 5);
+	expect(voyage.minimumHull).toBe(0); expect(voyage.minimumSensors).toBe(0);
 	const spent = function (result: typeof control) { return result.purchases.reduce(function (sum, purchase) { return sum + purchase.cost; }, 0); };
-	expect(spent(trial)).toBe(spent(control));
+	// Identical purchase policy; the losing run earns less and ends earlier.
+	expect(spent(voyage)).toBeLessThan(spent(control));
 });

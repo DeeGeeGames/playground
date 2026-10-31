@@ -3,10 +3,6 @@ import { covered, coverageFor, distance, type State } from './simulation';
 import { mountWorld } from './space';
 import { POWER_CHANNELS, POWER_PRESETS, type Allocation } from './systems';
 
-// Only the explicit trial opts Full Voyage into directional coverage.
-export const voyageCoverage = function (search: string): 240 | 360 {
-	return new URLSearchParams(search).get('coverage') === '240' ? 240 : 360;
-};
 export const priorityCoverage = function (state: State, selected: number): string {
 	const target = state.enemies.find(function (enemy) { return enemy.id === state.priority && enemy.hp > 0; });
 	const mount = state.mounts[selected];

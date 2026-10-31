@@ -9,7 +9,7 @@ import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
 import { createEngineeringPanel } from './engineering-panel';
 import { powerOutputs } from './systems';
-import { contactDescription, inspectorName, presetFor, priorityCoverage, voyageCoverage, type Inspector } from './play-screen';
+import { contactDescription, inspectorName, presetFor, priorityCoverage, type Inspector } from './play-screen';
 import { contactIntel, SENSOR_CONFIG, sensorRanges } from './sensors';
 import { createInterdictionPanel } from './interdiction-panel';
 import { systemsResultMessage, systemsSummary } from './trial-summary';
@@ -44,7 +44,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 	const requestedMode = new URLSearchParams(location.search).get('mode');
 	let mode = requestedMode === 'systems' ? 'systems' : requestedMode === 'drill' ? 'drill' : 'voyage';
-	const newState = function () { return createState(mode === 'systems' ? { scenario: 'systems' } : mode === 'drill' ? { scenario: 'drill' } : { coverageDegrees: voyageCoverage(location.search) }); };
+	const newState = function () { return createState(mode === 'systems' ? { scenario: 'systems' } : mode === 'drill' ? { scenario: 'drill' } : {}); };
 	let state = newState(); let selected = 0; let paused = false; let briefing = true; let rallyMode = false; let speed = 1;
 	let placement: Point | undefined;
 	let frame = 0; let previous = 0; let accumulator = 0; let disposed = false; let contextAvailable = true;
@@ -343,7 +343,7 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.rally.hidden = state.experimental; label(element('escort-help'), state.experimental ? 'Buy ready wings, then scramble a sector. Guardians hold their own sector. Reserve craft count toward nine slots.' : 'Escorts engage near their shared rally point.'); ui.rally.disabled = !active; ui.rally.classList.toggle('active', rallyMode); ui.rally.setAttribute('aria-pressed', String(rallyMode));
 		label(ui.rally, rallyMode ? 'Click space to place rally point' : '⌖ Set escort rally point');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
-		label(element('coverage-setting'), `${mode === 'voyage' ? 'Full Voyage' : mode === 'drill' ? 'Escort Drill' : 'Systems Trial'} · ${state.coverageDegrees}° ${state.coverageDegrees < 360 ? 'outward coverage' : 'full-arc control'}`);
+		label(element('coverage-setting'), `${mode === 'voyage' ? 'Full Voyage' : mode === 'drill' ? 'Escort Drill' : 'Systems Trial'} · ${state.coverageDegrees}° ${state.coverageDegrees < 360 ? 'outward coverage' : 'full coverage'}`);
 		label(ui.hint, placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.experimental ? 'Select a mount for coverage · Click hostile for turret priority · Order escorts in bay' : rallyMode ? 'RALLY MODE · Click or tap a location for all escorts' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Click empty space to rally · Click hostile to focus');
 		label(ui.message, state.messageTime > 0 ? state.message : ''); label(ui.speed, `${speed}×`); ui.speed.disabled = briefing || !contextAvailable || !state.focused || state.status === 'won' || state.status === 'lost';
 		label(ui.pause, paused ? 'Resume' : 'Menu'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
