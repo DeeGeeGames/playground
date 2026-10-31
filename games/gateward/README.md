@@ -15,7 +15,7 @@ hostiles to win; losing the ark's hull ends the run.
 - Beam costs 125 salvage, reaches 300m and deals 48 damage per second before armor at balanced weapon power. It automatically tracks one eligible target; upgrades and weapon power scale sustained damage.
 - Flak handles light ships; railguns ignore armor; homing missiles deal splash
   damage. All turrets turn toward their firing solution before firing automatically
-  through full arcs. Flak turns at 360°/s, beams at 180°/s, missiles at 120°/s,
+  within 120° outward arcs in Full Voyage. Flak turns at 360°/s, beams at 180°/s, missiles at 120°/s,
   and railguns at 90°/s. Projectile barrels track the lead angle; beams track the
   contact directly. Turning continues during reload and freezes with zero weapon
   power, pause, or focus loss. Upgrade to level 3
@@ -157,7 +157,7 @@ browser evidence and owner judgment establish visual and flight-feel acceptance.
 
 Choose **Escort Drill** in the briefing, pause menu or result, or open
 `?mode=drill`. Restart retains the selected mode. Full voyage remains the default
-with full arcs, permanent escorts and a shared rally. All modes include reactor
+with 120° outward arcs, permanent escorts and a shared rally. All modes include reactor
 allocation, rechargeable shields, damageable sensors and interdiction by default.
 The drill requires survival, its real 1.08 km route, and clearance of all four
 contacts after at least 90 seconds. Engines can delay arrival; reaching the gate
@@ -389,3 +389,71 @@ keyboard interaction. **Sound on/off** toggles a session-only mute; restart keep
 that choice. Pause, hidden tabs and focus loss cut active effects; resuming never
 replays missed sounds. Simultaneous cues are grouped and rate/voice limited at
 both simulation speeds. Audio is optional when browser playback is unavailable.
+
+## Full Voyage directional coverage (#52)
+
+Full Voyage uses **120° outward coverage** by owner direction. Open
+`games/gateward/` and prepare as usual: there is no coverage URL flag.
+Restart and returning from another mode retain the voyage default. Escort Drill
+and Systems Trial keep their existing 240° arcs and escort rules.
+
+The mount inspector identifies the mode and arc. A selected fitted mount shows
+its temporary coverage outline at the upgraded range. Port mounts 1–4 protect
+port; starboard mounts 5–8 protect starboard. At 120°, there are fore/aft blind
+spots rather than the overlap of the earlier 240° trial. The priority and automatic
+target paths share coverage eligibility; an out-of-arc priority cannot bypass it.
+The selected mount and contact inspector explain when its priority is outside
+range or arc. Voyage rally and permanent escorts remain unchanged.
+
+Reproduce deterministic placement comparisons and rerun #51's spending policy:
+
+```sh
+bun games/gateward/scripts/coverage-comparison.ts
+bun test games/gateward/tests/voyage-coverage.test.ts
+```
+
+The comparison script retains explicit 360° and 240° simulation controls alongside
+120°; these are analysis inputs, not playable URL options. The mirrored fixture
+uses Full Voyage rules with two simultaneous bomber arrivals 340m off either
+flank, 30 seconds, two level-one railguns (230 salvage), and no later spending or
+support orders. Port fitting uses mounts 1/4, starboard 5/8, split 1/5. This is not
+a playable mode. Travel and flight remain active, so mirrored attacks can yield
+asymmetric damage.
+
+| Arc | Fitting | Attack flank | Minimum shield | Kills / hull |
+| --- | --- | --- | ---: | --- |
+| 360° | Any of the three | Either | 240 | 2 / 1200 |
+| 240° | Port | Starboard | 137.47 | 2 / 1200 |
+| 240° | Starboard | Port | 152.93 | 2 / 1200 |
+| 120° | Port | Port | 240 | 2 / 1200 |
+| 120° | Port | Starboard | 35.87 | 1 / 1200 |
+| 120° | Starboard | Port | 93.20 | 2 / 1200 |
+| 120° | Starboard | Starboard | 240 | 2 / 1200 |
+| 120° | Split | Either | 240 | 2 / 1200 |
+
+Moving equivalent firepower to the attacked flank or splitting it avoids shield
+loss in this fixture. It does not establish difficulty or feel. For a production
+playtest, compare two railguns on 1/4 against 1/5 and select each mount to inspect
+coverage. Keep spending/support orders equal. The playable voyage retains its
+original six waves.
+
+The historical #51 spending policy wins at 360° and 240° at 210.017s with 86 kills,
+1200 minimum/final hull, 100 minimum sensors, and zero impairments. Both spend
+1835 salvage after the same 265-salvage opening fitting; minimum shield is 166.33
+and 240 respectively. At 120°, that same policy loses at 189.333s with 69 kills,
+zero final hull, zero minimum shield/sensors and one sensor impairment. It spends
+1292 salvage after the same opening; it earns less and ends earlier. This is a
+balance signal from one strategy. Weapon stats, economy, and attack schedules
+were not rebalanced to restore its previous victory.
+
+The owner selected 120° and removal of the flag. Physical devices and owner
+acceptance of the resulting combat feel remain separate from this configuration
+decision and from deterministic/browser evidence.
+
+Verification for the 120° default: `bun run check` passed (429 tests,
+typecheck, lint, build). Production Chromium checks at 1380×840, 390×844 and
+844×390 covered all eight mount keys, pointer/emulated-touch panel selection,
+493m upgraded range, travel, orbit/zoom, resize, pause/restart and mode defaults.
+Old coverage query parameters had no effect on the voyage's 120° setting. The
+pass reported zero page errors. Browser emulation does not establish physical
+touch/controller behavior or owner acceptance of combat feel.
