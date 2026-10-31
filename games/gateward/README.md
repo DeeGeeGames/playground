@@ -457,3 +457,27 @@ typecheck, lint, build). Production Chromium checks at 1380×840, 390×844 and
 Old coverage query parameters had no effect on the voyage's 120° setting. The
 pass reported zero page errors. Browser emulation does not establish physical
 touch/controller behavior or owner acceptance of combat feel.
+
+### Automatic target preferences
+
+Eligible player focus always wins. Otherwise flak prefers classified raiders;
+railguns prefer classified armored ships or flagships equally. Missiles prefer
+the aim point with the most other live, detected contacts strictly within the
+existing 85m splash radius. Splash neighbours may be outside the mount's firing
+arc/range, but the aim point must satisfy sensors, upgraded range and coverage.
+Unclassified contacts receive no class bonus. Equal scores use nearest distance,
+then lowest ID; no preferred target falls back to nearest. Beam stays nearest.
+Turning, power, firing and damage rules are unchanged.
+
+Issue #53 reran #51's unchanged spending control at 60Hz (simulation evidence,
+not owner acceptance of feel):
+
+| Coverage | Before | Role preferences |
+| --- | --- | --- |
+| 120° | Lost at 189.33s, 69 kills | Lost at 194.93s, 75 kills |
+| 240° | Won at 210.02s, 86 kills, minimum shield 240 | Won at 210.02s, 86 kills, minimum shield 170.13 |
+| 360° | Won at 210.02s, 86 kills, minimum shield 166.33 | Won at 210.02s, 86 kills, minimum shield 167 |
+
+Both 120° runs lost all hull and sensors; both wider-coverage runs retained full
+hull and sensors. These results isolate acquisition; no budget or combat tuning
+was changed.
