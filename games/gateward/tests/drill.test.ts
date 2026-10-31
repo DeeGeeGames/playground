@@ -81,20 +81,20 @@ describe('guardian screens and restrictions', function () {
 	});
 });
 
-export const strategyRun = function (strategy: 'baseline' | 'wings' | 'guardians', issueOrders = true): { strategy: string; result: State['status']; time: number; hull: number; kills: number; losses: number; launches: number; orders: number; salvage: number } {
+export const strategyRun = function (strategy: 'baseline' | 'wings' | 'guardians', issueOrders = true): { strategy: string; result: State['status']; time: number; hull: number; minimumShield: number; kills: number; losses: number; launches: number; orders: number; salvage: number } {
 	const s = createState({ scenario: 'drill' });
 	if (strategy !== 'baseline') { build(s, 0, 'rail'); if (strategy === 'wings') { deploy(s, 'interceptor'); build(s, 4, 'flak'); } else { deploy(s, 'guardian'); build(s, 4, 'flak'); } }
-	s.status = 'running';
+	s.status = 'running'; let minimumShield = s.systems.shield.charge;
 	for (let second = 0; second < 300 && s.status === 'running'; second++) {
 		if (issueOrders && strategy === 'wings' && [7, 42, 75].includes(second)) for (const w of s.wings) scramble(s, w.id, second === 75 ? 'ahead' : 'port');
 		if (issueOrders && strategy === 'guardians' && second === 18) for (const g of s.escorts) assignGuardian(s, g.id, 'starboard');
-		advance(s, 1);
+		for (let frame = 0; frame < 60; frame++) { step(s, 1 / 60); minimumShield = Math.min(minimumShield, s.systems.shield.charge); }
 	}
-	return { strategy, result: s.status, time: Math.round(s.time), hull: Math.ceil(s.hull), kills: s.kills, losses: s.escortLosses, launches: s.launches, orders: s.orders, salvage: Math.floor(s.salvage) };
+	return { strategy, result: s.status, time: Math.round(s.time), hull: Math.ceil(s.hull), minimumShield, kills: s.kills, losses: s.escortLosses, launches: s.launches, orders: s.orders, salvage: Math.floor(s.salvage) };
 };
 test('drill arrivals obey the schedule and require arrival plus clearance after 90 seconds', function () {
-	const s = createState({ scenario: 'drill' }); s.status = 'running'; advance(s, 9.9); expect(s.wave).toBe(0); expect(s.enemies).toHaveLength(0);
-	advance(s, .2); expect(s.wave).toBe(1); expect(s.enemies[0]?.kind).toBe('raider'); expect(s.enemies[0]?.y).toBeLessThan(0); expect(s.arrivals).toHaveLength(7);
+	const s = createState({ scenario: 'drill' }); s.status = 'running'; expect(s.wave).toBe(0); expect(s.enemies).toHaveLength(0);
+	advance(s, 1 / 60); expect(s.wave).toBe(1); expect(s.enemies[0]?.kind).toBe('raider'); expect(s.enemies[0]?.y).toBeLessThan(0); expect(s.arrivals).toHaveLength(7);
 	s.time = 89.99; s.wave = 4; s.nextWave = Infinity; s.arrivals = []; s.systems.distanceTraveled = s.systems.routeLength; s.ark.x = s.routeOrigin.x + s.systems.routeLength;
 	step(s, 1 / 60); expect<State['status']>(s.status).toBe('running'); expect(s.enemies.length).toBeGreaterThan(0);
 	s.enemies = []; step(s, 1 / 60); expect<State['status']>(s.status).toBe('won');
@@ -116,6 +116,6 @@ test('orders change outcomes with the same fitted equipment and spending', funct
 	const heldWing = strategyRun('wings', false); const launchedWing = strategyRun('wings');
 	expect(heldWing.launches).toBe(0); expect(launchedWing.launches).toBeGreaterThan(0); expect(launchedWing.hull).toBeGreaterThan(heldWing.hull);
 	const portScreen = strategyRun('guardians', false); const reassignedScreen = strategyRun('guardians');
-	expect(portScreen.result).toBe('won'); expect(reassignedScreen.result).toBe('won'); expect(reassignedScreen.hull).not.toBe(portScreen.hull);
+	expect(portScreen.result).toBe('won'); expect(reassignedScreen.result).toBe('won'); expect(reassignedScreen.minimumShield).not.toBe(portScreen.minimumShield);
 	expect(portScreen.orders).toBe(0); expect(reassignedScreen.orders).toBe(1);
 });

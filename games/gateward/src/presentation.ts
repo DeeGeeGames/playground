@@ -77,6 +77,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	const raycaster = new Raycaster();
 	const targets = new Map<Object3D, PickTarget>();
 	const enemyModels = new Map<number, Group>();
+	const detectedMarkers = new Map<number, Mesh>();
 	const escortModels = new Map<number, Group>();
 	const trajectories = new Map<number, Trajectory>();
 	const abort = new AbortController();
@@ -336,10 +337,17 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			rally.visible = !state.experimental && (state.escorts.length > 0 || rallyMode); rally.position.set(state.rally.x, 1, state.rally.y);
 			if (rally.material instanceof MeshBasicMaterial) rally.material.color.set(rallyMode ? '#d5ed9b' : '#9edbf0');
 			const target = state.enemies.find(function (enemy) { return enemy.id === state.priority && canAcquire(state, enemy); }); priority.visible = !!target;
-			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT, target.y); priority.scale.setScalar(target.kind === 'flagship' ? 70 : 42); }
+			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT, target.y); priority.scale.setScalar(contactIntel(state, target) === 'classified' && target.kind === 'flagship' ? 70 : 42); }
 			const liveEnemies = new Set(state.enemies.map(function (enemy) { return enemy.id; }));
 			for (const [id, model] of enemyModels) if (!liveEnemies.has(id)) { scene.remove(model); targets.delete(model); disposeObject(model); enemyModels.delete(id); }
-			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } updateCraftTurrets(model, enemy.turretAim); model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); }
+			for (const [id, marker] of detectedMarkers) if (!liveEnemies.has(id)) { scene.remove(marker); targets.delete(marker); disposeObject(marker); detectedMarkers.delete(id); }
+			for (const enemy of state.enemies) {
+				const detected = contactIntel(state, enemy) === 'detected';
+				let marker = detectedMarkers.get(enemy.id);
+				if (!marker && detected) { marker = new Mesh(new IcosahedronGeometry(11, 0), new MeshBasicMaterial({ color: '#edbc7e', wireframe: true })); detectedMarkers.set(enemy.id, marker); targets.set(marker, { kind: 'enemy', id: enemy.id }); scene.add(marker); }
+				if (marker) { marker.visible = detected; marker.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); }
+			}
+			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.visible = contactIntel(state, enemy) === 'classified'; updateCraftTurrets(model, enemy.turretAim); model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); }
 			const liveEscorts = new Set(state.escorts.map(function (escort) { return escort.id; }));
 			for (const [id, model] of escortModels) if (!liveEscorts.has(id)) { scene.remove(model); disposeObject(model); escortModels.delete(id); }
 			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } updateCraftTurrets(model, escort.turretAim); model.position.set(escort.x, FLIGHT_HEIGHT, escort.y); model.rotation.y = -escort.angle; }
@@ -366,7 +374,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		},
 		pick: function (point, state) {
 			resize(); followArk(state); controls.update(); scene.updateMatrixWorld(true); updateVisibility(state);
-			const roots = [...arkRoots, ...enemyModels.values()];
+			const roots = [...arkRoots, ...enemyModels.values(), ...detectedMarkers.values()];
 			const direct = hit(point, roots);
 			let mount = direct?.kind === 'mount' ? direct.index : -1;
 			let enemy = direct?.kind === 'enemy' ? state.enemies.find(function (candidate) { return candidate.id === direct.id; }) : undefined;

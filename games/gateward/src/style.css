@@ -258,3 +258,8 @@ h1 em { font-style:normal; color:var(--mint); }
 	.trial-status { left:var(--left); top:calc(var(--top) + 136px); width:280px; max-width:280px; display:grid; grid-template-columns:1fr 1fr; }
 	#trial-goal { grid-column:1/-1; grid-row:2; }
 }
+
+/* Radar is a separate live command surface; keep menus above it. */
+#game[data-radar-open="true"] .layout, #game[data-radar-open="true"] .survival-hud, #game[data-radar-open="true"] .command-console, #game[data-radar-open="true"]>.route, #game[data-radar-open="true"]>.trial-status, #game[data-radar-open="true"]>.menu-toggle { visibility:hidden; }
+.selection-row { grid-template-columns:1fr 1fr 1.6fr; }
+#game[data-fitting="true"] .selection-row { grid-template-columns:1fr 1fr 1.6fr 1fr; }

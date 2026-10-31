@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { runSpendingControl } from '../scripts/combat-pressure';
 
-test('issue 51 spending control reproduces the role-targeting voyage baseline', function () {
+test('issue 51 spending control reproduces the long-approach voyage baseline', function () {
 	const result = runSpendingControl();
 	expect(result.status).toBe('won');
 	expect(result.time).toBeCloseTo(210 + 1 / 60, 5);
@@ -11,8 +11,8 @@ test('issue 51 spending control reproduces the role-targeting voyage baseline', 
 	expect(result.minimumSensors).toBe(100);
 	expect(result.impairments).toBe(0);
 	// Shields do take damage; a hull-only report would conceal that pressure.
-	expect(result.minimumShield).toBeCloseTo(167, 5);
+	expect(result.minimumShield).toBeCloseTo(71, 5);
 	expect(result.purchases[0]).toMatchObject({ mount: 0, action: 'upgrade', cost: 60 });
-	expect(result.purchases[0]?.time).toBeCloseTo(9, 5);
-	expect(result.purchases.filter(function (purchase) { return purchase.action === 'upgrade'; })).toHaveLength(14);
+	expect(result.purchases[0]?.time).toBeCloseTo(21, 5);
+	expect(result.purchases.filter(function (purchase) { return purchase.action === 'upgrade'; })).toHaveLength(13);
 });

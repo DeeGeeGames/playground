@@ -2,10 +2,11 @@ import type { Point, State } from './simulation';
 
 export const SENSOR_CONFIG = {
 	maxIntegrity: 100,
+	shortRange: 700,
 	healthyThreshold: 50,
-	healthyDetectionRange: 760,
+	healthyDetectionRange: 2000,
 	healthyClassificationRange: 640,
-	impairedDetectionRange: 330,
+	impairedDetectionRange: 1000,
 	impairedClassificationRange: 230,
 	localDefenseRange: 200,
 	damagePerBomberHit: 35,

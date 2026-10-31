@@ -6,10 +6,10 @@ export type Sound = 'beam' | 'flak' | 'rail' | 'missile' | 'escort' | 'impact' |
 // Observe presentation state after every fixed step; never mutate gameplay or queue audio.
 export const createSoundObserver = function () {
 	let effects = new WeakSet<State['effects'][number]>();
-	let previous: { state: State; hull: number; kills: number; losses: number; wave: number; cleared: boolean; pulse: number; repair: number; status: State['status']; lastShot: number; cooldowns: number[]; escorts: Map<number, number> } | undefined;
+	let previous: { state: State; hull: number; kills: number; losses: number; contacts: Set<number>; cleared: boolean; pulse: number; repair: number; status: State['status']; lastShot: number; cooldowns: number[]; escorts: Map<number, number> } | undefined;
 	return function (state: State): Sound[] {
 		const before = previous;
-		previous = { state, hull: state.hull, kills: state.kills, losses: state.escortLosses, wave: state.wave, cleared: state.cleared, pulse: state.pulseCooldown, repair: state.repairCooldown, status: state.status, lastShot: state.nextId - 1, cooldowns: state.mounts.map(function (mount) { return mount.cooldown; }), escorts: new Map(state.escorts.map(function (craft) { return [craft.id, craft.cooldown]; })) };
+		previous = { state, hull: state.hull, kills: state.kills, losses: state.escortLosses, contacts: new Set(state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy); }).map(function (enemy) { return enemy.id; })), cleared: state.cleared, pulse: state.pulseCooldown, repair: state.repairCooldown, status: state.status, lastShot: state.nextId - 1, cooldowns: state.mounts.map(function (mount) { return mount.cooldown; }), escorts: new Map(state.escorts.map(function (craft) { return [craft.id, craft.cooldown]; })) };
 		if (!before || before.state !== state) { effects = new WeakSet(state.effects); return []; }
 		const sounds = new Set<Sound>();
 		// A close-range projectile may hit and disappear within the same fixed step.
@@ -31,7 +31,7 @@ export const createSoundObserver = function () {
 		}
 		if (state.hull < before.hull) sounds.add('damage');
 		if (state.kills > before.kills || state.escortLosses > before.losses) sounds.add('explosion');
-		if (state.wave > before.wave && state.enemies.some(function (enemy) { return enemy.id > before.lastShot && enemy.hp > 0 && canAcquire(state, enemy); })) sounds.add('contact');
+		if ([...previous.contacts].some(function (id) { return !before.contacts.has(id); })) sounds.add('contact');
 		if (state.cleared && !before.cleared) sounds.add('clear');
 		if (state.pulseCooldown > before.pulse) sounds.add('pulse');
 		if (state.repairCooldown > before.repair) sounds.add('repair');
