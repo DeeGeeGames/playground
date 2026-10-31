@@ -1,8 +1,9 @@
+import { createBackdrop } from './backdrop';
 import { MIN_CAMERA_ZOOM } from './combat-scale';
 import { COMBAT_EFFECT_LIMIT, createCombatVisual } from './combat-feedback';
 import { bomberCue, placeBomberCue } from './bomber-cue';
 import { updateCraftTurrets } from './craft-3d';
-import { ACESFilmicToneMapping, AdditiveBlending, BufferAttribute, BufferGeometry, Color, ConeGeometry, DirectionalLight, DoubleSide, Group, HemisphereLight, IcosahedronGeometry, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshStandardMaterial, MOUSE, Object3D, PCFSoftShadowMap, Points, PointsMaterial, Raycaster, RingGeometry, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, AdditiveBlending, BufferAttribute, BufferGeometry, Color, ConeGeometry, DirectionalLight, DoubleSide, Group, HemisphereLight, IcosahedronGeometry, InstancedMesh, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshStandardMaterial, MOUSE, Object3D, PCFSoftShadowMap, Raycaster, RingGeometry, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnemy, createEscort, createTurret, disposeObject, type TurretVisual } from './actors-3d';
@@ -90,7 +91,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		controls.removeEventListener('change', markLabelsDirty);
 		controls.dispose();
 		trajectories.clear();
-		scene.traverse(function (object) { if (object instanceof DirectionalLight) object.shadow.dispose(); });
+		scene.traverse(function (object) { if (object instanceof DirectionalLight) object.shadow.dispose(); if (object instanceof InstancedMesh) object.dispose(); });
 		disposeObject(scene);
 		scene.clear();
 		renderer.dispose();
@@ -167,19 +168,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		}
 		group.name = `beacon-${index}`; scene.add(group); return group;
 	});
-	const stars = [0.08, 0.2, 0.46].map(function (parallax, layer) {
-		const positions = new Float32Array(100 * 3);
-		for (let i = 0; i < 100; i++) { positions[i * 3] = (i * 173.73 + layer * 313) % 3000 - 1500; positions[i * 3 + 1] = (i * 97.31) % 1600 - 800; positions[i * 3 + 2] = (i * 239.17) % 2400 - 1200; }
-		const geometry = new BufferGeometry(); geometry.setAttribute('position', new BufferAttribute(positions, 3));
-		const points = new Points(geometry, new PointsMaterial({ color: layer === 2 ? '#7a94a6' : '#3b5064', size: layer === 2 ? 1.8 : 1.2, sizeAttenuation: false, depthWrite: false }));
-		scene.add(points); return { points, parallax, origins: positions.slice() };
-	});
-	const rocks = Array.from({ length: 48 }, function (_, i) {
-		const rock = new Mesh(new IcosahedronGeometry(18 + i * 11 % 27, 0), new MeshStandardMaterial({ color: '#1a2b3b', roughness: 1 }));
-		rock.position.set(i * 347 % 2200 - 1100, -160 - i % 3 * 40, (i % 2 === 0 ? -1 : 1) * (350 + i * 83 % 280));
-		rock.rotation.set(i * 0.4, i, i * 0.17); scene.add(rock); return { rock, index: i };
-	});
-	const navigation = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: '#254255', transparent: true, opacity: 0.24 })); scene.add(navigation);
+	const updateBackdrop = createBackdrop(scene);
 	const course = new Line(new BufferGeometry(), new LineDashedMaterial({ color: '#385c70', dashSize: 6, gapSize: 14, transparent: true, opacity: 0.55 })); scene.add(course);
 	let routeSignature = '';
 	const updateRoute = function (state: State) {
@@ -187,15 +176,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		if (signature === routeSignature) return;
 		routeSignature = signature;
 		const end = state.systems.routeLength + 1600;
-		const navPositions: number[] = [];
-		for (let i = -10; i <= Math.ceil(end / 160); i++) navPositions.push(i * 160, -105, -1000, i * 160, -105, 1000);
-		for (let i = -6; i <= 6; i++) navPositions.push(-1600, -105, i * 160, end, -105, i * 160);
-		navigation.geometry.dispose(); navigation.geometry = new BufferGeometry();
-		navigation.geometry.setAttribute('position', new BufferAttribute(new Float32Array(navPositions), 3));
-		navigation.position.set(state.routeOrigin.x, 0, state.routeOrigin.y);
 		course.geometry.dispose(); course.geometry = new BufferGeometry().setFromPoints([new Vector3(-1600, -8, 0), new Vector3(end, -8, 0)]);
-		course.position.copy(navigation.position); course.computeLineDistances();
-		for (const { rock, index } of rocks) rock.position.set(state.routeOrigin.x + index * 347 % (state.systems.routeLength + 2200) - 1100, -160 - index % 3 * 40, state.routeOrigin.y + (index % 2 === 0 ? -1 : 1) * (350 + index * 83 % 280));
+		course.position.set(state.routeOrigin.x, 0, state.routeOrigin.y); course.computeLineDistances();
 	};
 	let cameraAnchor: Point = { x: 0, y: 0 };
 	let carrierAngle = 0;
@@ -312,7 +294,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				const firing = state.status === 'running' ? state.effects.reduce<State['effects'][number] | undefined>(function (latest, effect) { return effect.feedback?.kind === 'muzzle' && effect.feedback.mount === index && effect.feedback.weapon === mount.weapon ? effect : latest; }, undefined) : undefined;
 				turret.update(mount, selected === index, { strength: beam ? 0.65 : firing ? firing.life / firing.maxLife : 0, beam }, reducedMotion);
 			}
-			const journey = journeyFor(state); const drift = reducedMotion ? 0 : journey.distance;
+			const journey = journeyFor(state);
 			const fieldPosition = state.systems.interdiction.field?.world; field.visible = !!fieldPosition; buoy.visible = !!fieldPosition;
 			if (fieldPosition) { field.position.set(fieldPosition.x, FLIGHT_HEIGHT, fieldPosition.y); buoy.position.set(fieldPosition.x, FLIGHT_HEIGHT + 8, fieldPosition.y); }
 			fieldPreview.visible = !!placement; placementRange.visible = !!placement;
@@ -372,7 +354,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			for (const [index, visual] of effects.entries()) { const effect = activeEffects[index]; visual.root.visible = !!effect; if (effect) visual.update(effect, state, reducedMotion); }
 			gate.visible = journey.remaining <= 1100; gate.position.set(state.routeOrigin.x + state.systems.routeLength, 25, state.routeOrigin.y);
 			for (const [index, beacon] of beacons.entries()) { const at = beaconFor(index, state); beacon.position.set(at.x, 0, at.y); beacon.visible = Math.abs(at.x - state.ark.x) <= 1100; }
-			for (const { points, parallax, origins } of stars) { points.position.set(state.ark.x, 0, state.ark.y); const position = points.geometry.getAttribute('position'); for (let i = 0; i < position.count; i++) position.setX(i, (((origins[i * 3] ?? 0) - drift * parallax + 1500) % 3000 + 3000) % 3000 - 1500); position.needsUpdate = true; }
+			updateBackdrop(state, view, reducedMotion);
 			scene.updateMatrixWorld(true); updateVisibility(state); renderer.render(scene, view.camera); drawLabels(state, selected);
 		},
 		pick: function (point, state) {

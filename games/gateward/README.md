@@ -554,3 +554,9 @@ schedules, and mission clocks retain their original values. The camera permits
 zoom down to 0.1625 (four times farther out than the previous 0.65 limit).
 Historical validation snapshots above describe their original tuning; they are
 not balance or play-feel acceptance for this expanded space.
+
+The decorative backdrop follows the visible camera footprint at all zooms and
+orbits. The world-anchored grid adjusts spacing as the camera zooms out;
+deterministic instanced asteroid cells provide nearby debris and a larger outer
+field. Camera-aligned star layers retain viewport coverage and optional parallax.
+These decorations do not participate in combat, sensors, or collision rules.
