@@ -1,8 +1,9 @@
-import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fieldBlocks, fieldRelative, INTERDICTION_CONFIG, navigateField, type Detour } from './interdiction';
+import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fieldBlocks, INTERDICTION_CONFIG, navigateField, type Detour } from './interdiction';
 import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
 import { ESCORT_DRILL, SYSTEMS_TRIAL, type Scenario } from './scenarios';
 import { absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
-import { broadsideMuzzle, capitalCourse, createFlight, fighterCourse, fly, inBroadside, isCapital, type Flight } from './flight';
+import { arriveCourse, broadsideMuzzle, capitalCourse, createFlight, fighterCourse, fly, inBroadside, isCapital, type Flight } from './flight';
+import { arkVelocity, flightVelocity, localPoint, mountWorld, worldPoint } from './space';
 export type Point = { x: number; y: number };
 export type Weapon = 'flak' | 'rail' | 'missile' | 'beam';
 export type EnemyKind = 'raider' | 'bomber' | 'armored' | 'flagship';
@@ -30,7 +31,7 @@ export const ENEMIES = {
 export interface Mount extends Point { weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
 export interface Enemy extends Point { flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
 export interface Escort extends Point { flight?: Flight; wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
-export interface Shot extends Point { beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
+export interface Shot extends Point { origin?: Point; sourceVelocity?: Point; beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
 export interface Effect extends Point { sourceShot?: Shot; radius: number; life: number; maxLife: number; color: string }
 export interface Arrival { at: number; kind: EnemyKind; x: number; y: number }
 export const SECTORS = ['port', 'starboard', 'ahead', 'astern'] as const;
@@ -39,6 +40,8 @@ export const SECTOR_POINTS: Record<Sector, Point> = { port: { x: 0, y: -230 }, s
 export interface Wing { id: number; phase: 'ready' | 'launching' | 'sortie' | 'returning' | 'rearming'; timer: number; craft: Escort[]; assignment: Sector; }
 export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
 export interface State {
+	ark: Point & { angle: number; speed: number };
+	routeOrigin: Point;
 	systems: SystemsState;
 	resultReason: 'hull' | 'deadline' | 'arrival' | undefined;
 	scenario: Scenario | undefined; experimental: boolean; wings: Wing[]; launches: number; orders: number; escortLosses: number; coverageDegrees: number; paused: boolean; focused: boolean;
@@ -52,6 +55,7 @@ export const distance = function (a: Point, b: Point): number { return Math.hypo
 export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill' | 'systems' } = {}): State {
 	const scenario = options.scenario === 'systems' ? SYSTEMS_TRIAL : options.scenario === 'drill' ? ESCORT_DRILL : undefined;
 	return {
+		ark: { x: 0, y: 0, angle: 0, speed: 0 }, routeOrigin: { x: 0, y: 0 },
 		resultReason: undefined,
 		systems: createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed),
 		scenario, experimental: scenario !== undefined || (options.experimental ?? false), wings: [], launches: 0, orders: 0, escortLosses: 0, coverageDegrees: options.coverageDegrees ?? (scenario ? 240 : 360), paused: false, focused: true,
@@ -72,8 +76,9 @@ export const interdictionReason = function (state: State, point?: Point): string
 	if (state.salvage < INTERDICTION_CONFIG.cost) return `Need ${INTERDICTION_CONFIG.cost} salvage`;
 	if (!point) return '';
 	if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return 'Choose a valid point';
-	if (point.x < INTERDICTION_CONFIG.minRelativeX || Math.hypot(point.x, point.y) > INTERDICTION_CONFIG.maxRange) return 'Place ahead or beside the ark, within 450m';
-	const fromHull = Math.hypot(Math.max(0, Math.abs(point.x) - 145), Math.max(0, Math.abs(point.y) - 40));
+	const local = localPoint(state, point);
+	if (local.x < INTERDICTION_CONFIG.minRelativeX || Math.hypot(local.x, local.y) > INTERDICTION_CONFIG.maxRange) return 'Place ahead or beside the ark, within 450m';
+	const fromHull = Math.hypot(Math.max(0, Math.abs(local.x) - 145), Math.max(0, Math.abs(local.y) - 40));
 	if (fromHull <= INTERDICTION_CONFIG.radius + INTERDICTION_CONFIG.minArkClearance) return 'Field must clear the ark hull';
 	if (state.enemies.some(function (enemy) { return enemy.hp > 0 && distance(point, enemy) <= enemyClearance(enemy); })) return 'Field must clear hostile ships';
 	return '';
@@ -82,7 +87,7 @@ export const placeInterdiction = function (state: State, point: Point): boolean 
 	if (interdictionReason(state, point)) return false;
 	const systems = state.systems;
 	state.salvage -= INTERDICTION_CONFIG.cost;
-	systems.interdiction.field = { id: state.nextId++, world: { x: systems.distanceTraveled + point.x, y: point.y }, remaining: INTERDICTION_CONFIG.lifetime };
+	systems.interdiction.field = { id: state.nextId++, world: { ...point }, remaining: INTERDICTION_CONFIG.lifetime };
 	systems.interdiction.cooldown = INTERDICTION_CONFIG.cooldown; systems.interdiction.placements++;
 	notify(state, 'Interdiction deployed. Hostile approaches and rounds are blocked.');
 	return true;
@@ -120,8 +125,9 @@ export const coverageFor = function (state: State, mount: Mount) {
 };
 export const covered = function (state: State, mount: Mount, target: Point): boolean {
 	const { range, center, arc } = coverageFor(state, mount);
-	const angle = Math.atan2(target.y - mount.y, target.x - mount.x) - center;
-	return distance(mount, target) <= range + 1e-8 && Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle))) <= arc / 2 + 1e-8;
+	const local = localPoint(state, target);
+	const angle = Math.atan2(local.y - mount.y, local.x - mount.x) - center;
+	return distance(mount, local) <= range + 1e-8 && Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle))) <= arc / 2 + 1e-8;
 };
 export const invested = function (mount: Mount): number {
 	return mount.weapon ? WEAPONS[mount.weapon].cost + (mount.level >= 2 ? Math.round(WEAPONS[mount.weapon].cost * 0.8) : 0) + (mount.level >= 3 ? Math.round(WEAPONS[mount.weapon].cost * 1.2) : 0) : 0;
@@ -138,14 +144,14 @@ export const deploy = function (state: State, kind: EscortKind): boolean {
 		const wing: Wing = { id: state.nextId++, phase: 'ready', timer: 0, craft: [], assignment: 'port' };
 		wing.craft = Array.from({ length: 3 }, function () { return makeFighter(state, wing.id); }); state.wings.push(wing); return true;
 	}
-	for (let i = 0; i < config.count; i++) state.escorts.push({ id: state.nextId++, kind, ...(state.experimental && kind === 'guardian' ? { sector: 'port' as const } : {}), x: -110, y: (i - 1) * 18, hp: config.hp, cooldown: i * 0.1, angle: 0 });
+	for (let i = 0; i < config.count; i++) state.escorts.push({ id: state.nextId++, kind, ...(state.experimental && kind === 'guardian' ? { sector: 'port' as const } : {}), ...worldPoint(state, { x: -110, y: (i - 1) * 18 }), hp: config.hp, cooldown: i * 0.1, angle: state.ark.angle });
 	return true;
 };
 export const craftCount = function (state: State): number {
 	return state.escorts.length + state.wings.filter(function (w) { return w.phase === 'ready' || w.phase === 'rearming'; }).reduce(function (n, w) { return n + w.craft.length; }, 0);
 };
 const makeFighter = function (state: State, wingId: number): Escort {
-	return { id: state.nextId++, wingId, kind: 'interceptor', x: -110, y: 0, hp: ESCORTS.interceptor.hp, cooldown: 0, angle: Math.PI };
+	return { id: state.nextId++, wingId, kind: 'interceptor', ...worldPoint(state, { x: -110, y: 0 }), hp: ESCORTS.interceptor.hp, cooldown: 0, angle: state.ark.angle };
 };
 export const scrambleReason = function (state: State, wing: Wing): string {
 	if (!canOrder(state)) return state.paused ? 'Paused' : !state.focused ? 'Command link unfocused' : 'Run ended';
@@ -157,7 +163,11 @@ export const scramble = function (state: State, id: number, sector: Sector): boo
 	const wing = state.wings.find(function (w) { return w.id === id; });
 	if (!wing || scrambleReason(state, wing)) return false;
 	wing.assignment = sector; wing.phase = 'launching'; wing.timer = WING_TIMING.launch;
-	for (const [i, craft] of wing.craft.entries()) { craft.x = -110; craft.y = (i - 1) * 18; state.escorts.push(craft); }
+	for (const [i, craft] of wing.craft.entries()) {
+		Object.assign(craft, worldPoint(state, { x: -110, y: (i - 1) * 18 }));
+		craft.flight = { angle: state.ark.angle, speed: state.ark.speed, side: i % 2 ? -1 : 1, course: 'intercept', run: 1 }; craft.angle = state.ark.angle;
+		state.escorts.push(craft);
+	}
 	state.launches++; state.orders++; return true;
 };
 export const replaceFighters = function (state: State, id: number): boolean {
@@ -172,11 +182,14 @@ export const replaceFighters = function (state: State, id: number): boolean {
 const updateWings = function (state: State, dt: number) {
 	for (const wing of state.wings) {
 		wing.craft = wing.craft.filter(function (craft) { return craft.hp > 0; });
+		if (wing.phase === 'ready' || wing.phase === 'rearming') {
+			for (const craft of wing.craft) { Object.assign(craft, worldPoint(state, { x: -110, y: 0 })); craft.angle = state.ark.angle; }
+		}
 		if (wing.phase === 'ready') continue;
 		wing.timer = Math.max(0, wing.timer - dt);
 		if (wing.phase === 'launching' && wing.timer === 0) { wing.phase = 'sortie'; wing.timer = WING_TIMING.sortie; }
 		else if (wing.phase === 'sortie' && (wing.timer === 0 || wing.craft.length === 0)) wing.phase = 'returning';
-		else if (wing.phase === 'returning' && wing.craft.every(function (craft) { return distance(craft, { x: -110, y: 0 }) < 8; })) {
+		else if (wing.phase === 'returning' && wing.craft.every(function (craft) { return distance(craft, worldPoint(state, { x: -110, y: 0 })) < 8; })) {
 			state.escorts = state.escorts.filter(function (craft) { return craft.wingId !== wing.id; }); wing.phase = 'rearming'; wing.timer = WING_TIMING.rearm;
 		} else if (wing.phase === 'rearming' && wing.timer === 0) wing.phase = 'ready';
 	}
@@ -185,6 +198,11 @@ export const assignGuardian = function (state: State, id: number, sector: Sector
 	const guardian = state.escorts.find(function (e) { return e.id === id && e.kind === 'guardian' && e.hp > 0; });
 	if (!canOrder(state) || !state.experimental || !guardian || guardian.sector === sector) return false;
 	guardian.sector = sector; state.orders++; return true;
+};
+export const setRally = function (state: State, point: Point): boolean {
+	if (!canOrder(state) || state.experimental || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return false;
+	const offset = localPoint(state, point);
+	state.rally = { x: Math.max(-450, Math.min(450, offset.x)), y: Math.max(-370, Math.min(370, offset.y)) }; return true;
 };
 export const repair = function (state: State): boolean {
 	if (!canOrder(state) || state.salvage < 80 || state.hull >= MAX_HULL || state.repairCooldown > 0) return false;
@@ -210,10 +228,10 @@ const clearLostPriority = function (state: State) {
 export const pulse = function (state: State): boolean {
 	if (!canOrder(state) || state.status !== 'running' || state.pulseCooldown > 0) return false;
 	state.pulseCooldown = 32; state.aegisRemaining = 5; state.shots = state.shots.filter(function (shot) { return shot.side !== 'enemy'; });
-	state.effects.push({ x: 0, y: 0, radius: 310, life: 0.8, maxLife: 0.8, color: '#88f1e4' });
+	state.effects.push({ x: state.ark.x, y: state.ark.y, radius: 310, life: 0.8, maxLife: 0.8, color: '#88f1e4' });
 	for (const enemy of state.enemies) {
-		const d = distance(enemy, { x: 0, y: 0 });
-		if (d < 310) { enemy.hp -= 45; const angle = Math.atan2(enemy.y, enemy.x); enemy.x += Math.cos(angle) * 75; enemy.y += Math.sin(angle) * 75; }
+		const d = distance(enemy, state.ark);
+		if (d < 310) { enemy.hp -= 45; const angle = Math.atan2(enemy.y - state.ark.y, enemy.x - state.ark.x); enemy.x += Math.cos(angle) * 75; enemy.y += Math.sin(angle) * 75; }
 	}
 	notify(state, 'AEGIS: incoming rounds cleared. 80% hull protection for 5 seconds.'); return true;
 };
@@ -251,7 +269,7 @@ export const contactWarning = function (state: State): string {
 	if (next) {
 		const bearing = SECTOR_POINTS[next.sector]; const angle = Math.atan2(bearing.y, bearing.x);
 		const range = Math.hypot(Math.cos(angle) * 520, Math.sin(angle) * 460) + ENEMIES[next.kind].speed * Math.max(0, next.at - state.time);
-		const intel = contactIntel(state, { x: Math.cos(angle) * range, y: Math.sin(angle) * range });
+		const intel = contactIntel(state, worldPoint(state, { x: Math.cos(angle) * range, y: Math.sin(angle) * range }));
 		if (intel === 'classified') return `${next.sector.toUpperCase()} · ${next.count} ${next.kind} · arrival ${Math.max(0, Math.ceil(next.at - state.time))}s`;
 		if (intel === 'detected') return `${next.sector.toUpperCase()} · unclassified contact`;
 	}
@@ -259,23 +277,23 @@ export const contactWarning = function (state: State): string {
 	for (const arrival of [...state.arrivals, ...futureWave]) {
 		const radius = Math.hypot(arrival.x, arrival.y);
 		const range = radius + ENEMIES[arrival.kind].speed * Math.max(0, arrival.at - state.time);
-		const intel = contactIntel(state, { x: arrival.x * range / radius, y: arrival.y * range / radius });
+		const intel = contactIntel(state, worldPoint(state, { x: arrival.x * range / radius, y: arrival.y * range / radius }));
 		if (intel === 'classified') return `${contactDirection(arrival)} · ${arrival.kind} · arrival ${Math.max(0, Math.ceil(arrival.at - state.time))}s`;
 		if (intel === 'detected') return `${contactDirection(arrival)} · unclassified contact`;
 	}
 	const contacts = state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy); });
 	const contact = contacts[0];
 	if (!contact) return 'Scanning for contacts';
-	if (contactIntel(state, contact) === 'detected') return `${contactDirection(contact)} · unclassified contact`;
-	const count = contacts.filter(function (enemy) { return enemy.kind === contact.kind && contactDirection(enemy) === contactDirection(contact) && contactIntel(state, enemy) === 'classified'; }).length;
-	return `${contactDirection(contact)} · ${count} ${contact.kind} · in range`;
+	if (contactIntel(state, contact) === 'detected') return `${contactDirection(localPoint(state, contact))} · unclassified contact`;
+	const count = contacts.filter(function (enemy) { return enemy.kind === contact.kind && contactDirection(localPoint(state, enemy)) === contactDirection(localPoint(state, contact)) && contactIntel(state, enemy) === 'classified'; }).length;
+	return `${contactDirection(localPoint(state, contact))} · ${count} ${contact.kind} · in range`;
 };
 const effect = function (state: State, point: Point, radius: number, color: string, sourceShot?: Shot) {
 	state.effects.push({ x: point.x, y: point.y, radius, life: 0.45, maxLife: 0.45, color, ...(sourceShot ? { sourceShot: { ...sourceShot } } : {}) });
 };
-const fire = function (state: State, from: Point, to: Point, damage: number, speed: number, side: Shot['side'], weapon: Shot['weapon'], target: number | undefined, sensorDamage?: number) {
+const fire = function (state: State, from: Point, to: Point, damage: number, speed: number, side: Shot['side'], weapon: Shot['weapon'], target: number | undefined, sourceVelocity: Point, sensorDamage?: number) {
 	const angle = Math.atan2(to.y - from.y, to.x - from.x);
-	state.shots.push({ id: state.nextId++, x: from.x, y: from.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, damage, side, weapon, target, life: 4, ...(sensorDamage === undefined ? {} : { sensorDamage }) });
+	state.shots.push({ id: state.nextId++, x: from.x, y: from.y, vx: Math.cos(angle) * speed + sourceVelocity.x, vy: Math.sin(angle) * speed + sourceVelocity.y, origin: { ...from }, sourceVelocity: { ...sourceVelocity }, damage, side, weapon, target, life: 4, ...(sensorDamage === undefined ? {} : { sensorDamage }) });
 };
 const interceptTime = function (from: Point, to: Point, velocity: Point, speed: number): number {
 	const dx = to.x - from.x; const dy = to.y - from.y;
@@ -287,9 +305,6 @@ const interceptTime = function (from: Point, to: Point, velocity: Point, speed: 
 	const times = [(-b - Math.sqrt(discriminant)) / (2 * a), (-b + Math.sqrt(discriminant)) / (2 * a)].filter(function (time) { return time >= 0 && time <= 4; });
 	return times.length ? Math.min(...times) : 0;
 };
-const flightVelocity = function (flight: Flight | undefined, arkSpeed: number): Point {
-	return flight ? { x: Math.cos(flight.angle) * flight.speed - arkSpeed, y: Math.sin(flight.angle) * flight.speed } : { x: 0, y: 0 };
-};
 const aimAhead = function (from: Point, target: Point, velocity: Point, speed: number): Point {
 	const time = interceptTime(from, target, velocity, speed);
 	return { x: target.x + velocity.x * time, y: target.y + velocity.y * time };
@@ -297,7 +312,8 @@ const aimAhead = function (from: Point, target: Point, velocity: Point, speed: n
 const hostileSolution = function (enemy: Enemy, target: Point, velocity: Point, speed: number): { muzzle: Point; aim: Point } | undefined {
 	const muzzle = isCapital(enemy) ? broadsideMuzzle(enemy, target) : enemy;
 	if (!muzzle) return undefined;
-	const aim = aimAhead(muzzle, target, velocity, speed);
+	const source = flightVelocity(enemy.flight);
+	const aim = aimAhead(muzzle, target, { x: velocity.x - source.x, y: velocity.y - source.y }, speed);
 	return isCapital(enemy) && !inBroadside(enemy.flight?.angle ?? 0, muzzle, aim) ? undefined : { muzzle, aim };
 };
 const nearest = function <T extends Point>(from: Point, targets: readonly T[], range: number): T | undefined {
@@ -309,15 +325,28 @@ const targetFor = function (state: State, from: Point, range: number): Enemy | u
 	const priority = state.enemies.find(function (enemy) { return enemy.id === state.priority && enemy.hp > 0 && distance(from, enemy) <= range; });
 	return priority ?? nearest(from, state.enemies.filter(function (enemy) { return enemy.hp > 0; }), range);
 };
-const moveToward = function (point: Point, target: Point, speed: number, dt: number) {
-	const d = distance(point, target); if (d <= 1) return;
-	const travel = Math.min(speed * dt, d); point.x += (target.x - point.x) / d * travel; point.y += (target.y - point.y) / d * travel;
-};
 const damageEnemy = function (enemy: Enemy, damage: number, weapon: Shot['weapon']) { enemy.hp -= damage * (weapon === 'rail' ? 1 : ENEMIES[enemy.kind].armor); };
 const segmentDistance = function (point: Point, a: Point, b: Point): number {
 	const dx = b.x - a.x; const dy = b.y - a.y; const length = dx * dx + dy * dy;
 	const t = length > 0 ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length)) : 0;
 	return distance(point, { x: a.x + dx * t, y: a.y + dy * t });
+};
+const movingContact = function (point: Point, previous: Point, from: Point, to: Point, radius: number): boolean {
+	return segmentDistance({ x: 0, y: 0 }, { x: from.x - previous.x, y: from.y - previous.y }, { x: to.x - point.x, y: to.y - point.y }) < radius;
+};
+const hullContact = function (state: State, previous: Point, from: Point, to: Point): Point | undefined {
+	const c = Math.cos(state.ark.angle); const s = Math.sin(state.ark.angle);
+	const start = { x: c * (from.x - previous.x) + s * (from.y - previous.y), y: -s * (from.x - previous.x) + c * (from.y - previous.y) };
+	const end = localPoint(state, to);
+	let first = 0; let last = 1;
+	for (const [a, b, half] of [[start.x, end.x, 145], [start.y, end.y, 40]] as const) {
+		const delta = b - a;
+		if (Math.abs(delta) < 1e-10) { if (Math.abs(a) > half) return undefined; continue; }
+		const t1 = (-half - a) / delta; const t2 = (half - a) / delta;
+		first = Math.max(first, Math.min(t1, t2)); last = Math.min(last, Math.max(t1, t2));
+		if (first > last) return undefined;
+	}
+	return { x: from.x + (to.x - from.x) * first, y: from.y + (to.y - from.y) * first };
 };
 export const step = function (state: State, dt: number) {
 	if (!canOrder(state) || state.status !== 'running' || !Number.isFinite(dt) || dt <= 0) return;
@@ -325,19 +354,24 @@ export const step = function (state: State, dt: number) {
 	const deadline = state.scenario?.deadline;
 	if (deadline !== undefined && state.time >= deadline) { state.status = 'lost'; state.resultReason = state.hull <= 0 ? 'hull' : 'deadline'; state.shots = []; return; }
 	dt = Math.min(dt, 0.05, deadline === undefined ? Infinity : Math.max(0, deadline - state.time)); state.time += dt;
+	const previousArk = { x: state.ark.x, y: state.ark.y };
+	const previousEnemies = new Map(state.enemies.map(function (enemy) { return [enemy.id, { x: enemy.x, y: enemy.y }] as const; }));
+	const previousEscorts = new Map(state.escorts.map(function (escort) { return [escort.id, { x: escort.x, y: escort.y }] as const; }));
 	state.pulseCooldown = Math.max(0, state.pulseCooldown - dt); state.aegisRemaining = Math.max(0, state.aegisRemaining - dt); state.repairCooldown = Math.max(0, state.repairCooldown - dt); state.messageTime = Math.max(0, state.messageTime - dt);
 	const distanceBefore = state.systems.distanceTraveled;
 	state.systems.sensors.repairCooldown = Math.max(0, state.systems.sensors.repairCooldown - dt);
 	state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
 	state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + powerOutputs(state.systems.allocation).speed * dt);
-	const fieldDrift = (state.systems.distanceTraveled) - distanceBefore;
-	const arkSpeed = fieldDrift / dt;
+	const travel = state.systems.distanceTraveled - distanceBefore;
+	state.ark.speed = travel / dt;
+	state.ark.x += Math.cos(state.ark.angle) * travel; state.ark.y += Math.sin(state.ark.angle) * travel;
+	const carrierVelocity = arkVelocity(state);
 	advanceInterdiction(state, dt);
 	// The reactor provides a modest income even while enemies remain outside firing range.
 	state.salvage += dt * 1.2;
 	if (state.time >= state.nextWave) { if (state.scenario) startEncounter(state); else if (state.wave < WAVE_COUNT) startWave(state); }
 	for (const arrival of state.arrivals.filter(function (a) { return a.at <= state.time; })) {
-		const config = ENEMIES[arrival.kind]; const position = arrivalOutsideField(state, arrival, arrival.kind); state.enemies.push({ id: state.nextId++, kind: arrival.kind, x: position.x, y: position.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8 });
+		const config = ENEMIES[arrival.kind]; const position = arrivalOutsideField(state, worldPoint(state, arrival), arrival.kind); state.enemies.push({ id: state.nextId++, kind: arrival.kind, x: position.x, y: position.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8 });
 	}
 	state.arrivals = state.arrivals.filter(function (a) { return a.at > state.time; });
 	clearLostPriority(state);
@@ -348,78 +382,67 @@ export const step = function (state: State, dt: number) {
 		mount.cooldown = Math.max(0, mount.cooldown - dt * weaponRate);
 		if (!mount.weapon || weaponRate === 0) continue;
 		const config = WEAPONS[mount.weapon]; const candidates = state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy) && covered(state, mount, enemy); });
-		const target = candidates.find(function (enemy) { return enemy.id === state.priority; }) ?? nearest(mount, candidates, coverageFor(state, mount).range);
+		const origin = mountWorld(state, mount);
+		const target = candidates.find(function (enemy) { return enemy.id === state.priority; }) ?? nearest(origin, candidates, coverageFor(state, mount).range);
 		if (!target) continue;
 		// Track the firing solution even while reloading; barrels must finish turning before firing.
-		const aim = mount.weapon === 'beam' ? target : aimAhead(mount, target, flightVelocity(target.flight, arkSpeed), config.speed);
-		const desired = Math.atan2(aim.y - mount.y, aim.x - mount.x);
+		const targetVelocity = flightVelocity(target.flight);
+		const aim = mount.weapon === 'beam' ? target : aimAhead(origin, target, { x: targetVelocity.x - carrierVelocity.x, y: targetVelocity.y - carrierVelocity.y }, config.speed);
+		const desired = Math.atan2(aim.y - origin.y, aim.x - origin.x) - state.ark.angle;
 		const error = Math.atan2(Math.sin(desired - mount.aim), Math.cos(desired - mount.aim));
 		const travel = config.rotationSpeed * dt;
 		mount.aim += Math.max(-travel, Math.min(travel, error));
 		if (Math.abs(error) > travel) continue;
 		if (mount.weapon === 'beam') {
 			damageEnemy(target, config.damage * dt * weaponRate * (1 + (mount.level - 1) * 0.55) * (1 + (mount.level - 1) * 0.12), 'beam');
-			state.shots.push({ id: state.nextId++, x: target.x, y: target.y, beamFrom: { x: mount.x, y: mount.y }, vx: 0, vy: 0, damage: 0, side: 'player', weapon: 'beam', target: target.id, life: 4 });
+			state.shots.push({ id: state.nextId++, x: target.x, y: target.y, beamFrom: origin, vx: 0, vy: 0, damage: 0, side: 'player', weapon: 'beam', target: target.id, life: 4 });
 			if (mount.cooldown <= 0) mount.cooldown = config.reload;
 			continue;
 		}
-		if (mount.cooldown <= 0) { fire(state, mount, aim, config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); }
+		if (mount.cooldown <= 0) { fire(state, origin, aim, config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id, carrierVelocity); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); }
 	}
 	updateWings(state, dt);
-	const escortVelocities = new Map<number, Point>();
 	for (const [i, escort] of state.escorts.entries()) {
 		if (escort.hp <= 0) continue;
 		const config = ESCORTS[escort.kind]; escort.cooldown -= dt;
 		const wing = state.wings.find(function (w) { return w.id === escort.wingId; });
-		if (wing && wing.phase !== 'sortie') {
-			delete escort.flight;
-			const destination = wing.phase === 'launching' ? SECTOR_POINTS[wing.assignment] : { x: -110, y: 0 };
-			escort.angle = Math.atan2(destination.y - escort.y, destination.x - escort.x); moveToward(escort, destination, config.speed, dt); continue;
+		const phaseAllowsFire = !wing || wing.phase === 'sortie';
+		const offset = escort.sector ? SECTOR_POINTS[escort.sector] : wing ? SECTOR_POINTS[wing.assignment] : { x: state.rally.x + Math.cos(i * 2.4) * 45, y: state.rally.y + Math.sin(i * 2.4) * 45 };
+		const formation = worldPoint(state, offset);
+		const target = !phaseAllowsFire ? undefined : wing || escort.sector ? nearest(escort, state.enemies.filter(function (enemy) { return enemy.hp > 0 && distance(enemy, formation) <= 180; }), 300) : targetFor(state, escort, 300);
+		const engaging = escort.kind === 'interceptor' && target && distance(target, formation) < 320;
+		const destination = wing?.phase === 'returning' ? worldPoint(state, { x: -110, y: 0 }) : formation;
+		const desired = engaging ? fighterCourse(escort, target, 65, 65, config.speed, escort.id % 2 ? -1 : 1, flightVelocity(target.flight), state.escorts)
+			: arriveCourse(escort, destination, carrierVelocity);
+		escort.flight ??= { angle: escort.angle, speed: state.ark.speed, side: i % 2 ? -1 : 1, course: 'intercept', run: 1 };
+		fly(escort, escort.flight, desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt);
+		escort.angle = escort.flight.angle;
+		if (target && distance(escort, target) <= config.range && escort.cooldown <= 0) {
+			const velocity = flightVelocity(target.flight); const sourceVelocity = flightVelocity(escort.flight);
+			fire(state, escort, aimAhead(escort, target, { x: velocity.x - sourceVelocity.x, y: velocity.y - sourceVelocity.y }, 550), config.damage, 550, 'player', 'escort', target.id, sourceVelocity); escort.cooldown = config.reload;
 		}
-		const formation = escort.sector ? SECTOR_POINTS[escort.sector] : wing ? SECTOR_POINTS[wing.assignment] : { x: state.rally.x + Math.cos(i * 2.4) * 45, y: state.rally.y + Math.sin(i * 2.4) * 45 };
-		const target = wing || escort.sector ? nearest(escort, state.enemies.filter(function (e) { return e.hp > 0 && distance(e, formation) <= 180; }), 300) : targetFor(state, escort, 300);
-		const destination = target && distance(target, formation) < 320 ? target : formation;
-		const standOff = destination === target ? config.range * 0.75 : 5;
-		const before = { x: escort.x, y: escort.y };
-		if (escort.kind === 'interceptor' && target && destination === target) {
-			const desired = fighterCourse(escort, target, 65, 65, config.speed, escort.id % 2 ? -1 : 1, arkSpeed, state.escorts);
-			escort.flight ??= createFlight(escort, desired, config.speed, escort.id);
-			fly(escort, escort.flight, desired, config.speed, 4, fieldDrift, dt);
-			escort.angle = escort.flight.angle;
-		} else {
-			delete escort.flight;
-			if (distance(escort, destination) > standOff) moveToward(escort, destination, config.speed, dt);
-			escort.angle = Math.atan2(destination.y - escort.y, destination.x - escort.x);
-		}
-		escortVelocities.set(escort.id, { x: (escort.x - before.x) / dt, y: (escort.y - before.y) / dt });
-		if (target && distance(escort, target) <= config.range && escort.cooldown <= 0) { fire(state, escort, aimAhead(escort, target, flightVelocity(target.flight, arkSpeed), 550), config.damage, 550, 'player', 'escort', target.id); escort.cooldown = config.reload; }
 	}
 	for (const enemy of state.enemies) {
 		if (enemy.hp <= 0) continue;
 		const config = ENEMIES[enemy.kind]; enemy.cooldown -= dt;
-		const escort = nearest(enemy, state.escorts.filter(function (e) { return e.hp > 0; }), 180);
-		const arkTarget = { x: Math.max(-110, Math.min(110, enemy.x)), y: Math.max(-30, Math.min(30, enemy.y)) };
+		const escort = nearest(enemy, state.escorts.filter(function (craft) { return craft.hp > 0; }), 180);
+		const relative = localPoint(state, enemy);
+		const arkTarget = worldPoint(state, { x: Math.max(-110, Math.min(110, relative.x)), y: Math.max(-30, Math.min(30, relative.y)) });
 		const destination = escort ?? arkTarget;
-		enemy.flight ??= createFlight(enemy, { x: arkSpeed - enemy.x, y: -enemy.y }, config.speed, enemy.id);
+		enemy.flight ??= createFlight(relative, { x: state.ark.x - enemy.x, y: state.ark.y - enemy.y }, config.speed, enemy.id);
 		const flight = enemy.flight;
-		const before = { x: enemy.x, y: enemy.y };
-		const detouring = navigateField(state, enemy, destination, config.speed, dt, fieldDrift, true);
-		if (detouring) {
-			const dx = enemy.x - before.x + fieldDrift; const dy = enemy.y - before.y;
-			if (Math.hypot(dx, dy) > 1e-8) flight.angle = Math.atan2(dy, dx);
-			flight.speed = Math.hypot(dx, dy) / dt;
-		} else {
-			const desired = isCapital(enemy) ? capitalCourse(enemy, flight, config.range, config.speed, arkSpeed)
-				: fighterCourse(enemy, escort ?? { x: 0, y: 0 }, escort ? 60 : enemy.kind === 'bomber' ? 265 : 195, escort ? 60 : enemy.kind === 'bomber' ? 225 : 105, config.speed, enemy.id % 2 ? -1 : 1, arkSpeed, state.enemies);
-			fly(enemy, flight, desired, config.speed, isCapital(enemy) ? 0.7 : 3, fieldDrift, dt);
-		}
+		const waypoint = navigateField(state, enemy, destination, config.speed, dt);
+		const desired = waypoint ? arriveCourse(enemy, waypoint, { x: 0, y: 0 }, 2)
+			: isCapital(enemy) ? capitalCourse(state, enemy, flight, config.range, config.speed)
+			: fighterCourse(enemy, escort ?? state.ark, escort ? 60 : enemy.kind === 'bomber' ? 265 : 195, escort ? 60 : enemy.kind === 'bomber' ? 225 : 105, config.speed, enemy.id % 2 ? -1 : 1, escort ? flightVelocity(escort.flight) : carrierVelocity, state.enemies);
+		fly(enemy, flight, desired, config.speed, isCapital(enemy) ? 0.7 : 3, dt);
 		const shotSpeed = enemy.kind === 'bomber' ? 155 : 235;
-		const escortSolution = escort ? hostileSolution(enemy, escort, escortVelocities.get(escort.id) ?? { x: 0, y: 0 }, shotSpeed) : undefined;
+		const escortSolution = escort ? hostileSolution(enemy, escort, flightVelocity(escort.flight), shotSpeed) : undefined;
 		const firingEscort = escortSolution ? escort : undefined;
 		const firingTarget = firingEscort ?? arkTarget;
-		const solution = escortSolution ?? hostileSolution(enemy, arkTarget, { x: 0, y: 0 }, shotSpeed);
+		const solution = escortSolution ?? hostileSolution(enemy, arkTarget, carrierVelocity, shotSpeed);
 		if (enemy.cooldown <= 0 && solution && distance(enemy, firingTarget) <= config.range && !fieldBlocks(state, solution.muzzle, solution.aim)) {
-			fire(state, solution.muzzle, solution.aim, config.damage, shotSpeed, 'enemy', 'hostile', firingEscort?.id, enemy.kind === 'bomber' ? SENSOR_CONFIG.damagePerBomberHit : undefined); enemy.cooldown = config.reload;
+			fire(state, solution.muzzle, solution.aim, config.damage, shotSpeed, 'enemy', 'hostile', firingEscort?.id, flightVelocity(flight), enemy.kind === 'bomber' ? SENSOR_CONFIG.damagePerBomberHit : undefined); enemy.cooldown = config.reload;
 		}
 	}
 	let arkHit = false;
@@ -428,24 +451,26 @@ export const step = function (state: State, dt: number) {
 		const before = { x: shot.x, y: shot.y }; shot.life -= dt;
 		if (shot.weapon === 'missile') {
 			const target = state.enemies.find(function (e) { return e.id === shot.target && e.hp > 0 && canAcquire(state, e); });
-			if (target) { const angle = Math.atan2(target.y - shot.y, target.x - shot.x); shot.vx = Math.cos(angle) * 300; shot.vy = Math.sin(angle) * 300; }
+			if (target) { const angle = Math.atan2(target.y - shot.y, target.x - shot.x); shot.vx = Math.cos(angle) * 300 + (shot.sourceVelocity?.x ?? 0); shot.vy = Math.sin(angle) * 300 + (shot.sourceVelocity?.y ?? 0); }
 		}
 		shot.x += shot.vx * dt; shot.y += shot.vy * dt;
 		if (shot.side === 'player') {
-			const hit = state.enemies.find(function (enemy) { return enemy.hp > 0 && segmentDistance(enemy, before, shot) < (enemy.kind === 'flagship' ? 38 : enemy.kind === 'armored' ? 23 : 15); });
+			const hit = state.enemies.find(function (enemy) { return enemy.hp > 0 && movingContact(enemy, previousEnemies.get(enemy.id) ?? enemy, before, shot, enemy.kind === 'flagship' ? 38 : enemy.kind === 'armored' ? 23 : 15); });
 			if (!hit) continue;
 			shot.life = 0;
 			if (shot.weapon === 'missile') { for (const enemy of state.enemies) if (distance(hit, enemy) < 85) damageEnemy(enemy, shot.damage, shot.weapon); effect(state, hit, 85, '#f9c875'); }
 			else { damageEnemy(hit, shot.damage, shot.weapon); effect(state, hit, 10, '#a6efe5'); }
 		} else {
-			const center = fieldRelative(state);
-			const blocked = center ? circleHit({ x: before.x - fieldDrift, y: before.y }, shot, center, INTERDICTION_CONFIG.radius) : undefined;
+			const center = state.systems.interdiction.field?.world;
+			const blocked = center ? circleHit(before, shot, center, INTERDICTION_CONFIG.radius) : undefined;
 			if (blocked) {
 				effect(state, blocked, 20, '#d7bf89', shot); shot.life = 0; state.systems.interdiction.blockedShots++; continue;
 			}
-			const hit = state.escorts.find(function (escort) { return escort.hp > 0 && segmentDistance(escort, before, shot) < (escort.kind === 'guardian' ? 20 : 12); });
+			const hit = state.escorts.find(function (escort) { return escort.hp > 0 && movingContact(escort, previousEscorts.get(escort.id) ?? escort, before, shot, escort.kind === 'guardian' ? 20 : 12); });
 			if (hit) { hit.hp -= shot.damage; shot.life = 0; effect(state, hit, 15, '#ff897e'); }
-			else if (Math.abs(shot.x) < 145 && Math.abs(shot.y) < 40) {
+			else {
+				const impact = hullContact(state, previousArk, before, shot);
+				if (!impact) continue;
 				const overflow = absorbShieldDamage(state.systems, shot.damage);
 				// Escort interception consumed its round above. Only shield overflow disrupts sensors;
 				// Aegis mitigates hull damage below, not the subsystem disruption.
@@ -458,7 +483,7 @@ export const step = function (state: State, dt: number) {
 				}
 				state.hull = Math.max(0, state.hull - overflow * (state.aegisRemaining > 0 ? 0.2 : 1));
 				arkHit ||= shot.damage > 0;
-				shot.life = 0; effect(state, shot, 22, '#ff897e');
+				shot.life = 0; effect(state, impact, 22, '#ff897e');
 			}
 		}
 	}

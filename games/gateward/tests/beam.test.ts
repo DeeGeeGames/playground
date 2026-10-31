@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { mountWorld } from '../src/space';
 import { build, createState, sell, step, upgrade } from '../src/simulation';
 import { createTrajectory } from '../src/projectiles-3d';
 import { FLIGHT_HEIGHT, TURRET_HEIGHT } from '../src/projection';
@@ -17,7 +18,8 @@ test('beam applies immediate sustained armor-reduced damage without projectile t
 	const beam = state.shots.find(function (shot) { return shot.weapon === 'beam'; });
 	if (!beam) throw new Error('Missing beam');
 	const track = createTrajectory(beam, state);
-	expect(track.from).toEqual({ x: -96, y: -43 });
+	const mount = state.mounts[0]; if (!mount) throw new Error('Missing mount');
+	expect(track.from).toEqual(mountWorld(state, mount));
 	expect(track.startHeight).toBe(TURRET_HEIGHT); expect(track.endHeight).toBe(FLIGHT_HEIGHT);
 	for (let i = 1; i < 60; i++) step(state, 1 / 60);
 	expect(state.enemies[0]?.hp).toBeCloseTo(1000 - 48 * 0.48);

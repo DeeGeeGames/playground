@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { fieldRelative } from '../src/interdiction';
-import { FLIGHT_HEIGHT, resizeView, toScreen, toWorld, viewFor } from '../src/projection';
+import { FLIGHT_HEIGHT, resizeView, toScreen, toWorld, translateView, viewFor } from '../src/projection';
 import { createState, placeInterdiction, setAllocation, step } from '../src/simulation';
 import { createTrajectory, effectHeight, projectileHeight } from '../src/projectiles-3d';
 
@@ -24,13 +24,15 @@ test('a fixed world buoy moves aft in the projected view at actual engine speed'
 		const state = createState({ scenario: 'drill' }); state.status = 'running'; state.nextWave = Infinity;
 		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 });
 		expect(placeInterdiction(state, { x: 300, y: 0 })).toBe(true);
-		const view = viewFor(1440, 900); const before = fieldRelative(state); if (!before) throw new Error('Missing field');
-		const projectedBefore = toScreen(before, view, FLIGHT_HEIGHT);
+		const view = viewFor(1440, 900); const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field');
+		const world = { ...field.world }; const arkBefore = { ...state.ark };
+		const projectedBefore = toScreen(field.world, view, FLIGHT_HEIGHT);
 		for (let frame = 0; frame < 120; frame++) step(state, 1 / 60);
 		const after = fieldRelative(state); if (!after) throw new Error('Missing field');
 		expect(after.x).toBeCloseTo(300 - engines * 3 * 2); expect(after.y).toBe(0);
-		const projectedAfter = toScreen(after, view, FLIGHT_HEIGHT);
-		const expected = toScreen({ x: 300 - engines * 6, y: 0 }, view, FLIGHT_HEIGHT);
+		expect(field.world).toEqual(world); translateView(view, arkBefore, state.ark);
+		const projectedAfter = toScreen(field.world, view, FLIGHT_HEIGHT);
+		const expected = toScreen({ x: 300 - engines * 6, y: 0 }, viewFor(1440, 900), FLIGHT_HEIGHT);
 		expect(projectedAfter.x).toBeCloseTo(expected.x); expect(projectedAfter.y).toBeCloseTo(expected.y);
 		if (engines === 0) expect(projectedAfter).toEqual(projectedBefore);
 		else expect(projectedAfter.x).toBeLessThan(projectedBefore.x);

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { worldPoint } from '../src/space';
 import { build, createState, deploy, setAllocation, step, transferPower, WEAPONS, type State } from '../src/simulation';
 import { POWER_PRESETS, powerOutputs, type SystemsState } from '../src/systems';
 
@@ -74,7 +75,7 @@ describe('powered cadence and shields', function () {
 		advance(state, 2); expect(mount.cooldown).toBeCloseTo(0.05);
 		// Isolate reload timing from the new aim delay after engine power changes.
 		const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing enemy');
-		enemy.x = mount.x; enemy.y = -200; delete enemy.flight; mount.aim = -Math.PI / 2;
+		Object.assign(enemy, worldPoint(state, { x: mount.x, y: -200 })); delete enemy.flight; mount.aim = -Math.PI / 2;
 		step(state, 0.05); expect(mount.cooldown).toBe(WEAPONS.rail.reload); expect(state.shots).toHaveLength(1);
 		const fired = state.nextId; step(state, 0.05); expect(state.nextId).toBe(fired); expect(mount.cooldown).toBeCloseTo(2.075);
 	});
@@ -84,6 +85,9 @@ describe('powered cadence and shields', function () {
 		setAllocation(state, { engines: 10, weapons: 0, shields: 0 });
 		state.enemies.push({ id: state.nextId++, kind: 'armored', x: -96, y: -200, hp: 10000, maxHp: 10000, cooldown: 999 });
 		advance(state, 5); expect(state.shots).toHaveLength(0);
+		// Keep restoration independent of travel-induced barrel realignment.
+		const enemy = state.enemies[0]; const mount = state.mounts[0]; if (!enemy || !mount) throw new Error('Missing target fixture');
+		Object.assign(enemy, worldPoint(state, { x: mount.x, y: -200 })); delete enemy.flight; mount.aim = -Math.PI / 2;
 		setAllocation(state, POWER_PRESETS.balanced); step(state, 0.05); expect(state.shots).toHaveLength(1);
 	});
 	test('guardian and fighter cadence and damage stay independent of ark weapon power at the same engine speed', function () {

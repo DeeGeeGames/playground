@@ -28,7 +28,7 @@ test('passing scenery moves opposite the isometric bow direction at the actual t
 
 test('every state journey uses distance from engines rather than elapsed time', function () {
 	const drill = createState({ scenario: 'drill' }); drill.status = 'running'; drill.time = 45; drill.systems.distanceTraveled = 540;
-	expect(journeyFor(drill).distance).toBe(540); expect(beaconFor(6, drill).x).toBe(540);
+	expect(journeyFor(drill).distance).toBe(540); expect(beaconFor(6, drill).x).toBe(1080);
 	drill.time = 90; expect(journeyFor(drill).distance).toBe(540);
 	const voyage = createState(); voyage.status = 'running'; voyage.time = 45;
 	expect(journeyFor(voyage).distance).toBe(0);
@@ -44,7 +44,8 @@ test('systems landmarks, ETA and route fraction use integrated distance through 
 	for (let i = 0; i < 100; i++) step(state, 0.05);
 	const journey = journeyFor(state);
 	expect(journey.distance).toBeCloseTo(150); expect(journey.speed).toBe(18); expect(journey.progress).toBeCloseTo(150 / 1080); expect(journey.eta).toBeCloseTo(930 / 18);
-	expect(beaconFor(6, state).x).toBe(journey.remaining); expect(beaconFor(1, state).x).toBeCloseTo(30);
+	expect(beaconFor(6, state).x).toBe(1080); expect(beaconFor(1, state).x).toBe(180);
+	expect(beaconFor(6, state).x - state.ark.x).toBeCloseTo(journey.remaining);
 	setAllocation(state, { engines: 0, weapons: 4, shields: 6 });
 	step(state, 0.05); expect(journeyFor(state).distance).toBe(journey.distance); expect(journeyFor(state).eta).toBe(Infinity); expect(journeyFor(state).speed).toBe(0);
 });

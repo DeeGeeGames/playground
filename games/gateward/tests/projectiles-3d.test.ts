@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createTrajectory, projectileHeight } from '../src/projectiles-3d';
 import { createState, step, type Enemy, type Shot } from '../src/simulation';
 import { DECK_HEIGHT, FLIGHT_HEIGHT, TURRET_HEIGHT } from '../src/projection';
+import { worldPoint } from '../src/space';
 
 const enemy: Enemy = { id: 1, kind: 'raider', x: -450, y: -43, hp: 45, maxHp: 45, cooldown: 1 };
 const shot: Shot = { id: 1, side: 'player', weapon: 'rail', x: -96, y: -43, vx: -1000, vy: 0, damage: 1, target: 1, life: 4 };
@@ -55,4 +56,25 @@ test('incoming rounds reach deck height at the first hull collision boundary', f
 	step(state, 1 / 60);
 	expect(state.shots).toHaveLength(0);
 	expect(state.effects.some(function (effect) { return effect.radius === 22; })).toBe(true);
+});
+
+test('recorded world origins survive carrier travel and homing turns', function () {
+	const state = createState(); state.ark.x = 2000; state.ark.y = -400;
+	const origin = worldPoint(state, { x: -96, y: -43 });
+	const missile: Shot = { ...shot, weapon: 'missile', origin, x: origin.x + 100, y: origin.y + 40, vx: 180, vy: 240, life: 3.5 };
+	state.ark.x += 500;
+	const trajectory = createTrajectory(missile, state);
+		expect(trajectory.from).toEqual(origin);
+		expect(projectileHeight(origin, trajectory)).toBe(TURRET_HEIGHT);
+});
+
+test('incoming trajectories meet a rotated world-space hull and follow its motion', function () {
+	const state = createState(); state.ark.x = 2300; state.ark.y = -700; state.ark.angle = Math.PI / 2; state.ark.speed = 12;
+	const origin = worldPoint(state, { x: -195, y: 0 });
+	const incoming: Shot = { ...shot, side: 'enemy', weapon: 'hostile', target: undefined, origin, x: origin.x, y: origin.y, vx: 0, vy: 235 };
+	const trajectory = createTrajectory(incoming, state);
+	const time = 50 / (235 - 12);
+		expect(trajectory.to.x).toBeCloseTo(origin.x);
+		expect(trajectory.to.y).toBeCloseTo(origin.y + 235 * time);
+		expect(projectileHeight(trajectory.to, trajectory)).toBe(DECK_HEIGHT);
 });

@@ -3,7 +3,8 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
+import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, setRally, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
+import { worldPoint } from './space';
 import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
 import { createEngineeringPanel } from './engineering-panel';
@@ -160,7 +161,7 @@ const shutdown = await mountGame('game', async function (container) {
 			if (setPriority(state, enemy.id)) notify(state, `Priority target: ${contactIntel(state, enemy) === 'classified' ? enemy.kind : 'unclassified contact'}. Eligible weapons in range and coverage will focus fire.`);
 			else notify(state, 'Contact outside sensor range. Nearby defense remains automatic.');
 		}
-		else if (world && !state.experimental) { state.rally = { x: Math.max(-450, Math.min(450, world.x)), y: Math.max(-370, Math.min(370, world.y)) }; rallyMode = false; notify(state, 'Escort rally point updated.'); }
+		else if (world && !state.experimental && setRally(state, world)) { rallyMode = false; notify(state, 'Escort rally point updated.'); }
 		focusCanvas();
 	};
 	canvas.addEventListener('pointerup', function (event) { releasePointer(event, false); }, options);
@@ -174,10 +175,10 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'Escape' && placement) { event.preventDefault(); cancelPlacement(); return; }
 		if (event.code === 'Escape' || event.code === 'Space') { event.preventDefault(); setPause(!paused); return; }
 		if (!available()) return;
-		if (event.code === 'KeyI') { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement({ x: 300, y: 0 }); return; }
+		if (event.code === 'KeyI') { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement(worldPoint(state, { x: 300, y: 0 })); return; }
 		if (placement && event.target === canvas) {
 			const adjustment = event.code === 'ArrowUp' ? { x: 20, y: 0 } : event.code === 'ArrowDown' ? { x: -20, y: 0 } : event.code === 'ArrowLeft' ? { x: 0, y: -20 } : event.code === 'ArrowRight' ? { x: 0, y: 20 } : undefined;
-			if (adjustment) { event.preventDefault(); placement = { x: placement.x + adjustment.x, y: placement.y + adjustment.y }; return; }
+			if (adjustment) { event.preventDefault(); const offset = worldPoint(state, adjustment); placement = { x: placement.x + offset.x - state.ark.x, y: placement.y + offset.y - state.ark.y }; return; }
 			if (event.code === 'Enter') { event.preventDefault(); confirmPlacement(); return; }
 		}
 		const index = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8'].indexOf(event.code);

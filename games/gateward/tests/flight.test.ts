@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { broadsideMuzzle } from '../src/flight';
+import { localPoint } from '../src/space';
 import { createState, deploy, ENEMIES, setAllocation, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
 
 const quiet = function (): State {
@@ -21,7 +22,7 @@ describe('capital ship courses and batteries', function () {
 			expect(enemy.flight?.course).toBe('broadside');
 			const before = { x: enemy.x, y: enemy.y }; const charge = state.systems.shield.charge;
 			let travel = 0;
-			for (let frame = 0; frame < 480; frame++) { const x = enemy.x; step(state, 1 / 60); travel += Math.abs(enemy.x - x); }
+			for (let frame = 0; frame < 480; frame++) { const x = localPoint(state, enemy).x; step(state, 1 / 60); travel += Math.abs(localPoint(state, enemy).x - x); }
 			expect(travel).toBeGreaterThan(35);
 			expect(Math.abs(enemy.y - before.y)).toBeLessThan(20);
 			expect(Math.cos(enemy.flight?.angle ?? Math.PI)).toBeGreaterThan(0.98);
@@ -53,17 +54,17 @@ describe('capital ship courses and batteries', function () {
 		// The escort's current bearing is in arc, but its predicted interception
 		// point is ahead of the bank. The ark remains a legal broadside target.
 		expect(shot.target).toBeUndefined();
-		const direction = Math.atan2(shot.vy, shot.vx) - enemy.flight.angle;
+		const direction = Math.atan2(shot.vy - (shot.sourceVelocity?.y ?? 0), shot.vx - (shot.sourceVelocity?.x ?? 0)) - enemy.flight.angle;
 		expect(Math.abs(Math.cos(direction))).toBeLessThanOrEqual(Math.sin(50 * Math.PI / 180));
 	});
 	for (const engines of [0, 10]) test(`world speed stays bounded through engine changes and gate arrival (${engines} engines)`, function () {
 		const state = quiet(); const enemy = hostile(state, 'flagship', -300, -400);
 		for (let frame = 0; frame < 3600; frame++) {
 			if (frame === 600) setAllocation(state, { engines, weapons: 10 - engines, shields: 0 });
-			if (frame === 1800) state.systems.distanceTraveled = state.systems.routeLength;
-			const before = { x: enemy.x, y: enemy.y, distance: state.systems.distanceTraveled };
+			if (frame === 1800) { state.systems.distanceTraveled = state.systems.routeLength; state.ark.x = state.routeOrigin.x + state.systems.routeLength; }
+			const before = { x: enemy.x, y: enemy.y };
 			step(state, 1 / 60);
-			const worldX = enemy.x - before.x + state.systems.distanceTraveled - before.distance;
+			const worldX = enemy.x - before.x;
 			expect(Math.hypot(worldX, enemy.y - before.y)).toBeLessThanOrEqual(ENEMIES.flagship.speed / 60 + 1e-8);
 		}
 		const before = { x: enemy.x, y: enemy.y }; advance(state, 5);
@@ -76,7 +77,7 @@ describe('fighter skirmishing', function () {
 		const state = quiet(); const enemy = hostile(state, kind, 400, -100);
 		advance(state, 20); const before = { x: enemy.x, y: enemy.y }; const charge = state.systems.shield.charge;
 		const quadrants = new Set<string>();
-		for (let i = 0; i < 4800; i++) { step(state, 1 / 60); quadrants.add(`${Math.sign(enemy.x)},${Math.sign(enemy.y)}`); }
+		for (let i = 0; i < 4800; i++) { step(state, 1 / 60); const relative = localPoint(state, enemy); quadrants.add(`${Math.sign(relative.x)},${Math.sign(relative.y)}`); }
 		expect(quadrants.size).toBe(4); expect(state.systems.shield.charge).toBeLessThan(charge - 50);
 		expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeGreaterThan(30);
 	});

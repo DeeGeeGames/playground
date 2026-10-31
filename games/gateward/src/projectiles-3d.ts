@@ -1,6 +1,7 @@
 import { Box3, Ray, Vector3 } from 'three';
 import { DECK_HEIGHT, FLIGHT_HEIGHT, TURRET_HEIGHT } from './projection';
-import { distance, type Effect, type Point, type Shot, type State } from './simulation';
+import { type Effect, type Point, type Shot, type State } from './simulation';
+import { arkVelocity, localPoint, worldPoint } from './space';
 
 export interface Trajectory {
 	readonly from: Point;
@@ -9,33 +10,33 @@ export interface Trajectory {
 	readonly endHeight: number;
 }
 
-const nearest = function (point: Point, candidates: readonly Point[]): Point {
-	let closest: Point = point;
-	let best = Infinity;
-	for (const candidate of candidates) { const d = distance(point, candidate); if (d < best) { best = d; closest = candidate; } }
-	return { x: closest.x, y: closest.y };
-};
-
-// Altitude belongs to presentation. Gameplay continues to use its unchanged
-// ground-plane shots, hits and ranges; this track only joins the visible actors.
+// Altitude belongs to presentation; shot positions and their recorded firing
+// origins belong to the world even after their source has moved or turned.
 export const createTrajectory = function (shot: Shot, state: State): Trajectory {
 	if (shot.beamFrom) return { from: shot.beamFrom, to: { x: shot.x, y: shot.y }, startHeight: TURRET_HEIGHT, endHeight: FLIGHT_HEIGHT };
 	// Simulation rounds start with four seconds of life. Rewind their movement,
 	// rather than associating a fast round with a hardpoint it has already passed.
 	const age = Math.max(0, 4 - shot.life);
-	const launch = { x: shot.x - shot.vx * age, y: shot.y - shot.vy * age };
+	const launch = shot.origin ?? { x: shot.x - shot.vx * age, y: shot.y - shot.vy * age };
 	if (shot.side === 'enemy') {
 		const escort = state.escorts.find(function (candidate) { return candidate.id === shot.target; });
-		if (escort) return { from: launch, to: { x: escort.x, y: escort.y }, startHeight: FLIGHT_HEIGHT, endHeight: FLIGHT_HEIGHT };
-		// Match the simulation's first hull collision, not its interior aim point.
-		const ray = new Ray(new Vector3(launch.x, 0, launch.y), new Vector3(shot.vx, 0, shot.vy).normalize());
-		const hit = Math.abs(launch.x) < 145 && Math.abs(launch.y) < 40 ? ray.origin : ray.intersectBox(new Box3(new Vector3(-145, -1, -40), new Vector3(145, 1, 40)), new Vector3());
-		return { from: launch, to: hit ? { x: hit.x, y: hit.z } : { x: shot.x + shot.vx, y: shot.y + shot.vy }, startHeight: FLIGHT_HEIGHT, endHeight: hit ? DECK_HEIGHT : FLIGHT_HEIGHT };
+		if (shot.target !== undefined) return { from: launch, to: escort ? { x: escort.x, y: escort.y } : { x: shot.x + shot.vx, y: shot.y + shot.vy }, startHeight: FLIGHT_HEIGHT, endHeight: FLIGHT_HEIGHT };
+		// Predict the deck boundary in the moving ark's frame, then put the
+		// intersection back on the projectile's independent world trajectory.
+		const local = localPoint(state, shot); const velocity = arkVelocity(state);
+		const dx = shot.vx - velocity.x; const dy = shot.vy - velocity.y;
+		const cosine = Math.cos(state.ark.angle); const sine = Math.sin(state.ark.angle);
+		const relative = new Vector3(dx * cosine + dy * sine, 0, -dx * sine + dy * cosine);
+		const speed = relative.length();
+		const ray = new Ray(new Vector3(local.x, 0, local.y), relative.clone().normalize());
+		const inside = Math.abs(local.x) < 145 && Math.abs(local.y) < 40;
+		const hit = inside ? ray.origin : speed > 0 ? ray.intersectBox(new Box3(new Vector3(-145, -1, -40), new Vector3(145, 1, 40)), new Vector3()) : null;
+		const time = hit && speed > 0 ? hit.distanceTo(ray.origin) / speed : 0;
+		const impact = hit ? inside ? worldPoint(state, local) : { x: shot.x + shot.vx * time, y: shot.y + shot.vy * time } : { x: shot.x + shot.vx, y: shot.y + shot.vy };
+		return { from: launch, to: impact, startHeight: FLIGHT_HEIGHT, endHeight: hit ? DECK_HEIGHT : FLIGHT_HEIGHT };
 	}
 	const target = state.enemies.find(function (candidate) { return candidate.id === shot.target; });
-	// Homing rounds can turn after launch; snap their rewound estimate to a pad.
-	const from = shot.weapon === 'missile' ? nearest(launch, state.mounts.filter(function (mount) { return mount.weapon === shot.weapon; })) : launch;
-	return { from, to: target ? { x: target.x, y: target.y } : { x: shot.x + shot.vx * 0.3, y: shot.y + shot.vy * 0.3 }, startHeight: shot.weapon === 'escort' ? FLIGHT_HEIGHT : TURRET_HEIGHT, endHeight: FLIGHT_HEIGHT };
+	return { from: launch, to: target ? { x: target.x, y: target.y } : { x: shot.x + shot.vx * 0.3, y: shot.y + shot.vy * 0.3 }, startHeight: shot.weapon === 'escort' ? FLIGHT_HEIGHT : TURRET_HEIGHT, endHeight: FLIGHT_HEIGHT };
 };
 
 export const projectileHeight = function (point: Point, trajectory: Trajectory, target: Point = trajectory.to): number {

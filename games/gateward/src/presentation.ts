@@ -2,14 +2,15 @@ import { ACESFilmicToneMapping, AdditiveBlending, BufferAttribute, BufferGeometr
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnemy, createEscort, createTurret, disposeObject, type TurretVisual } from './actors-3d';
-import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, pickEnemy, pickMount, resizeView, toScreen, toWorld, TURRET_HEIGHT, viewFor, type View } from './projection';
+import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, pickEnemy, pickMount, resizeView, toScreen, toWorld, translateView, TURRET_HEIGHT, viewFor, type View } from './projection';
 import { beaconFor, CRUISE_SPEED, journeyFor } from './journey';
 import { createState, coverageFor, ESCORTS, interdictionReason, type Enemy, type Point, type State } from './simulation';
 import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
 import { createTrajectory, effectHeight, projectileHeight, type Trajectory } from './projectiles-3d';
 import { shieldAppearance } from './shield-view';
 import { canAcquire, contactIntel } from './sensors';
-import { fieldRelative, INTERDICTION_CONFIG } from './interdiction';
+import { INTERDICTION_CONFIG } from './interdiction';
+import { mountWorld, worldPoint } from './space';
 
 type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'hull' };
 export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined }
@@ -37,6 +38,7 @@ const visible = function (object: Object3D): boolean {
 
 export const createPresentation = async function (canvas: HTMLCanvasElement): Promise<Presentation> {
 	const scene = new Scene();
+	const carrier = new Group(); scene.add(carrier);
 	const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 	renderer.setClearColor('#080f19');
 	renderer.outputColorSpace = SRGBColorSpace;
@@ -93,7 +95,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	try {
 		const model = await new GLTFLoader().loadAsync(new URL('./models/gateward-ark.glb', document.baseURI).href);
 		ark = model.scene;
-		scene.add(ark);
+		carrier.add(ark);
 		ark.updateMatrixWorld(true);
 		const mounts = createState().mounts;
 		for (const [index, mount] of mounts.entries()) {
@@ -115,31 +117,31 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	light.shadow.camera.near = 1; light.shadow.camera.far = 1600;
 	light.shadow.bias = -0.0003;
 	light.shadow.normalBias = 0.3;
-	scene.add(light, new HemisphereLight('#b8cede', '#192231', 2));
+	scene.add(light, light.target, new HemisphereLight('#b8cede', '#192231', 2));
 	const fill = new DirectionalLight('#7295b3', 1.2);
-	fill.position.set(250, 100, -400); scene.add(fill);
+	fill.position.set(250, 100, -400); scene.add(fill, fill.target);
 	const turrets: readonly TurretVisual[] = createState().mounts.map(function (mount, index) {
 		const turret = createTurret(mount);
-		scene.add(turret.root); targets.set(turret.root, { kind: 'mount', index }); return turret;
+		carrier.add(turret.root); targets.set(turret.root, { kind: 'mount', index }); return turret;
 	});
 	const drives = [1, 2, 3, 4].map(function (index) { return ark.getObjectByName(`Drive_${String(index).padStart(2, '0')}`); });
 	const plumes = drives.flatMap(function (drive) {
 		if (!drive) return [];
 		const plume = new Mesh(new ConeGeometry(11, 1, 12, 1, true), new MeshBasicMaterial({ color: '#9ed8e0', transparent: true, opacity: 0.24, depthWrite: false, blending: AdditiveBlending, side: DoubleSide }));
-		plume.rotation.z = Math.PI / 2; scene.add(plume);
+		plume.rotation.z = Math.PI / 2; carrier.add(plume);
 		return [{ plume, origin: drive.getWorldPosition(new Vector3()) }];
 	});
 	const shield = new Mesh(new SphereGeometry(1, 40, 24), new MeshBasicMaterial({ color: '#88f1e4', transparent: true, opacity: 0.065, depthWrite: false, blending: AdditiveBlending }));
-	shield.scale.set(SHIELD_RADII.x, SHIELD_RADII.y, SHIELD_RADII.z); shield.position.set(SHIELD_CENTER.x, SHIELD_CENTER.y, SHIELD_CENTER.z); shield.visible = false; scene.add(shield);
+	shield.scale.set(SHIELD_RADII.x, SHIELD_RADII.y, SHIELD_RADII.z); shield.position.set(SHIELD_CENTER.x, SHIELD_CENTER.y, SHIELD_CENTER.z); shield.visible = false; carrier.add(shield);
 	const energyShield = new Mesh(new SphereGeometry(1, 40, 24), new MeshBasicMaterial({ color: '#75bfe8', transparent: true, opacity: 0.012, depthWrite: false, blending: AdditiveBlending }));
-	energyShield.scale.copy(shield.scale).multiplyScalar(1.015); energyShield.position.copy(shield.position); energyShield.visible = false; scene.add(energyShield);
-	const range = new Line(new BufferGeometry(), new LineBasicMaterial({ color: '#77dec8', transparent: true, opacity: 0.22, depthWrite: false })); scene.add(range);
+	energyShield.scale.copy(shield.scale).multiplyScalar(1.015); energyShield.position.copy(shield.position); energyShield.visible = false; carrier.add(energyShield);
+	const range = new Line(new BufferGeometry(), new LineBasicMaterial({ color: '#77dec8', transparent: true, opacity: 0.22, depthWrite: false })); carrier.add(range);
 	let coverageSignature = '';
-	const rally = circle('#b7dbe4', 25, 0.7, 1); scene.add(rally);
+	const rally = circle('#b7dbe4', 25, 0.7, 1); carrier.add(rally);
 	const field = circle('#d7bf89', INTERDICTION_CONFIG.radius, 0.85, 2); field.visible = false; scene.add(field);
 	const buoy = new Mesh(new IcosahedronGeometry(8, 0), new MeshBasicMaterial({ color: '#d7bf89' })); buoy.visible = false; scene.add(buoy);
 	const fieldPreview = circle('#d0e7a6', INTERDICTION_CONFIG.radius, 0.65, 2); fieldPreview.visible = false; scene.add(fieldPreview);
-	const placementRange = circle('#d7bf89', INTERDICTION_CONFIG.maxRange, 0.18, 1); placementRange.position.y = FLIGHT_HEIGHT; placementRange.visible = false; scene.add(placementRange);
+	const placementRange = circle('#d7bf89', INTERDICTION_CONFIG.maxRange, 0.18, 1); placementRange.position.y = FLIGHT_HEIGHT; placementRange.visible = false; carrier.add(placementRange);
 	const priority = circle('#f4d68a', 1, 0.9, 0.025); scene.add(priority);
 	const gate = new Group();
 	for (const [radius, tube, color] of [[170, 9, '#234c4b'], [150, 3, '#83dfcb']] as const) {
@@ -164,21 +166,42 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		const points = new Points(geometry, new PointsMaterial({ color: layer === 2 ? '#7a94a6' : '#3b5064', size: layer === 2 ? 1.8 : 1.2, sizeAttenuation: false, depthWrite: false }));
 		scene.add(points); return { points, parallax, origins: positions.slice() };
 	});
-	const rocks = Array.from({ length: 24 }, function (_, i) {
+	const rocks = Array.from({ length: 48 }, function (_, i) {
 		const rock = new Mesh(new IcosahedronGeometry(18 + i * 11 % 27, 0), new MeshStandardMaterial({ color: '#1a2b3b', roughness: 1 }));
 		rock.position.set(i * 347 % 2200 - 1100, -160 - i % 3 * 40, (i % 2 === 0 ? -1 : 1) * (350 + i * 83 % 280));
-		rock.rotation.set(i * 0.4, i, i * 0.17); scene.add(rock); return { rock, x: rock.position.x };
+		rock.rotation.set(i * 0.4, i, i * 0.17); scene.add(rock); return { rock, index: i };
 	});
-	const navPositions: number[] = [];
-	for (let i = -10; i <= 10; i++) {
-		navPositions.push(i * 160, -105, -1000, i * 160, -105, 1000);
-		navPositions.push(-1800, -105, i * 160, 1800, -105, i * 160);
-	}
-	const navGeometry = new BufferGeometry(); navGeometry.setAttribute('position', new BufferAttribute(new Float32Array(navPositions), 3));
-	const navigation = new LineSegments(navGeometry, new LineBasicMaterial({ color: '#254255', transparent: true, opacity: 0.24 })); scene.add(navigation);
-	const courseGeometry = new BufferGeometry().setFromPoints([new Vector3(-1800, -8, 0), new Vector3(1800, -8, 0)]);
-	const course = new Line(courseGeometry, new LineDashedMaterial({ color: '#385c70', dashSize: 6, gapSize: 14, transparent: true, opacity: 0.55 }));
-	course.computeLineDistances(); scene.add(course);
+	const navigation = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: '#254255', transparent: true, opacity: 0.24 })); scene.add(navigation);
+	const course = new Line(new BufferGeometry(), new LineDashedMaterial({ color: '#385c70', dashSize: 6, gapSize: 14, transparent: true, opacity: 0.55 })); scene.add(course);
+	let routeSignature = '';
+	const updateRoute = function (state: State) {
+		const signature = `${state.routeOrigin.x}/${state.routeOrigin.y}/${state.systems.routeLength}`;
+		if (signature === routeSignature) return;
+		routeSignature = signature;
+		const end = state.systems.routeLength + 1600;
+		const navPositions: number[] = [];
+		for (let i = -10; i <= Math.ceil(end / 160); i++) navPositions.push(i * 160, -105, -1000, i * 160, -105, 1000);
+		for (let i = -6; i <= 6; i++) navPositions.push(-1600, -105, i * 160, end, -105, i * 160);
+		navigation.geometry.dispose(); navigation.geometry = new BufferGeometry();
+		navigation.geometry.setAttribute('position', new BufferAttribute(new Float32Array(navPositions), 3));
+		navigation.position.set(state.routeOrigin.x, 0, state.routeOrigin.y);
+		course.geometry.dispose(); course.geometry = new BufferGeometry().setFromPoints([new Vector3(-1600, -8, 0), new Vector3(end, -8, 0)]);
+		course.position.copy(navigation.position); course.computeLineDistances();
+		for (const { rock, index } of rocks) rock.position.set(state.routeOrigin.x + index * 347 % (state.systems.routeLength + 2200) - 1100, -160 - index % 3 * 40, state.routeOrigin.y + (index % 2 === 0 ? -1 : 1) * (350 + index * 83 % 280));
+	};
+	let cameraAnchor: Point = { x: 0, y: 0 };
+	let carrierAngle = 0;
+	const followArk = function (state: State) {
+		if (cameraAnchor.x !== state.ark.x || cameraAnchor.y !== state.ark.y) {
+			translateView(view, cameraAnchor, state.ark);
+			controls.target.x += state.ark.x - cameraAnchor.x; controls.target.z += state.ark.y - cameraAnchor.y;
+			cameraAnchor = { x: state.ark.x, y: state.ark.y }; labelsDirty = true;
+		}
+		if (carrierAngle !== state.ark.angle) { carrierAngle = state.ark.angle; labelsDirty = true; }
+		carrier.position.set(state.ark.x, 0, state.ark.y); carrier.rotation.y = -state.ark.angle;
+		light.position.set(state.ark.x - 240, 540, state.ark.y + 320); light.target.position.set(state.ark.x, 0, state.ark.y);
+		fill.position.set(state.ark.x + 250, 100, state.ark.y - 400); fill.target.position.copy(light.target.position);
+	};
 	const shotGeometry = new BufferGeometry();
 	const shots = new LineSegments(shotGeometry, new LineBasicMaterial({ vertexColors: true }));
 	shots.frustumCulled = false; scene.add(shots);
@@ -215,7 +238,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		const signature = state.mounts.map(function (mount) { return mount.weapon ?? ''; }).join(',');
 		if (signature !== mountSignature) { mountSignature = signature; labelsDirty = true; }
 		if (!labelsDirty) return;
-		mountVisibility = state.mounts.map(function (mount, index) { const target = hit(toScreen(mount, view, mountHeight(mount)), arkRoots); return target?.kind === 'mount' && target.index === index; });
+		mountVisibility = state.mounts.map(function (mount, index) { const target = hit(toScreen(mountWorld(state, mount), view, mountHeight(mount)), arkRoots); return target?.kind === 'mount' && target.index === index; });
 		labelsDirty = false;
 	};
 	const text = function (value: string, point: Point, fill: string, size = 10) {
@@ -223,10 +246,10 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	};
 	const drawLabels = function (state: State, selected: number) {
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, view.width, view.height);
-		for (const [value, point] of [['PORT', { x: 0, y: -380 }], ['STARBOARD', { x: 0, y: 380 }], ['BOW →', { x: 420, y: 0 }], ['← ASTERN', { x: -420, y: 0 }]] as const) text(value, toScreen(point, view), '#63818f', view.width < 650 ? 8 : 10);
+		for (const [value, point] of [['PORT', { x: 0, y: -380 }], ['STARBOARD', { x: 0, y: 380 }], ['BOW →', { x: 420, y: 0 }], ['← ASTERN', { x: -420, y: 0 }]] as const) text(value, toScreen(worldPoint(state, point), view), '#63818f', view.width < 650 ? 8 : 10);
 		for (const [index, mount] of state.mounts.entries()) {
 			if (!mountVisibility[index]) continue;
-			const point = toScreen(mount, view, mountHeight(mount) + 12);
+			const point = toScreen(mountWorld(state, mount), view, mountHeight(mount) + 12);
 			text(String(index + 1), { x: point.x, y: point.y - 10 }, selected === index ? '#e1f3c1' : '#b4c8d4', view.width < 650 ? 10 : 11);
 		}
 		let bomberLabelShown = false;
@@ -250,20 +273,20 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		}
 		for (const escort of state.escorts) if (escort.sector) text(`G${escort.id} · ${escort.sector}`, toScreen(escort, view, FLIGHT_HEIGHT + 42), '#a6d4d9', 9);
 		for (const escort of state.escorts) if (escort.hp < ESCORTS[escort.kind].hp) { const at = toScreen(escort, view, FLIGHT_HEIGHT + 29); ctx.fillStyle = '#89d5de'; ctx.fillRect(at.x - 13, at.y, 26 * Math.max(0, escort.hp / ESCORTS[escort.kind].hp), 3); }
-		const position = fieldRelative(state); const activeField = state.systems.interdiction.field;
+		const activeField = state.systems.interdiction.field; const position = activeField?.world;
 		if (position && activeField) text(`INTERDICTION · ${Math.ceil(activeField.remaining)}s`, toScreen(position, view, FLIGHT_HEIGHT + 30), '#d7bf89', 10);
-		for (let i = 0; i <= 6; i++) { const point = beaconFor(i, state); if (Math.abs(point.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: 180 }, view, -5), '#6e939f', 9); }
-		if (journeyFor(state).remaining <= 1100) text('KEPLER GATE', toScreen({ x: journeyFor(state).remaining, y: 0 }, view, 220), '#83dfcb');
+		for (let i = 0; i <= 6; i++) { const point = beaconFor(i, state); if (Math.abs(point.x - state.ark.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: point.y + 180 }, view, -5), '#6e939f', 9); }
+		if (journeyFor(state).remaining <= 1100) text('KEPLER GATE', toScreen({ x: state.routeOrigin.x + state.systems.routeLength, y: state.routeOrigin.y }, view, 220), '#83dfcb');
 	};
 
 	return {
 		render: function (state, selected, reducedMotion, rallyMode, controlsEnabled, placement) {
 			if (disposed) return;
 			resize(); if (view.width <= 0 || view.height <= 0) return;
-			controls.enabled = controlsEnabled; controls.update();
+			followArk(state); updateRoute(state); controls.enabled = controlsEnabled; controls.update();
 			for (const [index, turret] of turrets.entries()) { const mount = state.mounts[index]; if (mount) turret.update(mount, selected === index); }
 			const journey = journeyFor(state); const drift = reducedMotion ? 0 : journey.distance;
-			const fieldPosition = fieldRelative(state); field.visible = !!fieldPosition; buoy.visible = !!fieldPosition;
+			const fieldPosition = state.systems.interdiction.field?.world; field.visible = !!fieldPosition; buoy.visible = !!fieldPosition;
 			if (fieldPosition) { field.position.set(fieldPosition.x, FLIGHT_HEIGHT, fieldPosition.y); buoy.position.set(fieldPosition.x, FLIGHT_HEIGHT + 8, fieldPosition.y); }
 			fieldPreview.visible = !!placement; placementRange.visible = !!placement;
 			if (placement) {
@@ -293,7 +316,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT, target.y); priority.scale.setScalar(target.kind === 'flagship' ? 70 : 42); }
 			const liveEnemies = new Set(state.enemies.map(function (enemy) { return enemy.id; }));
 			for (const [id, model] of enemyModels) if (!liveEnemies.has(id)) { scene.remove(model); targets.delete(model); disposeObject(model); enemyModels.delete(id); }
-			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(-enemy.y, -enemy.x)); }
+			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); }
 			const liveEscorts = new Set(state.escorts.map(function (escort) { return escort.id; }));
 			for (const [id, model] of escortModels) if (!liveEscorts.has(id)) { scene.remove(model); disposeObject(model); escortModels.delete(id); }
 			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } model.position.set(escort.x, FLIGHT_HEIGHT, escort.y); model.rotation.y = -escort.angle; }
@@ -301,7 +324,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			const liveShots = new Set(state.shots.map(function (shot) { return shot.id; }));
 			for (const id of trajectories.keys()) if (!liveShots.has(id)) trajectories.delete(id);
 			for (const [index, shot] of state.shots.entries()) {
-				let trajectory = trajectories.get(shot.id); if (!trajectory) { trajectory = createTrajectory(shot, state); trajectories.set(shot.id, trajectory); }
+				let trajectory = trajectories.get(shot.id); if (!trajectory || shot.side === 'enemy' && shot.target === undefined) { trajectory = createTrajectory(shot, state); trajectories.set(shot.id, trajectory); }
 				const target = shot.side === 'player' ? state.enemies.find(function (enemy) { return enemy.id === shot.target; }) : state.escorts.find(function (escort) { return escort.id === shot.target; });
 				const tailTime = shot.weapon === 'rail' ? 0.04 : 0.025;
 				const tail = shot.beamFrom ?? { x: shot.x - shot.vx * tailTime, y: shot.y - shot.vy * tailTime };
@@ -311,25 +334,23 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			if (shotCapacity > 0) { shotGeometry.getAttribute('position').needsUpdate = true; shotGeometry.getAttribute('color').needsUpdate = true; } shotGeometry.setDrawRange(0, state.shots.length * 2);
 			while (effects.length < state.effects.length) { const effect = circle('#ffffff', 1, 1); scene.add(effect); effects.push(effect); }
 			for (const [index, model] of effects.entries()) { const effect = state.effects[index]; model.visible = !!effect; if (effect) { model.position.set(effect.x, effectHeight(effect, state), effect.y); model.scale.setScalar(effect.radius * (1 - effect.life / effect.maxLife * 0.7)); if (model.material instanceof MeshBasicMaterial) { model.material.transparent = true; model.material.color.set(effect.color); model.material.opacity = effect.life / effect.maxLife; } } }
-			gate.visible = journey.remaining <= 1100; gate.position.set(journey.remaining, 25, 0);
-			for (const [index, beacon] of beacons.entries()) { const at = beaconFor(index, state); beacon.position.x = at.x; beacon.visible = Math.abs(at.x) <= 1100; }
-			for (const { points, parallax, origins } of stars) { const position = points.geometry.getAttribute('position'); for (let i = 0; i < position.count; i++) position.setX(i, (((origins[i * 3] ?? 0) - drift * parallax + 1500) % 3000 + 3000) % 3000 - 1500); position.needsUpdate = true; }
-			for (const { rock, x } of rocks) rock.position.x = ((x - drift * 0.72 + 1100) % 2200 + 2200) % 2200 - 1100;
-			navigation.position.x = -(drift % 160);
+			gate.visible = journey.remaining <= 1100; gate.position.set(state.routeOrigin.x + state.systems.routeLength, 25, state.routeOrigin.y);
+			for (const [index, beacon] of beacons.entries()) { const at = beaconFor(index, state); beacon.position.set(at.x, 0, at.y); beacon.visible = Math.abs(at.x - state.ark.x) <= 1100; }
+			for (const { points, parallax, origins } of stars) { points.position.set(state.ark.x, 0, state.ark.y); const position = points.geometry.getAttribute('position'); for (let i = 0; i < position.count; i++) position.setX(i, (((origins[i * 3] ?? 0) - drift * parallax + 1500) % 3000 + 3000) % 3000 - 1500); position.needsUpdate = true; }
 			scene.updateMatrixWorld(true); updateVisibility(state); renderer.render(scene, view.camera); drawLabels(state, selected);
 		},
 		pick: function (point, state) {
-			resize(); scene.updateMatrixWorld(true); updateVisibility(state);
+			resize(); followArk(state); controls.update(); scene.updateMatrixWorld(true); updateVisibility(state);
 			const roots = [...arkRoots, ...enemyModels.values()];
 			const direct = hit(point, roots);
 			let mount = direct?.kind === 'mount' ? direct.index : -1;
 			let enemy = direct?.kind === 'enemy' ? state.enemies.find(function (candidate) { return candidate.id === direct.id; }) : undefined;
-			if (mount < 0 && !enemy) { const candidate = pickMount(point, view, state.mounts); if (candidate >= 0 && mountVisibility[candidate]) mount = candidate; }
+			if (mount < 0 && !enemy) { const candidate = pickMount(point, view, state.mounts.map(function (mount) { return { ...mount, ...mountWorld(state, mount) }; })); if (candidate >= 0 && mountVisibility[candidate]) mount = candidate; }
 			if (mount < 0 && !enemy) { const candidate = pickEnemy(point, view, state.enemies); if (candidate) { const center = hit(toScreen(candidate, view, FLIGHT_HEIGHT), roots); if (center?.kind === 'enemy' && center.id === candidate.id) enemy = candidate; } }
 			return { mount, enemy, world: toWorld(point, view) };
 		},
 		placementPoint: function (point) { resize(); return toWorld(point, view, FLIGHT_HEIGHT); },
-		resetCamera: function () { controls.reset(); labelsDirty = true; },
+		resetCamera: function () { controls.reset(); translateView(view, { x: 0, y: 0 }, cameraAnchor); controls.target.set(cameraAnchor.x, 0, cameraAnchor.y); controls.update(); labelsDirty = true; },
 		cancelInteraction: function () { controls.disconnect(); controls.connect(canvas); },
 		getView: function () { return view; },
 		dispose: cleanup,
