@@ -589,11 +589,11 @@ export const step = function (state: State, dt: number) {
 		const engaging = escort.kind === 'interceptor' && target && distance(target, formation) < tactical(320);
 		const destination = wing?.phase === 'returning' ? worldPoint(state, { x: -tactical(210), y: 0 }) : formation;
 		const desired = engaging ? fighterCourse(escort, target, tactical(65), tactical(65), config.speed, escort.id % 2 ? -1 : 1, flightVelocity(target.flight), state.escorts)
-			: arriveCourse(escort, trafficWaypoint(state, escort, destination, escort.kind), carrierVelocity);
+			: arriveCourse(escort, trafficWaypoint(state, escort, destination, escort.kind), carrierVelocity, escort.kind === 'guardian' ? 0.7 : 1.5);
 		escort.flight ??= { angle: escort.angle, speed: state.ark.speed, side: i % 2 ? -1 : 1, course: 'intercept', run: 1 };
 		desired.z = (altitudeCourse(escort.id, state.time, escort.kind === 'guardian', engaging ? target : destination, wing?.phase === 'returning' || wing?.phase === 'launching') - (escort.z ?? 0)) * 0.8;
 		const hull = neighbors.find(function (hull) { return hull.id === escort.id; });
-		fly(escort, escort.flight, hull ? avoidTraffic(hull, desired, neighbors, config.speed) : desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt, true);
+		fly(escort, escort.flight, hull ? avoidTraffic(hull, desired, neighbors, config.speed) : desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt, true, escort.kind === 'guardian');
 		escort.angle = escort.flight.angle;
 		if (target && distance(escort, target) <= config.range) {
 			const velocity = flightVelocity(target.flight); const sourceVelocity = flightVelocity(escort.flight);

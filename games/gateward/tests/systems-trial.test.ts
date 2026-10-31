@@ -103,10 +103,10 @@ describe('reproducible equipped trial strategies', function () {
 		expect(first.summary).toEqual(second.summary); expect(first.state).toEqual(second.state);
 		if (preset === 'engines') {
 			// Fast travel reaches the gate; clearing the final contact before the
-			// deadline is sensitive to runtime-specific contact trajectories.
+			// deadline is sensitive to contact trajectories and heavy-hull turn time.
 			expect(first.summary.distance).toBe(first.summary.routeLength);
 			expect(first.summary.hull).toBeGreaterThan(0);
-			expect(first.summary.kills).toBeGreaterThanOrEqual(32);
+			expect(first.summary.kills).toBeGreaterThanOrEqual(31);
 			expect(['arrival', 'deadline']).toContain(first.summary.reason ?? '');
 		} else expect(first.summary.reason).toBe(preset === 'balanced' ? 'arrival' : 'deadline');
 		expect(first.summary?.contacts).toBe(5);
@@ -124,7 +124,7 @@ describe('reproducible equipped trial strategies', function () {
 		expect(field.summary.distance).toBe(field.summary.routeLength);
 		expect(field.summary.hull).toBeGreaterThan(0);
 		expect(field.summary.contacts).toBe(field.summary.totalContacts);
-		expect(field.summary.kills).toBeGreaterThanOrEqual(32);
+		expect(field.summary.kills).toBeGreaterThanOrEqual(31);
 		expect(['arrival', 'deadline']).toContain(field.summary.reason ?? '');
 		if (field.summary.reason === 'arrival') {
 			expect(field.summary.kills).toBe(33);
