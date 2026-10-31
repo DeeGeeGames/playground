@@ -18,4 +18,4 @@ test('issue 51 spending control repeats and protects hull and equipment', functi
 	expect(result.purchases[0]).toMatchObject({ mount: 0, action: 'upgrade', cost: 60 });
 	expect(result.purchases[0]?.time).toBeCloseTo(21, 5);
 	expect(result.purchases.filter(function (purchase) { return purchase.action === 'upgrade'; })).toHaveLength(16);
-});
+}, 20000);

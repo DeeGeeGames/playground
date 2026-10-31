@@ -1,3 +1,4 @@
+import { tactical } from './combat-scale';
 import { fieldRelative, INTERDICTION_CONFIG } from './interdiction';
 import { interdictionReason, type Point, type State } from './simulation';
 import { localPoint, worldPoint } from './space';
@@ -39,16 +40,16 @@ export const createInterdictionPanel = function (host: HTMLElement, getState: ()
 	toggle.addEventListener('click', function () {
 		const state = getState();
 		if (holdReason(state, available())) return;
-		if (!placement.get() && !interdictionReason(state)) placement.aim(worldPoint(state, { x: 300, y: 0 }));
+		if (!placement.get() && !interdictionReason(state)) placement.aim(worldPoint(state, { x: tactical(300), y: 0 }));
 		update();
 	}, { signal });
 	host.append(toggle);
 	const presets = document.createElement('div'); presets.className = 'interdiction-presets';
 	presets.setAttribute('role', 'group'); presets.setAttribute('aria-label', 'Preview field position');
 	const presetPositions = [
-		{ name: 'Ahead', key: 'ahead', point: { x: 300, y: 0 } },
-		{ name: 'Port', key: 'port', point: { x: 0, y: -270 } },
-		{ name: 'Starboard', key: 'starboard', point: { x: 0, y: 270 } },
+		{ name: 'Ahead', key: 'ahead', point: { x: tactical(300), y: 0 } },
+		{ name: 'Port', key: 'port', point: { x: 0, y: -tactical(270) } },
+		{ name: 'Starboard', key: 'starboard', point: { x: 0, y: tactical(270) } },
 	];
 	const presetButtons = presetPositions.map(function ({ name, key, point }) {
 		const control = document.createElement('button'); control.type = 'button'; control.textContent = name; control.dataset['interdictionPreset'] = key;

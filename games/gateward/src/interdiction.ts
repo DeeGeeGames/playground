@@ -1,10 +1,11 @@
+import { tactical } from './combat-scale';
 import { enemyRadius } from './ship-config';
 import type { Enemy, Point, State } from './simulation';
 import { localPoint } from './space';
 
 export const INTERDICTION_CONFIG = {
-	cost: 90, radius: 110, lifetime: 30, cooldown: 40, maxRange: 450,
-	minArkClearance: 8, minRelativeX: -50, leftBehind: 650,
+	cost: 90, radius: tactical(110), lifetime: 30, cooldown: 40, maxRange: tactical(450),
+	minArkClearance: 8, minRelativeX: -tactical(50), leftBehind: tactical(650),
 } as const;
 export interface InterdictionField { id: number; world: Point; remaining: number }
 export interface Detour { fieldId: number; waypoint: Point; side: -1 | 1 }

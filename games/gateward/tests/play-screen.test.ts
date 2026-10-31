@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { contactDescription, inspectorName, presetFor } from '../src/play-screen';
 import { createState } from '../src/simulation';
@@ -10,7 +11,7 @@ describe('play screen information', function () {
 	});
 	test('contact inspector responds to sensor degradation without leaking classification or hull', function () {
 		const state = createState();
-		const enemy = { id: 900, kind: 'bomber' as const, x: state.ark.x + 300, y: state.ark.y, hp: 41, maxHp: 95, cooldown: 0 };
+		const enemy = { id: 900, kind: 'bomber' as const, x: state.ark.x + tactical(300), y: state.ark.y, hp: 41, maxHp: 95, cooldown: 0 };
 		state.enemies.push(enemy); state.priority = enemy.id;
 		expect(contactDescription(state, enemy.id)).toContain('bomber');
 		state.systems.sensors.integrity = 20;

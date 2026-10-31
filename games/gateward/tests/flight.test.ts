@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { CRAFT_MOUNTS } from '../src/craft-turrets';
 import { describe, expect, test } from 'bun:test';
 import { broadsideMuzzle, fly, type Flight } from '../src/flight';
@@ -79,17 +80,17 @@ describe('capital ship courses and batteries', function () {
 
 describe('fighter skirmishing', function () {
 	for (const kind of ['raider', 'bomber'] as const) test(`${kind} keeps moving around the ark and takes repeated pot shots`, function () {
-		const state = quiet(); const enemy = hostile(state, kind, 400, -100);
-		advance(state, 20); const before = { x: enemy.x, y: enemy.y }; const charge = state.systems.shield.charge;
+		const state = quiet(); const enemy = hostile(state, kind, tactical(400), -tactical(100));
+		advance(state, 20); const before = { x: enemy.x, y: enemy.y }; const absorbed = state.systems.shieldAbsorbed;
 		const quadrants = new Set<string>();
 		for (let i = 0; i < 4800; i++) { step(state, 1 / 60); const relative = localPoint(state, enemy); quadrants.add(`${Math.sign(relative.x)},${Math.sign(relative.y)}`); }
-		expect(quadrants.size).toBe(4); expect(state.systems.shield.charge).toBeLessThan(charge - 50);
+		expect(quadrants.size).toBe(4); expect(state.systems.shieldAbsorbed).toBeGreaterThan(absorbed);
 		expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeGreaterThan(30);
 	});
 	test('hostile and deployed interceptors maneuver, exchange fire, and resume ark attacks after escorts disappear', function () {
 		const state = quiet(); deploy(state, 'interceptor'); const wing = state.wings[0]; if (!wing) throw new Error('Missing wing'); scramble(state, wing.id, 'port');
-		for (const escort of state.escorts) { escort.hp = 100000; escort.x = 0; escort.y = -150; }
-		const enemy = hostile(state, 'raider', 60, -220); const before = structuredClone(state.escorts);
+		for (const escort of state.escorts) { escort.hp = 100000; escort.x = 0; escort.y = -tactical(150); }
+		const enemy = hostile(state, 'raider', tactical(60), -tactical(220)); const before = structuredClone(state.escorts);
 		let hostileShots = 0; let friendlyShots = 0;
 		for (let frame = 0; frame < 600; frame++) {
 			const nextId = state.nextId; step(state, 1 / 60);
@@ -101,8 +102,8 @@ describe('fighter skirmishing', function () {
 		expect(hostileShots).toBeGreaterThan(2); expect(friendlyShots).toBeGreaterThan(5);
 		expect(enemy.hp).toBeLessThan(100000);
 		expect(state.escorts.some(function (craft, index) { const start = before[index]; return start && Math.hypot(craft.x - start.x, craft.y - start.y) > 30; })).toBe(true);
-		state.escorts = []; const charge = state.systems.shield.charge; advance(state, 20);
-		expect(state.systems.shield.charge).toBeLessThan(charge);
+		state.escorts = []; const absorbed = state.systems.shieldAbsorbed; advance(state, 60);
+		expect(state.systems.shieldAbsorbed).toBeGreaterThan(absorbed);
 	});
 	test('courses repeat deterministically and pause, focus loss and results freeze all flight state', function () {
 		const state = quiet(); hostile(state, 'raider', 350, -100); hostile(state, 'armored', -500, 100);

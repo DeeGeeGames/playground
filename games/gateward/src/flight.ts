@@ -1,3 +1,4 @@
+import { tactical } from './combat-scale';
 import type { Enemy, Point, State } from './simulation';
 import { arkVelocity, localPoint, worldPoint } from './space';
 
@@ -84,20 +85,20 @@ export const arriveCourse = function (point: Point, destination: Point, targetVe
 
 export const capitalCourse = function (state: State, enemy: Enemy, flight: Flight, range: number, speed: number): Point {
 	const relative = localPoint(state, enemy); const velocity = arkVelocity(state);
-	const lane = flight.side * (30 + range * 0.7 + (enemy.id % 3 - 1) * 12);
-	const interceptX = -65 + (enemy.id % 4) * 40;
-	if (flight.course === 'intercept' && Math.abs(relative.y - lane) < 30 && Math.abs(relative.x - interceptX) < 100) flight.course = 'broadside';
+	const lane = flight.side * (tactical(30) + range * 0.7 + (enemy.id % 3 - 1) * tactical(12));
+	const interceptX = -tactical(65) + (enemy.id % 4) * tactical(40);
+	if (flight.course === 'intercept' && Math.abs(relative.y - lane) < tactical(30) && Math.abs(relative.x - interceptX) < tactical(100)) flight.course = 'broadside';
 	if (flight.course === 'intercept') {
 		const destination = worldPoint(state, { x: interceptX, y: lane });
 		return arriveCourse(enemy, destination, velocity, 0.5);
 	}
 	// Overtake, then ease aft without parking at a firing-range boundary. At low
 	// engine power this becomes a turning return pass beside the stationary ark.
-	if (relative.x > 135) flight.run = -1;
-	if (relative.x < -135) flight.run = 1;
+	if (relative.x > tactical(135)) flight.run = -1;
+	if (relative.x < -tactical(135)) flight.run = 1;
 	const c = Math.cos(state.ark.angle); const s = Math.sin(state.ark.angle);
 	const lateral = clamp((lane - relative.y) * 0.6, speed * 0.7);
-	return { x: velocity.x + c * flight.run * 9 - s * lateral, y: velocity.y + s * flight.run * 9 + c * lateral };
+	return { x: velocity.x + c * flight.run * tactical(9) - s * lateral, y: velocity.y + s * flight.run * tactical(9) + c * lateral };
 };
 
 export const fighterCourse = function (point: Point, target: Point, radiusX: number, radiusY: number, speed: number, direction: -1 | 1, targetVelocity: Point, neighbors: readonly Point[]): Point {
@@ -109,7 +110,7 @@ export const fighterCourse = function (point: Point, target: Point, radiusX: num
 	let vy = (-y / radius * radial + x / radius * direction * tangent) * speed;
 	for (const neighbor of neighbors) {
 		const dx = point.x - neighbor.x; const dy = point.y - neighbor.y; const distance = Math.hypot(dx, dy);
-		if (distance > 0.01 && distance < 38) { const push = (38 - distance) / 38 * speed; vx += dx / distance * push; vy += dy / distance * push; }
+		if (distance > 0.01 && distance < tactical(38)) { const push = (tactical(38) - distance) / tactical(38) * speed; vx += dx / distance * push; vy += dy / distance * push; }
 	}
 	return { x: vx + targetVelocity.x, y: vy + targetVelocity.y };
 };
@@ -131,11 +132,11 @@ export const inBroadside = function (angle: number, from: Point, to: Point): boo
 	return distance > 0 && Math.abs((dx * Math.cos(angle) + dy * Math.sin(angle)) / distance) <= Math.sin(50 * Math.PI / 180);
 };
 
-// A 130m deep operating volume around the nominal flight layer. Capitals hold
+// A scaled 130m deep operating volume around the nominal flight layer. Capitals hold
 // stable lanes; lighter craft weave through them while tracking target altitude.
-export const FLIGHT_BAND = 65;
+export const FLIGHT_BAND = tactical(65);
 export const altitudeCourse = function (id: number, time: number, capital: boolean, target: Point, returning = false): number {
 	if (returning) return 0;
-	const lane = (id % 5 - 2) * (capital ? 24 : 12);
-	return clamp((target.z ?? 0) + lane + (capital ? 0 : Math.sin(time * 0.45 + id * 1.7) * 28), FLIGHT_BAND);
+	const lane = (id % 5 - 2) * tactical(capital ? 24 : 12);
+	return clamp((target.z ?? 0) + lane + (capital ? 0 : Math.sin(time * 0.45 + id * 1.7) * tactical(28)), FLIGHT_BAND);
 };

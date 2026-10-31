@@ -1,14 +1,15 @@
+import { tactical } from './combat-scale';
 import type { Point, State } from './simulation';
 
 export const SENSOR_CONFIG = {
 	maxIntegrity: 100,
-	shortRange: 700,
+	shortRange: tactical(700),
 	healthyThreshold: 50,
-	healthyDetectionRange: 2000,
-	healthyClassificationRange: 640,
-	impairedDetectionRange: 1000,
-	impairedClassificationRange: 230,
-	localDefenseRange: 200,
+	healthyDetectionRange: tactical(2000),
+	healthyClassificationRange: tactical(640),
+	impairedDetectionRange: tactical(1000),
+	impairedClassificationRange: tactical(230),
+	localDefenseRange: tactical(200),
 	damagePerBomberHit: 35,
 	repairCost: 70,
 	repairCooldown: 18,

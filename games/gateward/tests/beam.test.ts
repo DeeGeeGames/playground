@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { expect, test } from 'bun:test';
 import { mountWorld } from '../src/space';
 import { build, createState, sell, step, upgrade } from '../src/simulation';
@@ -32,7 +33,7 @@ test('beam stops on range loss, zero weapon power and sale; pause freezes damage
 		const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing enemy');
 		const hp = enemy.hp;
 		state.paused = true; step(state, 1 / 60); expect(enemy.hp).toBe(hp); state.paused = false;
-		if (stop === 'range') enemy.y = -900;
+		if (stop === 'range') enemy.y = -tactical(900);
 		if (stop === 'power') state.systems.allocation = { engines: 5, weapons: 0, shields: 5 };
 		if (stop === 'sale') expect(sell(state, 0)).toBe(true);
 		step(state, 1 / 60); expect(enemy.hp).toBe(hp);

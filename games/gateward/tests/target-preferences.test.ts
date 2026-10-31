@@ -1,8 +1,10 @@
+import { tactical } from '../src/combat-scale';
 import { expect, test } from 'bun:test';
 import { build, createState, mountTarget, step, type Enemy, type EnemyKind, type Weapon } from '../src/simulation';
 
+// Preserve each fixture's displacement from mount 0 while its physical anchor stays fixed.
 const contact = function (id: number, kind: EnemyKind, x: number, y: number): Enemy {
-	return { id, kind, x, y, hp: 10000, maxHp: 10000, cooldown: 999 };
+	return { id, kind, x: -96 + tactical(x + 96), y: -43 + tactical(y + 43), hp: 10000, maxHp: 10000, cooldown: 999 };
 };
 const fixture = function (weapon: Weapon, coverageDegrees = 120) {
 	const state = createState({ coverageDegrees });
@@ -25,12 +27,12 @@ for (const weapon of ['flak', 'rail', 'missile', 'beam'] as const) {
 		const priority = state.enemies[0]; if (!priority) throw new Error('Missing contact');
 		state.priority = priority.id;
 		expect(mountTarget(state, mount)?.id).toBe(priority.id);
-		for (const invalid of [{ hp: 0 }, { y: -900 }, { y: 120 }, { x: 500, y: -100 }]) {
+		for (const invalid of [{ hp: 0 }, { y: -tactical(900) }, { y: tactical(120) }, { x: tactical(500), y: -tactical(100) }]) {
 			const original = { ...priority }; Object.assign(priority, invalid);
 			expect(mountTarget(state, mount)?.id).not.toBe(priority.id);
 			expect(mountTarget(state, mount)).toBeDefined(); Object.assign(priority, original);
 		}
-		state.systems.sensors.integrity = 0; priority.y = -300;
+		state.systems.sensors.integrity = 0; priority.y = -tactical(300);
 		expect(mountTarget(state, mount)?.id).not.toBe(priority.id);
 	});
 	test(`${weapon} resolves equal scores by distance then ID independent of array order`, function () {
@@ -58,10 +60,10 @@ test('missile clusters use detected live neighbours and the strict splash radius
 	state.enemies = [contact(100, 'bomber', -96, -100), contact(101, 'bomber', 225, -120), contact(102, 'raider', 285, -120)];
 	expect(mountTarget(state, mount)?.id).toBe(101);
 	const neighbour = state.enemies[2]; if (!neighbour) throw new Error('Missing neighbour');
-	neighbour.x = 310; expect(mountTarget(state, mount)?.id).toBe(100); // exactly 85m
-	neighbour.x = 1001; neighbour.y = -140; // outside impaired detection
+	neighbour.x = -96 + tactical(310 + 96); expect(mountTarget(state, mount)?.id).toBe(100); // exactly the scaled 85m splash boundary
+	neighbour.x = tactical(1001); neighbour.y = -tactical(140); // outside impaired detection
 	expect(mountTarget(state, mount)?.id).toBe(100);
-	neighbour.x = 300; neighbour.y = -120; neighbour.hp = 0;
+	neighbour.x = tactical(300); neighbour.y = -tactical(120); neighbour.hp = 0;
 	expect(mountTarget(state, mount)?.id).toBe(100);
 });
 
@@ -91,7 +93,7 @@ for (const weapon of ['flak', 'rail', 'missile', 'beam'] as const) {
 for (const weapon of ['flak', 'rail'] as const) {
 	test(`${weapon} ignores class outside impaired classification range`, function () {
 		const { state, mount } = fixture(weapon, 360); state.systems.sensors.integrity = 25;
-		state.enemies = [contact(100, 'bomber', -96, -120), contact(101, weapon === 'flak' ? 'raider' : 'flagship', -96, -260)];
+		state.enemies = [contact(100, 'bomber', -96, -120), contact(101, weapon === 'flak' ? 'raider' : 'flagship', -96, -280)];
 		expect(mountTarget(state, mount)?.id).toBe(100);
 		state.systems.sensors.integrity = 100;
 		expect(mountTarget(state, mount)?.id).toBe(101);

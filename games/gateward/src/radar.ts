@@ -24,8 +24,8 @@ export const createRadar = function (host: HTMLElement, getState: () => State, a
 	const vitals = node('div', 'radar-vitals'); surface.append(vitals);
 	const toolbar = node('div', 'radar-toolbar'); const heading = node('h2'); const scales = node('div', 'radar-scales'); scales.setAttribute('role', 'group'); scales.setAttribute('aria-label', 'Radar range');
 	const control = function (name: string, action: () => void) { const button = node('button', '', name); button.type = 'button'; button.addEventListener('click', action, { signal }); return button; };
-	const longButton = control('LONG · 2 km', function () { short = false; update(); });
-	const shortButton = control('SHORT · 700 m', function () { short = true; update(); }); scales.append(longButton, shortButton); toolbar.append(heading, scales); surface.append(toolbar);
+	const longButton = control(`LONG · ${RADAR_LONG_RANGE / 1000} km`, function () { short = false; update(); });
+	const shortButton = control(`SHORT · ${RADAR_SHORT_RANGE} m`, function () { short = true; update(); }); scales.append(longButton, shortButton); toolbar.append(heading, scales); surface.append(toolbar);
 	const body = node('div', 'radar-body'); const scope = node('div', 'radar-scope');
 	const svg = svgNode('svg'); svg.setAttribute('viewBox', '0 0 440 440'); svg.setAttribute('role', 'group'); svg.setAttribute('aria-label', 'Heading-up radar. Contact list provides keyboard selection.');
 	const rings = svgNode('g'); const coverage = svgNode('path'); coverage.classList.add('radar-coverage');
@@ -114,7 +114,7 @@ export const createRadar = function (host: HTMLElement, getState: () => State, a
 		const isPriority = selected?.ids.some(function (id) { return id === state.priority; });
 		text(priority, isPriority ? 'Priority marked ✓' : 'Mark priority'); priority.disabled = !available() || !selected || selected.age > 0;
 		text(coverageText, short && mount?.weapon ? `Mount ${callbacks.selectedMount() + 1} · ${mount.weapon} · ${Math.round(coverageFor(state, mount).range)} m. ${priorityCoverage(state, callbacks.selectedMount())}` : 'Priority does not extend weapon range or firing arcs.');
-		text(notice, state.systems.sensors.integrity <= 0 ? 'ARRAY OFFLINE · Local automatic defense remains available within 200 m. Repair to recover early warning.' : ranges.detection < RADAR_LONG_RANGE ? `ARRAY IMPAIRED · Detection ${ranges.detection} m; classification ${ranges.classification} m. Shaded space is unobserved, not clear.` : 'BOTH BANDS ACTIVE · Rings show distance from the ark. Amber groups may contain multiple ships.');
+		text(notice, state.systems.sensors.integrity <= 0 ? `ARRAY OFFLINE · Local automatic defense remains available within ${SENSOR_CONFIG.localDefenseRange} m. Repair to recover early warning.` : ranges.detection < RADAR_LONG_RANGE ? `ARRAY IMPAIRED · Detection ${ranges.detection} m; classification ${ranges.classification} m. Shaded space is unobserved, not clear.` : 'BOTH BANDS ACTIVE · Rings show distance from the ark. Amber groups may contain multiple ships.');
 		text(footerText, `Detect ${ranges.detection} m · classify ${ranges.classification} m. Scale changes display only.`);
 		text(pause, state.paused ? 'Resume' : 'Pause');
 		const sensors = state.systems.sensors;

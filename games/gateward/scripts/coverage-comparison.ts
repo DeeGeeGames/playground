@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { build, createState, invested, step } from '../src/simulation';
 import { runSpendingControl } from './combat-pressure';
 
@@ -9,7 +10,7 @@ export const runFlankComparison = function (coverageDegrees: 120 | 240 | 360, fi
 	for (const mount of fittings[fitting]) build(state, mount, 'rail');
 	const spent = state.mounts.reduce(function (total, mount) { return total + invested(mount); }, 0);
 	state.nextWave = Infinity;
-	state.arrivals = [{ at: 0, kind: 'bomber', x: -96, y: flank * 340 }, { at: 0, kind: 'bomber', x: 96, y: flank * 340 }];
+	state.arrivals = [{ at: 0, kind: 'bomber', x: -96, y: flank * tactical(340) }, { at: 0, kind: 'bomber', x: 96, y: flank * tactical(340) }];
 	state.status = 'running';
 	let minimumShield = state.systems.shield.charge;
 	for (let tick = 0; tick < 30 * 60; tick++) {

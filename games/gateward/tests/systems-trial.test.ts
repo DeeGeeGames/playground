@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { assignGuardian, build, contactWarning, createState, deploy, placeInterdiction, pulse, repair, repairSensors, replaceFighters, scramble, sell, setAllocation, setPriority, step, transferPower, upgrade, type State } from '../src/simulation';
 import { SYSTEMS_TRIAL } from '../src/scenarios';
@@ -17,16 +18,16 @@ describe('Systems Trial route and results', function () {
 		const state = createState({ scenario: 'systems' }); const fresh = structuredClone(state);
 		expect(state.scenario).toBe(SYSTEMS_TRIAL); expect(state.experimental).toBe(true); expect(state.coverageDegrees).toBe(240);
 		expect(state.salvage).toBe(500); expect(state.nextWave).toBe(0); expect(state.resultReason).toBeUndefined();
-		expect(systemsFor(state).routeLength).toBe(1440); expect(systemsFor(state).shield.charge).toBe(240);
+		expect(systemsFor(state).routeLength).toBe(tactical(1440)); expect(systemsFor(state).shield.charge).toBe(240);
 		expect(systemsFor(state).allocation).toEqual(POWER_PRESETS.balanced);
 		state.time = 7; expect(contactWarning(state)).toBe('Scanning for contacts');
-		state.status = 'running'; placeInterdiction(state, { x: 300, y: 0 }); setAllocation(state, POWER_PRESETS.engines); step(state, 0.05);
+		state.status = 'running'; placeInterdiction(state, { x: tactical(300), y: 0 }); setAllocation(state, POWER_PRESETS.engines); step(state, 0.05);
 		expect(createState({ scenario: 'systems' })).toEqual(fresh);
-		expect(createState().systems.routeLength).toBe(2520); expect(createState({ scenario: 'drill' }).systems.routeLength).toBe(1080);
+		expect(createState().systems.routeLength).toBe(tactical(2520)); expect(createState({ scenario: 'drill' }).systems.routeLength).toBe(tactical(1080));
 		expect(createState({ scenario: 'drill' }).scenario?.duration).toBe(90);
 	});
 	test('early route completion waits for future, pending and live contacts without a duration minimum', function () {
-		const state = trial(); systemsFor(state).distanceTraveled = 1440; state.ark.x = state.routeOrigin.x + 1440; state.time = 82.9; state.wave = 4; state.nextWave = 83;
+		const state = trial(); systemsFor(state).distanceTraveled = tactical(1440); state.ark.x = state.routeOrigin.x + tactical(1440); state.time = 82.9; state.wave = 4; state.nextWave = 83;
 		step(state, 0.05); expect(state.status).toBe('running');
 		step(state, 0.05); step(state, 0.05); expect(state.wave).toBe(5); expect(state.arrivals.length).toBeGreaterThan(0);
 		state.enemies = []; step(state, 0.05); expect(state.status).toBe('running');
@@ -39,7 +40,7 @@ describe('Systems Trial route and results', function () {
 		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 });
 		for (let i = 0; i < 3200; i++) step(state, 0.05);
 		expect(state.status).toBe('lost'); expect(state.resultReason).toBe('deadline'); expect(state.time).toBe(155);
-		expect(systemsFor(state).distanceTraveled).toBeLessThan(1440);
+		expect(systemsFor(state).distanceTraveled).toBeLessThan(tactical(1440));
 	});
 	test('strict deadline clamps the final tick and beats arrival; hull loss beats deadline and clear rewards', function () {
 		const arrived = clearRoute(); arrived.time = 154.99; step(arrived, 0.05);
@@ -54,8 +55,8 @@ describe('Systems Trial route and results', function () {
 		expect(systemsResultMessage(state)).toContain('contacts remained unresolved');
 	});
 	test('arrival on the strict deadline explains the boundary without blaming cleared combat', function () {
-		const state = clearRoute(); state.time = 154.99; systemsFor(state).distanceTraveled = 1439.9; state.ark.x = state.routeOrigin.x + 1439.9;
-		step(state, 0.05); expect(state.status).toBe('lost'); expect(systemsFor(state).distanceTraveled).toBe(1440);
+		const state = clearRoute(); state.time = 154.99; systemsFor(state).distanceTraveled = tactical(1439.9); state.ark.x = state.routeOrigin.x + tactical(1439.9);
+		step(state, 0.05); expect(state.status).toBe('lost'); expect(systemsFor(state).distanceTraveled).toBe(tactical(1440));
 		expect(systemsResultMessage(state)).toContain('at the deadline'); expect(systemsResultMessage(state)).not.toContain('weapon');
 	});
 	test('a cloned trial keeps distance-based early completion and an already reached deadline cannot tick again', function () {
@@ -67,7 +68,7 @@ describe('Systems Trial route and results', function () {
 		expect(expired.salvage).toBe(salvage); expect(expired.hull).toBe(500); expect(systemsFor(expired).shield.charge).toBe(charge);
 	});
 	for (const restriction of ['paused', 'unfocused', 'won', 'lost'] as const) test(`${restriction} freezes all systems and rejects commands`, function () {
-		const state = trial(); build(state, 0, 'rail'); deploy(state, 'guardian'); deploy(state, 'interceptor'); placeInterdiction(state, { x: 300, y: 0 });
+		const state = trial(); build(state, 0, 'rail'); deploy(state, 'guardian'); deploy(state, 'interceptor'); placeInterdiction(state, { x: tactical(300), y: 0 });
 		state.hull = 500; state.salvage = 1000; systemsFor(state).sensors.integrity = 0;
 		const wing = state.wings[0]; const guardian = state.escorts[0]; if (!wing || !guardian) throw new Error('Missing escorts');
 		if (restriction === 'paused') state.paused = true; else if (restriction === 'unfocused') state.focused = false; else state.status = restriction;
@@ -76,7 +77,7 @@ describe('Systems Trial route and results', function () {
 		expect(deploy(state, 'guardian')).toBe(false); expect(scramble(state, wing.id, 'port')).toBe(false); expect(replaceFighters(state, wing.id)).toBe(false);
 		expect(assignGuardian(state, guardian.id, 'ahead')).toBe(false); expect(repair(state)).toBe(false); expect(repairSensors(state)).toBe(false);
 		expect(setAllocation(state, POWER_PRESETS.engines)).toBe(false); expect(transferPower(state, 'engines', 'weapons')).toBe(false);
-		expect(setPriority(state, undefined)).toBe(false); expect(pulse(state)).toBe(false); expect(placeInterdiction(state, { x: 300, y: 0 })).toBe(false);
+		expect(setPriority(state, undefined)).toBe(false); expect(pulse(state)).toBe(false); expect(placeInterdiction(state, { x: tactical(300), y: 0 })).toBe(false);
 		step(state, 0.05); expect(state).toEqual(before);
 	});
 	test('summary is a pure serializable snapshot, including stalled ETA, results and reset', function () {

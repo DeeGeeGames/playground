@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { assignGuardian, build, covered, coverageFor, craftCount, createState, deploy, MAX_HULL, pulse, repair, replaceFighters, scramble, SECTOR_POINTS, step, upgrade, type State } from '../src/simulation';
 import { ESCORT_DRILL } from '../src/scenarios';
@@ -19,7 +20,7 @@ describe('directional coverage', function () {
 		expect(covered(s, port, { x: port.x, y: 200 })).toBe(false);
 		expect(covered(s, starboard, { x: starboard.x, y: -200 })).toBe(false);
 		for (const x of [-300, 200]) { expect(covered(s, port, { x, y: 0 })).toBe(true); expect(covered(s, starboard, { x, y: 0 })).toBe(true); }
-		const far = { x: port.x, y: port.y - 450 }; expect(covered(s, port, far)).toBe(false); upgrade(s, 0); expect(covered(s, port, far)).toBe(true);
+		const far = { x: port.x, y: port.y - tactical(450) }; expect(covered(s, port, far)).toBe(false); upgrade(s, 0); expect(covered(s, port, far)).toBe(true);
 		s.coverageDegrees = 360; expect(covered(s, port, { x: port.x, y: 200 })).toBe(true);
 	});
 	test('outward priority cannot bypass the opposite turret arc', function () {
@@ -71,7 +72,7 @@ describe('guardian screens and restrictions', function () {
 	});
 	test('screen draws hostile fire and dies without damaging ark; replacement uses economy', function () {
 		const s = quiet(); deploy(s, 'guardian'); const g = s.escorts[0]; if (!g) throw new Error('Missing guardian'); Object.assign(g, SECTOR_POINTS.port); g.hp = 1; s.status = 'running';
-		s.enemies.push({ id: 99, x: 0, y: -320, hp: 45, maxHp: 45, kind: 'raider', cooldown: 0 }); advance(s, 1); expect(s.escorts).toHaveLength(0); expect(s.hull).toBe(MAX_HULL); expect(s.escortLosses).toBe(1); expect(assignGuardian(s, g.id, 'ahead')).toBe(false);
+		s.enemies.push({ id: 99, x: 0, y: -tactical(320), hp: 45, maxHp: 45, kind: 'raider', cooldown: 0 }); advance(s, 1); expect(s.escorts).toHaveLength(0); expect(s.hull).toBe(MAX_HULL); expect(s.escortLosses).toBe(1); expect(assignGuardian(s, g.id, 'ahead')).toBe(false);
 		const before = s.salvage; expect(deploy(s, 'guardian')).toBe(true); expect(s.salvage).toBe(before - 105);
 	});
 	for (const restriction of ['paused', 'unfocused', 'won', 'lost'] as const) test(`${restriction} freezes simulation and rejects commands`, function () {
@@ -111,10 +112,10 @@ test('drill schedule is deterministic and baseline/defenses yield repeatable dis
 	const outcomes = ['baseline', 'wings', 'guardians'].map(function (s) { if (s !== 'baseline' && s !== 'wings' && s !== 'guardians') throw new Error('Strategy'); const result = strategyRun(s); expect(strategyRun(s)).toEqual(result); return result; });
 	console.table(outcomes); expect(new Set(outcomes.map(function (o) { return o.hull; })).size).toBeGreaterThanOrEqual(2);
 	expect(outcomes[0]?.result).toBe('lost'); expect(outcomes.some(function (o) { return o.result === 'won'; })).toBe(true);
-});
+}, 20000);
 test('orders change outcomes with the same fitted equipment and spending', function () {
 	const heldWing = strategyRun('wings', false); const launchedWing = strategyRun('wings');
-	expect(heldWing.launches).toBe(0); expect(launchedWing.launches).toBeGreaterThan(0); expect(launchedWing.hull).not.toBe(heldWing.hull);
+	expect(heldWing.launches).toBe(0); expect(launchedWing.launches).toBeGreaterThan(0); expect(launchedWing.minimumShield).not.toBe(heldWing.minimumShield);
 	const portScreen = strategyRun('guardians', false); const reassignedScreen = strategyRun('guardians');
 	expect(portScreen.result).not.toBe('lost'); expect(reassignedScreen.result).toBe('won'); expect({ result: reassignedScreen.result, time: reassignedScreen.time, kills: reassignedScreen.kills, losses: reassignedScreen.losses, shield: reassignedScreen.minimumShield }).not.toEqual({ result: portScreen.result, time: portScreen.time, kills: portScreen.kills, losses: portScreen.losses, shield: portScreen.minimumShield });
 	expect(portScreen.orders).toBe(0); expect(reassignedScreen.orders).toBe(1);

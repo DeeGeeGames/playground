@@ -1,7 +1,8 @@
+import { tactical } from './combat-scale';
 import { effectiveOutputs } from './systems';
 import { ROUTE_SECONDS, type State } from './simulation';
 
-export const ROUTE_LENGTH = 2520;
+export const ROUTE_LENGTH = tactical(2520);
 export const CRUISE_SPEED = ROUTE_LENGTH / ROUTE_SECONDS;
 export const BEACON_SPACING = ROUTE_LENGTH / 6;
 
