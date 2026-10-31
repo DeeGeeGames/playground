@@ -174,7 +174,7 @@ browser evidence and owner judgment establish visual and flight-feel acceptance.
 
 Choose **Escort Drill** in the briefing, pause menu or result, or open
 `?mode=drill`. Restart retains the selected mode. Full voyage remains the default
-with 120° outward arcs, permanent escorts and a shared rally. All modes include reactor
+with 120° outward arcs and a shared guardian rally. All modes include reactor
 allocation, rechargeable shields, damageable sensors and interdiction by default.
 The drill requires survival, its real 1.08 km route, and clearance of all four
 contacts after at least 90 seconds. Engines can delay arrival; reaching the gate
@@ -185,8 +185,11 @@ fitted mount shows a subtle outline at its actual upgraded range; `coverageFor`
 drives both presentation and acquisition. Inclusive angle/range boundaries apply
 to priority targets too. Fore/aft overlap is intentional.
 
-Buy a three-fighter wing for 85 salvage, then use its four sector buttons to
-scramble after departure. One order commits the entire wing: 2s launching, 18s
+In every mode, buy a three-fighter wing for 85 salvage; fighters start docked.
+After departure, Escort Bay’s Scramble all fighters enables recurring sorties
+according to radar coverage. Recall all fighters interrupts launching and active
+sorties, brings survivors home without firing, and holds them docked until the
+next scramble. Coverage changes do not release this hold. Each wing cycles through: 2s launching, 18s
 sortie, physical return to the stern, 10s rearming, ready. Only sortie craft fire.
 Sector assignments stay fixed if local enemies disappear; the timed sortie ends
 rather than following a disappearing target. Craft engage within 180 units of
@@ -420,7 +423,7 @@ port; starboard mounts 5–8 protect starboard. At 120°, there are fore/aft bli
 spots rather than the overlap of the earlier 240° trial. The priority and automatic
 target paths share coverage eligibility; an out-of-arc priority cannot bypass it.
 The selected mount and contact inspector explain when its priority is outside
-range or arc. Voyage rally and permanent escorts remain unchanged.
+range or arc. Voyage retains its guardian rally; fighters use the docked wing lifecycle in every mode.
 
 Reproduce deterministic placement comparisons and rerun #51's spending policy:
 

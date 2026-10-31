@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { COVERAGE_SECTORS, coveragePlan, coverageReadiness, coverageStation, pointSector } from '../src/escort-coverage';
-import { balanceCoverage, createState, deploy, replaceFighters, setCoveragePriority, step, type State } from '../src/simulation';
+import { balanceCoverage, createState, deploy, replaceFighters, scrambleAll, setCoveragePriority, step, type State } from '../src/simulation';
 import { worldPoint } from '../src/space';
 
 const quiet = function (experimental = false) { const state = createState({ experimental }); state.salvage = 2000; state.nextWave = Infinity; return state; };
@@ -12,7 +12,7 @@ describe('coarse escort coverage', function () {
 		setCoveragePriority(state, 'port', 'high'); setCoveragePriority(state, 'ahead', 'off'); setCoveragePriority(state, 'astern', 'low');
 		const before = structuredClone(state.coverage.priorities); const plan = [...coveragePlan(state)];
 		expect(setCoveragePriority(state, 'starboard', 'all')).toBe(true);
-		expect([...coveragePlan(state).values()]).toEqual(Array(6).fill('starboard'));
+		expect([...coveragePlan(state).values()]).toEqual(Array(2).fill('starboard'));
 		expect(state.coverage.priorities).toEqual(before);
 		const snapshot = JSON.stringify(state);
 		expect(setCoveragePriority(state, 'port', 'all')).toBe(false); expect(setCoveragePriority(state, 'ahead', 'high')).toBe(false); expect(balanceCoverage(state)).toBe(false);
@@ -23,15 +23,15 @@ describe('coarse escort coverage', function () {
 	test('Balanced restores all four Normal priorities; zero coverage holds without firing', function () {
 		const state = quiet(); deploy(state, 'interceptor');
 		for (const sector of COVERAGE_SECTORS) setCoveragePriority(state, sector, 'off');
-		expect([...coveragePlan(state).values()]).toEqual([undefined, undefined, undefined]);
-		state.status = 'running'; const craft = state.escorts[0]; if (!craft) throw new Error('Missing escort');
+		expect([...coveragePlan(state).values()]).toEqual([undefined]);
+		state.status = 'running'; const craft = state.wings[0]?.craft[0]; if (!craft) throw new Error('Missing escort');
 		state.enemies.push({ id: 900, x: craft.x, y: craft.y - 20, hp: 1000, maxHp: 1000, kind: 'raider', cooldown: 99 }); step(state, 1 / 60);
 		expect(state.shots.filter(function (shot) { return shot.side === 'player'; })).toHaveLength(0);
 		expect(balanceCoverage(state)).toBe(true); expect(Object.values(state.coverage.priorities)).toEqual(['normal', 'normal', 'normal', 'normal']);
 	});
 	test('allocations are deterministic, role-specific and stable through quiet ticks', function () {
 		const state = quiet(); deploy(state, 'interceptor'); deploy(state, 'interceptor'); deploy(state, 'guardian'); deploy(state, 'guardian');
-		const before = [...coveragePlan(state)]; state.status = 'running'; advance(state, 3);
+		const before = [...coveragePlan(state)]; state.status = 'running'; scrambleAll(state); advance(state, 3);
 		expect([...coveragePlan(state)]).toEqual(before);
 		expect(new Set(state.escorts.filter(function (craft) { return craft.kind === 'guardian'; }).map(function (craft) { return craft.sector; })).size).toBe(2);
 		setCoveragePriority(state, 'port', 'all');
@@ -46,9 +46,9 @@ describe('coarse escort coverage', function () {
 		state.enemies.push({ id: 900, ...worldPoint(state, { x: 0, y: 260 }), hp: 1000, maxHp: 1000, kind: 'armored', cooldown: 99 }); state.priority = 900;
 		advance(state, .2); expect(state.shots.filter(function (shot) { return shot.side === 'player'; })).toHaveLength(0);
 	});
-	test('trial wings automatically launch intact, return, rearm and launch again without free replacement', function () {
+	test('scrambled wings automatically launch intact, return, rearm and launch again without free replacement', function () {
 		const state = quiet(true); deploy(state, 'interceptor'); const wing = state.wings[0]; if (!wing) throw new Error('Missing wing');
-		setCoveragePriority(state, 'port', 'all'); state.status = 'running'; step(state, 1 / 60);
+		setCoveragePriority(state, 'port', 'all'); state.status = 'running'; scrambleAll(state); step(state, 1 / 60);
 		expect(wing.phase).toBe('launching'); expect(state.escorts).toHaveLength(3); expect(state.launches).toBe(1);
 		expect(coverageReadiness(state, 'port').unavailable).toBe(3);
 		advance(state, 40); expect(state.launches).toBeGreaterThan(1);

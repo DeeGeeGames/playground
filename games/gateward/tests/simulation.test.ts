@@ -51,7 +51,7 @@ describe('combat and voyage', function () {
 		state.priority = 91; step(state, 1 / 60); expect(state.shots.find(function (shot) { return shot.side === 'player'; })?.target).toBe(91);
 	});
 	test('escorts move toward the player rally point during a quiet approach', function () {
-		const state = createState(); deploy(state, 'interceptor'); setRally(state, { x: 200, y: -200 }); state.status = 'running';
+		const state = createState(); deploy(state, 'guardian'); setRally(state, { x: 200, y: -200 }); state.status = 'running';
 		advance(state, 3); expect(state.escorts.every(function (escort) { return escort.x > 100 && escort.y < -100; })).toBe(true);
 	});
 	test('railguns bypass armor while flak damage is reduced', function () {

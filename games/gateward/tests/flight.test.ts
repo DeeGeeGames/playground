@@ -2,7 +2,7 @@ import { CRAFT_MOUNTS } from '../src/craft-turrets';
 import { describe, expect, test } from 'bun:test';
 import { broadsideMuzzle } from '../src/flight';
 import { localPoint } from '../src/space';
-import { createState, deploy, ENEMIES, setAllocation, setRally, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
+import { createState, deploy, scramble, ENEMIES, setAllocation, setRally, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
 
 const quiet = function (): State {
 	const state = createState(); state.status = 'running'; state.nextWave = Infinity;
@@ -87,7 +87,7 @@ describe('fighter skirmishing', function () {
 		expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeGreaterThan(30);
 	});
 	test('hostile and deployed interceptors maneuver, exchange fire, and resume ark attacks after escorts disappear', function () {
-		const state = quiet(); deploy(state, 'interceptor'); setRally(state, { x: 0, y: -180 });
+		const state = quiet(); deploy(state, 'interceptor'); const wing = state.wings[0]; if (!wing) throw new Error('Missing wing'); scramble(state, wing.id, 'port');
 		for (const escort of state.escorts) { escort.hp = 100000; escort.x = 0; escort.y = -150; }
 		const enemy = hostile(state, 'raider', 60, -220); const before = structuredClone(state.escorts);
 		let hostileShots = 0; let friendlyShots = 0;

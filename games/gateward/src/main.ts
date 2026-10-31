@@ -304,7 +304,7 @@ const shutdown = await mountGame('game', async function (container) {
 		const held = briefing || paused || !state.focused || state.status !== 'running';
 		const recharge = effectiveOutputs(systems).shieldRecharge;
 		label(element('shield-status'), `${energyShield.charge === 0 ? 'DEPLETED · ' : ''}${held ? 'Recharge held' : energyShield.charge >= energyShield.capacity ? 'Fully charged' : energyShield.rechargeDelay > 0 ? `Recharge in ${Math.ceil(energyShield.rechargeDelay)}s` : recharge > 0 ? `Recharging · +${recharge} / s` : 'Recharge stopped · generator offline or no power'}`);
-		label(element('purchase-reason'), !active ? 'Commands held' : craftCount(state) >= 9 ? 'Bay full: nine craft slots' : state.salvage < 85 ? 'Insufficient salvage' : state.experimental ? 'Buy wing 85 · ready in bay / Guardian 105' : 'Deploy escorts'); const mount = state.mounts[selected]; if (!mount) return;
+		label(element('purchase-reason'), !active ? 'Commands held' : craftCount(state) >= 9 ? 'Bay full: nine craft slots' : state.salvage < 85 ? 'Insufficient salvage' : 'Buy wing 85 · docked in bay / Guardian 105'); const mount = state.mounts[selected]; if (!mount) return;
 		label(ui.hull, `${Math.ceil(state.hull)} / ${MAX_HULL}`); meter.value = state.hull;
 		const journey = journeyFor(state);
 		label(ui.salvage, String(Math.floor(state.salvage))); ui.route.style.width = `${journey.progress * 100}%`;
@@ -344,7 +344,7 @@ const shutdown = await mountGame('game', async function (container) {
 			const kind = control.dataset['deploy']; if (kind !== 'interceptor' && kind !== 'guardian') continue;
 			const reason = !active ? 'Commands held' : craftCount(state) + ESCORTS[kind].count > 9 ? `Needs ${ESCORTS[kind].count} free slots` : state.salvage < ESCORTS[kind].cost ? 'Insufficient salvage' : '';
 			control.disabled = !!reason;
-			const detail = control.querySelector('small'); if (detail) label(detail, reason || (kind === 'interceptor' ? state.experimental ? 'Buy 3 ready fighters' : '3 fighters · fragile, fast' : '1 gunship · draws enemy fire'));
+			const detail = control.querySelector('small'); if (detail) label(detail, reason || (kind === 'interceptor' ? '3 fighters · start docked' : '1 gunship · draws enemy fire'));
 		}
 		label(ui.escorts, `${craftCount(state)} / 9 CRAFT`);
 		const canvasHelp = `Tactical view. Click a numbered mount to build. Click an enemy for turret priority. Use tactical radar to allocate escort coverage. Right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
@@ -363,7 +363,7 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.repairInfo, !active ? 'Commands held' : hullCrews > 0 ? `${hullCrews} hull crews · E releases crews` : state.hull >= MAX_HULL ? 'Hull at full integrity' : 'Assign one free crew · split crews in Reactor');
 		label(element('repair-state'), hullCrews > 0 ? `${hullCrews} crews` : `${REPAIR_CREWS - usedCrews} crews free`);
 		ui.pulse.title = `Aegis (Q): ${ui.pulseInfo.textContent}`; ui.repair.title = `Repair (E): ${ui.repairInfo.textContent}`;
-		ui.coverage.disabled = !active; label(element('escort-help'), 'Allocate escort coverage on tactical radar. Ready wings launch automatically. Replace losses during rearm in Escort Bay.');
+		ui.coverage.disabled = !active; label(element('escort-help'), 'Fighters start docked. Scramble all to launch using radar coverage; Recall all to return and hold aboard. Replace losses while docked or rearming.');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
 		label(element('coverage-setting'), `${mode === 'voyage' ? 'Full Voyage' : mode === 'drill' ? 'Escort Drill' : 'Systems Trial'} · ${state.coverageDegrees}° ${state.coverageDegrees < 360 ? 'outward coverage' : 'full coverage'}`);
 		label(ui.hint, placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Radar for escort coverage · Click hostile to focus');
