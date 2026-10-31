@@ -108,7 +108,7 @@ const vents = function (parts: Parts, x: number, y: number, z: number, count: nu
 	}
 };
 
-const finish = function (name: string, parts: Parts, materials: Palette): Group {
+const finish = function (name: string, parts: Parts, materials: Palette, slender = false): Group {
 	const root = new Group(); root.name = name;
 	// Batch disconnected details by material, as the Blender ark does. No model
 	// shares GPU resources with another: existing removal/disposal remains valid.
@@ -116,6 +116,9 @@ const finish = function (name: string, parts: Parts, materials: Palette): Group 
 		const merged = mergeGeometries(geometries);
 		for (const geometry of geometries) geometry.dispose();
 		if (!merged) throw new Error(`Unable to batch craft ${surface}`);
+		// Bake proportions into every detail so picking and disposal keep using
+		// ordinary, unscaled scene roots. Capital ships retain their own proportions.
+		if (slender) merged.scale(1.2, 1, 0.7);
 		const mesh = new Mesh(merged, materials[surface]); mesh.name = surface;
 		mesh.receiveShadow = true; root.add(mesh);
 	}
@@ -128,8 +131,8 @@ const finish = function (name: string, parts: Parts, materials: Palette): Group 
 export const createEscort = function (escort: Escort): Group {
 	const parts: Parts = new Map();
 	if (escort.kind === 'interceptor') {
-		// Small swept wings, paired drives and a narrow glazed central fuselage.
-		body(parts, 'core', [[-10, 3, 2, -2], [-4, 5.5, 3, -2.5], [10, 2.4, 1, -1.5], [15, 0.8, 0, -1]]);
+		// Ark-like parallel shoulders and a clipped prow, with paired drives.
+		body(parts, 'core', [[-10, 3, 2, -2], [-7, 5.5, 3, -2.5], [7, 5.3, 3, -2.5], [12, 3.3, 2, -2], [15, 2.2, 1, -1.5]]);
 		for (const side of [-1, 1]) {
 			body(parts, 'plate', [[-11, 1, 0.8, -1.5], [-8, 3.4, 1.4, -1.5], [1, 1, 0.8, -0.8]], side * 5);
 			plate(parts, 'armor', -1.5, 2, side * 3.1, 14, 2.2, 1.9);
@@ -142,8 +145,8 @@ export const createEscort = function (escort: Escort): Group {
 		plate(parts, 'edge', 7.5, 1.7, 0, 6, 2.5, 1.4);
 		vents(parts, -6, 3.1, 0, 3, 0.9);
 	} else {
-		// Guardian: a broad, layered patrol hull with twin shoulder cannon pods.
-		body(parts, 'core', [[-20, 8, 3, -3], [-16, 13, 4.5, -4.5], [10, 12, 4, -4], [23, 4, 1, -2]]);
+		// Guardian: a long armored deck and aft bridge echo the ark's silhouette.
+		body(parts, 'core', [[-20, 8, 3, -3], [-16, 13, 4.5, -4.5], [12, 12.6, 4.5, -4.5], [19, 8, 3, -3], [23, 5.2, 2, -2.5]]);
 		for (const side of [-1, 1]) {
 			for (const x of [-12, -2, 8]) plate(parts, 'plate', x, 2.7, side * 9.5, 9.1, 6.3, 4.2);
 			plate(parts, 'armor', 1, 5.5, side * 7.3, 15, 4.5, 3.8);
@@ -160,13 +163,13 @@ export const createEscort = function (escort: Escort): Group {
 		vents(parts, -14, 5.8, 0, 4, 1.5);
 		vents(parts, 10, 6.8, 0, 3, 1.3);
 	}
-	return finish(`Escort_${escort.kind}_${escort.id}`, parts, palette());
+	return finish(`Escort_${escort.kind}_${escort.id}`, parts, palette(), true);
 };
 
 export const createEnemy = function (enemy: Enemy): Group {
 	const parts: Parts = new Map();
 	if (enemy.kind === 'raider') {
-		body(parts, 'core', [[-12, 4, 1.5, -2.5], [-6, 7, 2.5, -2.5], [13, 3, 1.2, -1.5], [18, 0.8, 0, -1]]);
+		body(parts, 'core', [[-12, 4, 1.5, -2.5], [-8, 7, 2.5, -2.5], [9, 6.8, 2.5, -2.5], [15, 4.2, 1.8, -2], [18, 2.8, 1, -1.5]]);
 		for (const side of [-1, 1]) {
 			body(parts, 'plate', [[-13, 1.3, 1.5, -1.8], [-10, 3.6, 2.2, -2], [9, 1.4, 0.6, -1]], side * 6.5);
 			plate(parts, 'armor', -4, 2.8, side * 4.2, 12, 3.5, 2.2);
@@ -178,7 +181,7 @@ export const createEnemy = function (enemy: Enemy): Group {
 		plate(parts, 'window', 1, 4.8, 0, 4.5, 3, 1);
 		vents(parts, -7, 3.7, 0, 3, 1.1);
 	} else if (enemy.kind === 'bomber') {
-		body(parts, 'core', [[-15, 5, 2, -3], [-6, 10, 3.5, -3], [15, 4, 2, -2], [22, 1.5, 0, -1.5]]);
+		body(parts, 'core', [[-15, 5, 2, -3], [-10, 10, 3.5, -3], [11, 9.7, 3.5, -3], [18, 6, 2.5, -2.5], [22, 4, 1.5, -2]]);
 		for (const side of [-1, 1]) {
 			body(parts, 'plate', [[-18, 1.8, 1, -2], [-13, 6.5, 2.4, -2.8], [5, 2.3, 1, -2]], side * 12);
 			plate(parts, 'recess', -1, 2, side * 11, 22, 7, 7);
@@ -195,7 +198,7 @@ export const createEnemy = function (enemy: Enemy): Group {
 		plate(parts, 'window', 5, 6.4, 0, 5, 4.5, 1.1);
 		vents(parts, -6, 6.5, 0, 3, 1.3);
 	} else if (enemy.kind === 'armored') {
-		body(parts, 'core', [[-22, 13, 4, -5], [-16, 20, 5.5, -5.5], [16, 18, 5.5, -5], [30, 6, 1.8, -3]]);
+		body(parts, 'core', [[-22, 13, 4, -5], [-16, 20, 5.5, -5.5], [16, 19.4, 5.5, -5], [25, 12, 4, -4], [30, 8, 2.5, -3]]);
 		for (const side of [-1, 1]) {
 			for (const x of [-15, -4, 7, 17]) plate(parts, 'plate', x, 3.6, side * 14.5, 10.2, 9, 5.8);
 			plate(parts, 'edge', 1, -2.5, side * 18, 32, 3, 2);
@@ -246,5 +249,5 @@ export const createEnemy = function (enemy: Enemy): Group {
 		box(parts, 'edge', -28, 28.5, -6, 0.8, 8, 0.8);
 		for (const x of [3, 21, 38]) vents(parts, x, 13.2, 0, 4, 2.2);
 	}
-	return finish(`Hostile_${enemy.kind}_${enemy.id}`, parts, palette(enemy.kind));
+	return finish(`Hostile_${enemy.kind}_${enemy.id}`, parts, palette(enemy.kind), enemy.kind !== 'flagship');
 };
