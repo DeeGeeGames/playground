@@ -32,9 +32,20 @@ hostiles to win; losing the ark's hull ends the run.
 - Kills earn salvage; the reactor produces 1.2 salvage per second. Clearing a
   wave grants 50 salvage and repairs 60 hull. Waves follow a fixed schedule, so
   slow defenses can face overlapping contacts.
-- Space or Escape pauses. Tab and native button activation work for the command
-  panel. Focus loss and hidden documents pause the running voyage. Pointer/touch
+- Space pauses immediately outside native button activation. Escape cancels a field
+  preview first, then closes the inspector, then toggles pause. Tab and native
+  button activation work for the command panel. Focus loss and hidden documents pause the running voyage. Pointer/touch
   commands use the same actions. Physical touch devices are separate acceptance.
+
+The canvas fills the viewport without browser fullscreen. Survival, route, threat,
+reactor presets and emergency commands remain visible. Ship systems opens one
+contextual inspector for mounts, reactor transfers, escorts, sensors, field and
+sensor-gated contact information. Selecting a mount or hostile opens its inspector;
+closing it preserves selection and priority. The inspector is a bottom sheet on
+narrow tall viewports and a right overlay on wide or short viewports. Detailed
+content scrolls internally. Menu pauses orders and contains sound, fullscreen,
+reset view, simulation speed, help, restart and mode controls. In expanded fallback
+mode, use the menu's Exit fullscreen button; Escape retains game navigation.
 
 Browser-independent simulation lives in `src/simulation.ts`; Three.js presentation
 and DOM input remain separate. `src/presentation.ts` owns the scene, orthographic

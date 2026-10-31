@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createState, type Enemy, type Mount } from '../src/simulation';
-import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, pickEnemy, pickMount, project, resizeView, toScreen, toWorld, translateView, TURRET_HEIGHT, viewFor, type View } from '../src/projection';
+import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, offsetView, pickEnemy, pickMount, project, resizeView, toScreen, toWorld, translateView, TURRET_HEIGHT, viewFor, type View } from '../src/projection';
 import { mountWorld } from '../src/space';
 
 const viewports = [{ width: 1152, height: 844 }, { width: 390, height: 440 }, { width: 320, height: 440 }, { width: 589, height: 620 }];
@@ -202,4 +202,24 @@ test('camera travel preserves orbit and zoom while picking world hardpoints afte
 		const resized = resizeView(view, 390, 844);
 		expect(toScreen(state.ark, resized).x).toBeCloseTo(resized.cx); expect(toScreen(state.ark, resized).y).toBeCloseTo(resized.cy);
 	}
+});
+
+
+test('portrait inspector offset preserves orbit, zoom, and world picking across rotation', function () {
+	let view = viewFor(390, 844);
+	orient(view, { azimuth: -Math.PI / 4, elevation: Math.PI / 4, zoom: 1.5 });
+	const position = view.camera.position.clone(); const rotation = view.camera.quaternion.clone();
+	const point = { x: 80, y: -40 }; const before = toScreen(point, view, FLIGHT_HEIGHT);
+	expect(offsetView(view, 150)).toBe(true);
+	expect(toScreen(point, view, FLIGHT_HEIGHT).y).toBeCloseTo(before.y - 150);
+	expect(offsetView(view, 150)).toBe(false);
+	for (const size of [{ width: 844, height: 390 }, { width: 390, height: 844 }]) {
+		view = resizeView(view, size.width, size.height); offsetView(view, 150);
+		const result = toWorld(toScreen(point, view, FLIGHT_HEIGHT), view, FLIGHT_HEIGHT);
+		expect(result?.x).toBeCloseTo(point.x); expect(result?.y).toBeCloseTo(point.y);
+		expect(view.camera.position.equals(position)).toBe(true);
+		expect(view.camera.quaternion.equals(rotation)).toBe(true); expect(view.camera.zoom).toBe(1.5);
+	}
+	offsetView(view, 0);
+	expect(toScreen(point, view, FLIGHT_HEIGHT).y).toBeCloseTo(before.y);
 });

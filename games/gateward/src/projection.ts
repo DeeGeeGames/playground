@@ -52,6 +52,14 @@ export const resizeView = function (view: View, width: number, height: number): 
 	return fitCamera(view.camera, width, height);
 };
 
+// Move the image above an overlay without changing the owner's orbit or zoom.
+export const offsetView = function (view: View, screenOffsetY: number): boolean {
+	const offsetY = screenOffsetY - view.height * 0.02;
+	if (view.camera.view?.offsetY === offsetY && view.camera.view.fullWidth === view.width && view.camera.view.fullHeight === view.height) return false;
+	view.camera.setViewOffset(view.width, view.height, 0, offsetY, view.width, view.height);
+	return true;
+};
+
 // Follow world travel without changing the owner's orbit pose or zoom.
 export const translateView = function (view: View, from: Point, to: Point): void {
 	view.camera.position.x += to.x - from.x;

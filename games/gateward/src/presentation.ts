@@ -3,7 +3,7 @@ import { ACESFilmicToneMapping, AdditiveBlending, BufferAttribute, BufferGeometr
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnemy, createEscort, createTurret, disposeObject, type TurretVisual } from './actors-3d';
-import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, pickEnemy, pickMount, resizeView, toScreen, toWorld, translateView, TURRET_HEIGHT, viewFor, type View } from './projection';
+import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, offsetView, pickEnemy, pickMount, resizeView, toScreen, toWorld, translateView, TURRET_HEIGHT, viewFor, type View } from './projection';
 import { beaconFor, CRUISE_SPEED, journeyFor } from './journey';
 import { createState, coverageFor, ESCORTS, interdictionReason, type Enemy, type Point, type State } from './simulation';
 import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
@@ -16,7 +16,7 @@ import { mountWorld, worldPoint } from './space';
 type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'hull' };
 export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined }
 export interface Presentation {
-	render: (state: State, selected: number, reducedMotion: boolean, rallyMode: boolean, controlsEnabled: boolean, placement?: Point) => void;
+	render: (state: State, selected: number, reducedMotion: boolean, rallyMode: boolean, controlsEnabled: boolean, placement?: Point, screenOffsetY?: number) => void;
 	pick: (point: Point, state: State) => PickResult;
 	placementPoint: (point: Point) => Point | undefined;
 	resetCamera: () => void;
@@ -281,9 +281,10 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	};
 
 	return {
-		render: function (state, selected, reducedMotion, rallyMode, controlsEnabled, placement) {
+		render: function (state, selected, reducedMotion, rallyMode, controlsEnabled, placement, screenOffsetY = 0) {
 			if (disposed) return;
 			resize(); if (view.width <= 0 || view.height <= 0) return;
+			if (offsetView(view, screenOffsetY)) labelsDirty = true;
 			followArk(state); updateRoute(state); controls.enabled = controlsEnabled; controls.update();
 			for (const [index, turret] of turrets.entries()) { const mount = state.mounts[index]; if (mount) turret.update(mount, selected === index); }
 			const journey = journeyFor(state); const drift = reducedMotion ? 0 : journey.distance;
