@@ -15,9 +15,9 @@ export const WAVE_INTERVAL = 34;
 export const WAVE_COUNT = 6;
 export const WEAPONS = {
 	beam: { name: 'Beam', cost: 125, range: 300, damage: 48, reload: 0.4, speed: 0, rotationSpeed: Math.PI, description: 'Sustained instant damage. Armor reduces damage.' },
-	flak: { name: 'Flak', cost: 75, range: 255, damage: 13, reload: 0.32, speed: 650, rotationSpeed: Math.PI * 2, description: 'Rapid fire. Shreds light raiders.' },
-	rail: { name: 'Railgun', cost: 115, range: 440, damage: 95, reload: 2.2, speed: 1100, rotationSpeed: Math.PI / 2, description: 'Long range. Pierces heavy armor.' },
-	missile: { name: 'Missile', cost: 135, range: 355, damage: 52, reload: 1.8, speed: 300, rotationSpeed: Math.PI * 2 / 3, description: 'Homing salvo. Blasts clustered ships.' },
+	flak: { name: 'Flak', cost: 75, range: 255, damage: 13, reload: 0.32, speed: 650, rotationSpeed: Math.PI * 2, description: 'Rapid fire. Prefers classified light raiders. Focus overrides.' },
+	rail: { name: 'Railgun', cost: 115, range: 440, damage: 95, reload: 2.2, speed: 1100, rotationSpeed: Math.PI / 2, description: 'Pierces armor. Prefers classified armored ships and flagships. Focus overrides.' },
+	missile: { name: 'Missile', cost: 135, range: 355, damage: 52, reload: 1.8, speed: 300, rotationSpeed: Math.PI * 2 / 3, description: 'Homing splash. Prefers detected clusters within 85m. Focus overrides.' },
 };
 export const ESCORTS = {
 	interceptor: { name: 'Interceptor wing', cost: 85, count: 3, hp: 65, speed: 160, range: 155, damage: 10, reload: 0.65 },
@@ -55,6 +55,26 @@ export interface State {
 	cleared: boolean; message: string; messageTime: number;
 }
 export const distance = function (a: Point, b: Point): number { return Math.hypot(a.x - b.x, a.y - b.y); };
+export const MISSILE_SPLASH_RADIUS = 85;
+
+// Scores use only available intel. Range and arc constrain the aim point;
+// detected neighbours outside that mount's arc/range can still take splash.
+export const mountTarget = function (state: State, mount: Mount): Enemy | undefined {
+	const weapon = mount.weapon;
+	if (!weapon) return undefined;
+	const visible = state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy); });
+	const candidates = visible.filter(function (enemy) { return covered(state, mount, enemy); });
+	const priority = candidates.find(function (enemy) { return enemy.id === state.priority; });
+	if (priority) return priority;
+	const score = function (enemy: Enemy): number {
+		if (weapon === 'missile') return visible.filter(function (other) { return other.id !== enemy.id && distance(enemy, other) < MISSILE_SPLASH_RADIUS; }).length;
+		if (contactIntel(state, enemy) !== 'classified') return 0;
+		return Number(weapon === 'flak' ? enemy.kind === 'raider' : weapon === 'rail' && (enemy.kind === 'armored' || enemy.kind === 'flagship'));
+	};
+	const origin = mountWorld(state, mount);
+	return candidates.map(function (enemy) { return { enemy, score: score(enemy), distance: distance(origin, enemy) }; })
+		.sort(function (a, b) { return b.score - a.score || a.distance - b.distance || a.enemy.id - b.enemy.id; })[0]?.enemy;
+};
 export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill' | 'systems' } = {}): State {
 	const scenario = options.scenario === 'systems' ? SYSTEMS_TRIAL : options.scenario === 'drill' ? ESCORT_DRILL : undefined;
 	return {
@@ -383,9 +403,9 @@ export const step = function (state: State, dt: number) {
 	for (const mount of state.mounts) {
 		mount.cooldown = Math.max(0, mount.cooldown - dt * weaponRate);
 		if (!mount.weapon || weaponRate === 0) continue;
-		const config = WEAPONS[mount.weapon]; const candidates = state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy) && covered(state, mount, enemy); });
+		const config = WEAPONS[mount.weapon];
 		const origin = mountWorld(state, mount);
-		const target = candidates.find(function (enemy) { return enemy.id === state.priority; }) ?? nearest(origin, candidates, coverageFor(state, mount).range);
+		const target = mountTarget(state, mount);
 		if (!target) continue;
 		// Track the firing solution even while reloading; barrels must finish turning before firing.
 		const targetVelocity = flightVelocity(target.flight);
@@ -489,7 +509,7 @@ export const step = function (state: State, dt: number) {
 			const hit = state.enemies.find(function (enemy) { return enemy.hp > 0 && movingContact(enemy, previousEnemies.get(enemy.id) ?? enemy, before, shot, enemy.kind === 'flagship' ? 38 : enemy.kind === 'armored' ? 23 : 15); });
 			if (!hit) continue;
 			shot.life = 0;
-			if (shot.weapon === 'missile') { for (const enemy of state.enemies) if (distance(hit, enemy) < 85) damageEnemy(enemy, shot.damage, shot.weapon); effect(state, hit, 85, '#f9c875'); }
+			if (shot.weapon === 'missile') { for (const enemy of state.enemies) if (distance(hit, enemy) < MISSILE_SPLASH_RADIUS) damageEnemy(enemy, shot.damage, shot.weapon); effect(state, hit, MISSILE_SPLASH_RADIUS, '#f9c875'); }
 			else { damageEnemy(hit, shot.damage, shot.weapon); effect(state, hit, 10, '#a6efe5'); }
 		} else {
 			const center = state.systems.interdiction.field?.world;
