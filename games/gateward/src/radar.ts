@@ -1,6 +1,6 @@
 import { createRadarTracker, radarPoint, RADAR_LONG_RANGE, RADAR_SHORT_RANGE, type RadarContact } from './radar-model';
 import { SENSOR_CONFIG, sensorRanges } from './sensors';
-import { coverageFor, MAX_HULL, setPriority, type Point, type State } from './simulation';
+import { coverageFor, REPAIR_CREWS, MAX_HULL, setPriority, type Point, type State } from './simulation';
 import { worldPoint } from './space';
 import { priorityCoverage } from './play-screen';
 
@@ -48,7 +48,7 @@ export const createRadar = function (host: HTMLElement, getState: () => State, a
 	detail.append(contactHeading, intel, readout, explanation, priority, coverageText); body.append(scope, detail); surface.append(body);
 	const footer = node('footer', 'radar-footer'); const footerText = node('p');
 	const actions = node('div', 'radar-actions');
-	const repair = control('Repair array · 70', function () { callbacks.repair(); update(); });
+	const repair = control('Assign array crew', function () { callbacks.repair(); update(); });
 	const pause = control('Pause', callbacks.pause); const close = control('Battle view · T / Esc', callbacks.close); actions.append(repair, pause, close); footer.append(footerText, actions); surface.append(footer);
 	const markerNodes = new Map<string, SVGGElement>();
 	const selection = function () { return contacts.find(function (contact) { return selectedId !== undefined && contact.ids.includes(selectedId); }); };
@@ -111,8 +111,8 @@ export const createRadar = function (host: HTMLElement, getState: () => State, a
 		text(footerText, `Detect ${ranges.detection} m · classify ${ranges.classification} m. Scale changes display only.`);
 		text(pause, state.paused ? 'Resume' : 'Pause');
 		const sensors = state.systems.sensors;
-		repair.disabled = !available() || sensors.integrity >= SENSOR_CONFIG.maxIntegrity || sensors.repairCooldown > 0 || state.salvage < SENSOR_CONFIG.repairCost;
-		text(repair, sensors.repairCooldown > 0 ? `Repair · ${Math.ceil(sensors.repairCooldown)}s` : `Repair array · ${SENSOR_CONFIG.repairCost}`);
+		repair.disabled = !available() || (!(state.repairs['sensors'] ?? 0) && (sensors.integrity >= SENSOR_CONFIG.maxIntegrity || Object.values(state.repairs).reduce(function (sum, crews) { return sum + crews; }, 0) >= REPAIR_CREWS));
+		text(repair, (state.repairs['sensors'] ?? 0) > 0 ? `Release array crews (${state.repairs['sensors']})` : 'Assign array crew');
 	};
 	const reset = function () { tracker.reset(); selectedId = undefined; short = false; };
 	const focus = function () { close.focus({ preventScroll: true }); };

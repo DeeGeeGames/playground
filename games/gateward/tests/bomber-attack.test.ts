@@ -56,13 +56,13 @@ describe('bomber response window', function () {
 	});
 	test('same equipment: ignoring hits; post-release Aegis clears; early Aegis only mitigates hull', function () {
 		const ignored = setup(); const release = untilShot(ignored); advance(ignored, 2);
-		expect(ignored.systems.sensors.integrity).toBe(65); expect(ignored.hull).toBe(1166);
+		expect(ignored.systems.sensors.integrity).toBe(66); expect(ignored.hull).toBe(1166);
 		const cleared = setup(); expect(untilShot(cleared)).toBe(release); expect(pulse(cleared)).toBe(true); advance(cleared, 2);
 		expect(cleared.systems.sensors.integrity).toBe(100); expect(cleared.hull).toBe(1200);
 		const early = setup(); step(early, 1 / 60); pulse(early); untilShot(early); advance(early, 2);
-		expect(early.systems.sensors.integrity).toBe(65); expect(early.hull).toBeCloseTo(1193.2);
+		expect(early.systems.sensors.integrity).toBe(66); expect(early.hull).toBeCloseTo(1193.2);
 		const late = setup(); untilShot(late); advance(late, 2); pulse(late);
-		expect(late.systems.sensors.integrity).toBe(65); expect(late.hull).toBe(1166);
+		expect(late.systems.sensors.integrity).toBe(66); expect(late.hull).toBe(1166);
 	});
 	test('eligible field blocks a released round', function () {
 		const state = setup(); untilShot(state);
