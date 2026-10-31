@@ -23,7 +23,7 @@ export const runTrialStrategy = function (preset: keyof typeof POWER_PRESETS | '
 			else if (guardian) assignGuardian(state, guardian.id, order.sector);
 			nextOrder++;
 		}
-		if (field && !fieldAttempted && state.time >= 70) { placeInterdiction(state, worldPoint(state, { x: 300, y: 0 })); fieldAttempted = true; }
+		if (field && !fieldAttempted && state.time >= 20) { placeInterdiction(state, worldPoint(state, { x: 300, y: 0 })); fieldAttempted = true; }
 		if (!refitAttempted && state.time >= 45) { build(state, 7, 'rail'); refitAttempted = true; }
 		if (state.hull < 800 && repair(state)) repairs.push({ at: state.time, kind: 'hull' });
 		if (state.systems && state.systems.sensors.integrity < 55 && repairSensors(state)) repairs.push({ at: state.time, kind: 'sensors' });

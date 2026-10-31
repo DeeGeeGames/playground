@@ -64,8 +64,8 @@ test('equal-cost paired attacks expose wrong-flank pressure and a split fitting 
 test('the historical spending policy exposes the tighter default arc without a budget increase', function () {
 	const control = runSpendingControl(360); const voyage = runSpendingControl(120);
 	expect(control.status).toBe('won'); expect(control.kills).toBe(86);
-	expect(voyage.status).toBe('lost'); expect(voyage.kills).toBe(75);
-	expect(voyage.time).toBeCloseTo(194 + 14 / 15, 5);
+	expect(voyage.status).toBe('lost'); expect(voyage.kills).toBe(71);
+	expect(voyage.time).toBeCloseTo(193 + 2 / 15, 5);
 	expect(voyage.minimumHull).toBe(0); expect(voyage.minimumSensors).toBe(0);
 	const spent = function (result: typeof control) { return result.purchases.reduce(function (sum, purchase) { return sum + purchase.cost; }, 0); };
 	// Identical purchase policy; the losing run earns less and ends earlier.

@@ -26,7 +26,7 @@ const hit = function (state: State, damage = 34, sensorDamage: number | undefine
 describe('range-limited sensor intelligence', function () {
 	test('healthy, impaired and offline detection and classification boundaries', function () {
 		const state = quiet(); const sensors = systemsFor(state).sensors;
-		for (const [integrity, detection, classification] of [[100, 760, 640], [50, 760, 640], [49, 330, 230], [0, 200, 0]]) {
+		for (const [integrity, detection, classification] of [[100, 2000, 640], [50, 2000, 640], [49, 1000, 230], [0, 200, 0]]) {
 			if (integrity === undefined || detection === undefined || classification === undefined) throw new Error('Missing fixture');
 			sensors.integrity = integrity;
 			expect(sensorRanges(state)).toEqual({ detection, classification });
@@ -50,19 +50,19 @@ describe('range-limited sensor intelligence', function () {
 			}
 		}
 	});
-	test('same bomber encounter has six seconds classified warning healthy, uncertain late warning impaired', function () {
+	test('scheduled encounters stay hidden until a real contact is detected and classified', function () {
 		const state = quiet(); state.wave = 1; state.time = 17;
-		expect(contactWarning(state)).toBe('STARBOARD · 4 bomber · arrival 6s');
-		systemsFor(state).sensors.integrity = 49;
 		expect(contactWarning(state)).toBe('Scanning for contacts');
-		state.time = 23; state.nextWave = 23; step(state, 0.05);
+		const enemy = enemyAt(state, 0, 1500);
+		expect(contactWarning(state)).toBe('STARBOARD · unclassified contact');
+		state.systems.sensors.integrity = 49;
 		expect(contactWarning(state)).toBe('Scanning for contacts');
-		expect(state.message).not.toContain('4 bomber');
-		const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing bomber');
-		enemy.x = 0; enemy.y = 300;
+		enemy.y = 900;
 		expect(contactWarning(state)).toBe('STARBOARD · unclassified contact');
 		expect(repairSensors(state)).toBe(true);
-		expect(contactWarning(state)).toContain('bomber');
+		expect(contactWarning(state)).not.toContain('bomber');
+		enemy.y = 600;
+		expect(contactWarning(state)).toBe('STARBOARD · 1 bomber · in range');
 	});
 	test('voyage and drill both use sensors without an opt-in', function () {
 		for (const state of [createState(), createState({ scenario: 'drill' })]) {
@@ -72,7 +72,7 @@ describe('range-limited sensor intelligence', function () {
 			expect(repairSensors(state)).toBe(false);
 		}
 		expect(contactWarning(createState({ scenario: 'drill' }))).toBe('Scanning for contacts');
-		const voyage = createState(); voyage.time = 4; expect(contactWarning(voyage)).toContain('raider');
+		const voyage = createState(); voyage.time = 4; expect(contactWarning(voyage)).toBe('Scanning for contacts');
 		voyage.systems.sensors.integrity = 0; expect(contactWarning(voyage)).toBe('Scanning for contacts');
 	});
 });
@@ -80,7 +80,7 @@ describe('range-limited sensor intelligence', function () {
 describe('acquisition and local defense', function () {
 	test('manual locks reject hidden/dead targets and clear immediately after disruption', function () {
 		const state = quiet(); const systems = systemsFor(state); systems.shield.charge = 0;
-		const enemy = enemyAt(state, 400);
+		const enemy = enemyAt(state, 1400);
 		expect(setPriority(state, enemy.id)).toBe(true);
 		hit(state); hit(state); step(state, 0.05);
 		expect(systems.sensors.integrity).toBe(30);
@@ -142,7 +142,7 @@ describe('interceptable bomber disruption', function () {
 		const state = createState({ scenario: 'drill' }); state.status = 'running';
 		state.wave = 1; state.time = 22.95; state.nextWave = 23;
 		const systems = systemsFor(state); systems.shield.charge = 0; systems.allocation = { engines: 4, weapons: 6, shields: 0 };
-		for (let frame = 0; frame < 400 && systems.sensors.integrity >= 50; frame++) step(state, 0.05);
+		for (let frame = 0; frame < 1800 && systems.sensors.integrity >= 50; frame++) step(state, 0.05);
 		expect(state.enemies.some(function (enemy) { return enemy.kind === 'bomber'; })).toBe(true);
 		expect(systems.sensors.integrity).toBeLessThan(50); expect(systems.sensors.impairments).toBe(1);
 		expect(state.hull).toBeLessThan(MAX_HULL); expect(state.message).toContain('Array-seeking round penetrated');

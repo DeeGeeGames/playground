@@ -71,7 +71,7 @@ export const drawTacticalRing = function (ctx: CanvasRenderingContext2D, state: 
 		ctx.closePath(); ctx.fillStyle = contact.intel === 'classified' ? '#ff8b82' : '#101d29';
 		ctx.strokeStyle = contact.intel === 'classified' ? '#101d29' : '#edbc7e'; ctx.lineWidth = 2;
 		ctx.fill(); ctx.stroke(); ctx.restore();
-		if (contact.count > 1) {
+		if (contact.intel === 'classified' && contact.count > 1) {
 			ctx.font = '10px ui-monospace, monospace'; ctx.textAlign = 'center';
 			ctx.lineWidth = 3; ctx.strokeStyle = '#080f19'; ctx.fillStyle = '#deeaef';
 			ctx.strokeText(String(contact.count), at.x, at.y - 10); ctx.fillText(String(contact.count), at.x, at.y - 10);

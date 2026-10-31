@@ -10,11 +10,11 @@ const enemy = function (id: number, x: number, y: number): Enemy {
 
 test('ring respects classification, detection boundaries, damage and dead contacts', function () {
 	const state = createState();
-	state.enemies = [enemy(1, 640, 0), enemy(2, 0, 760), enemy(3, -761, 0), { ...enemy(4, 100, 0), hp: 0 }];
+	state.enemies = [enemy(1, 640, 0), enemy(2, 0, 2000), enemy(3, -2001, 0), { ...enemy(4, 100, 0), hp: 0 }];
 	expect(ringContacts(state).map(function (contact) { return contact.intel; })).toEqual(['classified', 'detected']);
 	state.systems.sensors.integrity = 49;
-	expect(ringContacts(state)).toEqual([]);
-	state.enemies = [enemy(1, 230, 0), enemy(2, 0, 330), enemy(3, -331, 0)];
+	expect(ringContacts(state).map(function (contact) { return contact.intel; })).toEqual(['detected']);
+	state.enemies = [enemy(1, 230, 0), enemy(2, 0, 1000), enemy(3, -1001, 0)];
 	expect(ringContacts(state).map(function (contact) { return contact.intel; })).toEqual(['classified', 'detected']);
 	state.systems.sensors.integrity = 0;
 	state.enemies = [enemy(1, 200, 0), enemy(2, 0, 201)];

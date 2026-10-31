@@ -8,6 +8,23 @@ salvage, then depart. A voyage takes about 3½ minutes at 1×, or half that at 2
 Six directional waves culminate in a flagship. Reach Kepler Gate and destroy all
 hostiles to win; losing the ark's hull ends the run.
 
+- T / Radar opens the live heading-up tactical screen. Long range covers 2 km;
+  short range covers 700 m, with classification inside 640 m. Both sensor bands
+  remain active in either view. Escape or Battle view returns to the 3D battle.
+  Space pauses outside native button activation; radar also provides Pause.
+- Long-range returns group contacts by coarse bearing and distance without
+  revealing ship classes, exact counts, or hull strength. Select a contact to
+  mark priority; weapons still obey their existing range and firing arcs.
+  Lost tracks retain only their last observed world position, show their age,
+  and expire after eight simulation seconds. They cannot be targeted.
+- Encounters enter at 2.2–2.4 km and cruise at 60 m/s until entering the 700 m
+  combat zone, then use their normal combat speed. Detection warning time uses
+  actual relative closing speed. Voyage approaches start every 28 seconds after
+  the first at 5 seconds; scenario approaches start 15 seconds before their
+  encounter time, clamped at departure. Mission durations/deadlines are unchanged.
+- Sensor integrity below 50 reduces detection to 1 km and classification to
+  230 m. Offline sensors retain 200 m local automatic defense. Repair from radar
+  or the sensor panel costs 70 salvage, with the existing 18-second cooldown.
 - Select one of eight mounts using a visible ship pad, panel buttons, or keys 1–8.
 - Right-drag to orbit and use the wheel to zoom. On touch screens, drag to orbit
   and pinch to zoom; a tap still gives an order. Reset view and restarting restore
@@ -32,7 +49,7 @@ hostiles to win; losing the ark's hull ends the run.
 - Kills earn salvage; the reactor produces 1.2 salvage per second. Clearing a
   wave grants 50 salvage and repairs 60 hull. Waves follow a fixed schedule, so
   slow defenses can face overlapping contacts.
-- Space pauses immediately outside native button activation. Escape cancels a field
+- Space pauses immediately outside native button activation. Escape returns from radar, otherwise cancels a field
   preview first, then closes the inspector, then toggles pause. Tab and native
   button activation work for the command panel. Focus loss and hidden documents pause the running voyage. Pointer/touch
   commands use the same actions. Physical touch devices are separate acceptance.
@@ -271,15 +288,15 @@ independent. The engineering panel's travel ETA excludes combat clearance.
 Navigation beacons, gate position, route percentage and drive plumes share the
 same actual distance/speed. Reduced motion retains physical route progress.
 
-Sensors start at 100 integrity. At 50 or more, they detect contacts at 760m and
-classify them at 640m; below 50, those ranges fall to 330m and 230m. At zero,
+Sensors start at 100 integrity. At 50 or more, they detect contacts at 2000m and
+classify them at 640m; below 50, those ranges fall to 1000m and 230m. At zero,
 nearby defense still acquires contacts within 200m, with no classification.
-Only classified contacts provide class/count/arrival hints. Unknown detections
-show their direction and a question mark; undetected craft have no radar arrows,
-labels or health readout, but their physical models remain visible. The next
-scheduled approach is modeled beyond its spawn radius at that class's closing
-speed so healthy sensors give advance warning. This is a tactical prototype,
-not a generalized fog-of-war or line-of-sight system.
+Only classified contacts provide ship class, exact hull and classified group counts.
+Unclassified craft use a generic amber marker; unseen craft have no physical
+model, radar arrow, label, or health readout. The radar groups coarse returns
+without exact counts. Only real actors inside detection range produce warnings;
+pending encounter schedules never reveal their composition. This is a tactical
+prototype, not a generalized line-of-sight system.
 
 Ark turret acquisition and missile guidance respect sensor range. Missiles
 already flying continue ballistically while a lock is out of range and can

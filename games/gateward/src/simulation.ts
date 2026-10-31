@@ -11,8 +11,11 @@ export type EnemyKind = 'raider' | 'bomber' | 'armored' | 'flagship';
 export type EscortKind = 'interceptor' | 'guardian';
 export const MAX_HULL = 1200;
 export const ROUTE_SECONDS = 210;
-export const WAVE_INTERVAL = 34;
+export const WAVE_INTERVAL = 28;
 export const WAVE_COUNT = 6;
+// Move the approach earlier while retaining the existing mission clocks.
+export const APPROACH = { leadTime: 15, spawnRange: 2200, cruiseSpeed: 60 } as const;
+const approachAt = function (combatAt: number): number { return Math.max(0, combatAt - APPROACH.leadTime); };
 export const WEAPONS = {
 	beam: { name: 'Beam', cost: 125, range: 300, damage: 48, reload: 0.4, speed: 0, rotationSpeed: Math.PI, description: 'Sustained instant damage. Armor reduces damage.' },
 	flak: { name: 'Flak', cost: 75, range: 255, damage: 13, reload: 0.32, speed: 650, rotationSpeed: Math.PI * 2, description: 'Rapid fire. Prefers classified light raiders. Focus overrides.' },
@@ -32,7 +35,7 @@ export const ENEMIES = {
 export interface Mount extends Point { weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
 export const BOMBER_ATTACK = { windup: 2, releaseCue: 0.35 } as const;
 export type BomberAttack = { phase: 'windup'; remaining: number; target: number | undefined } | { phase: 'released'; remaining: number };
-export interface Enemy extends Point { bomberAttack?: BomberAttack; turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
+export interface Enemy extends Point { approaching?: boolean; bomberAttack?: BomberAttack; turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
 export interface Escort extends Point { turretAim?: CraftAim; flight?: Flight; wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
 export interface Shot extends Point { originHeight?: number; origin?: Point; sourceVelocity?: Point; beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
 export type CombatFeedback =
@@ -86,7 +89,7 @@ export const createState = function (options: { coverageDegrees?: number; experi
 		resultReason: undefined,
 		systems: createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed),
 		scenario, experimental: scenario !== undefined || (options.experimental ?? false), wings: [], launches: 0, orders: 0, escortLosses: 0, coverageDegrees: options.coverageDegrees ?? (scenario ? 240 : 120), paused: false, focused: true,
-		time: 0, hull: MAX_HULL, salvage: scenario?.salvage ?? 300, wave: 0, nextWave: scenario ? (scenario.encounters[0]?.at ?? Infinity) : 5, kills: 0, status: 'fitting',
+		time: 0, hull: MAX_HULL, salvage: scenario?.salvage ?? 300, wave: 0, nextWave: scenario ? approachAt(scenario.encounters[0]?.at ?? Infinity) : 5, kills: 0, status: 'fitting',
 		mounts: [-1, 1].flatMap(function (side) { return [-96, -32, 32, 96].map(function (x): Mount { return { x, y: side * 43, weapon: undefined, level: 0, cooldown: 0, aim: side * Math.PI / 2 }; }); }),
 		enemies: [], escorts: [], shots: [], effects: [], arrivals: [], nextId: 1, rally: { x: 0, y: 0 }, priority: undefined,
 		pulseCooldown: 0, aegisRemaining: 0, repairCooldown: 0, cleared: false, message: 'Fit your ship, then depart. Weapons fire automatically.', messageTime: 8,
@@ -271,20 +274,20 @@ const waveArrivals = function (wave: number, at: number): Arrival[] {
 		const angle = base + Math.sin(i * 2.4) * 0.65;
 		const kind: EnemyKind = wave === 6 && i === 0 ? 'flagship' : wave >= 3 && i % 5 === 0 ? 'armored' : wave >= 2 && i % 3 === 0 ? 'bomber' : 'raider';
 		const arrivalAngle = kind === 'flagship' ? 0 : angle;
-		return { at: at + i * (wave === 5 ? 0.45 : 0.9), kind, x: Math.cos(arrivalAngle) * 620, y: Math.sin(arrivalAngle) * 520 };
+		return { at: at + i * (wave === 5 ? 0.45 : 0.9), kind, x: Math.cos(arrivalAngle) * (APPROACH.spawnRange + i % 3 * 100), y: Math.sin(arrivalAngle) * (APPROACH.spawnRange + i % 3 * 100) };
 	});
 };
 const startWave = function (state: State) {
-	state.wave += 1; state.nextWave += WAVE_INTERVAL; state.cleared = false;
+	state.wave += 1; state.nextWave = 5 + state.wave * WAVE_INTERVAL; state.cleared = false;
 	state.arrivals.push(...waveArrivals(state.wave, state.time));
 };
 const startEncounter = function (state: State) {
 	const encounter = state.scenario?.encounters[state.wave]; if (!encounter) return;
-	state.wave++; state.cleared = false; state.nextWave = state.scenario?.encounters[state.wave]?.at ?? Infinity;
+	state.wave++; state.cleared = false; state.nextWave = approachAt(state.scenario?.encounters[state.wave]?.at ?? Infinity);
 	const base = SECTOR_POINTS[encounter.sector]; const angle = Math.atan2(base.y, base.x);
 	for (let i = 0; i < encounter.count; i++) {
 		const bearing = angle + Math.sin(i * 2.4) * 0.35;
-		state.arrivals.push({ at: encounter.at + i * encounter.spacing, kind: encounter.kind, x: Math.cos(bearing) * 520, y: Math.sin(bearing) * 460 });
+		state.arrivals.push({ at: approachAt(encounter.at) + i * encounter.spacing, kind: encounter.kind, x: Math.cos(bearing) * (APPROACH.spawnRange + i % 3 * 100), y: Math.sin(bearing) * (APPROACH.spawnRange + i % 3 * 100) });
 	}
 };
 export const durationFor = function (state: State): number { return state.scenario?.duration ?? ROUTE_SECONDS; };
@@ -292,23 +295,9 @@ const contactDirection = function (point: Point): string {
 	return Math.abs(point.x) > Math.abs(point.y) ? point.x > 0 ? 'AHEAD' : 'ASTERN' : point.y > 0 ? 'STARBOARD' : 'PORT';
 };
 export const contactWarning = function (state: State): string {
-	const next = state.scenario?.encounters[state.wave];
-	if (next) {
-		const bearing = SECTOR_POINTS[next.sector]; const angle = Math.atan2(bearing.y, bearing.x);
-		const range = Math.hypot(Math.cos(angle) * 520, Math.sin(angle) * 460) + ENEMIES[next.kind].speed * Math.max(0, next.at - state.time);
-		const intel = contactIntel(state, worldPoint(state, { x: Math.cos(angle) * range, y: Math.sin(angle) * range }));
-		if (intel === 'classified') return `${next.sector.toUpperCase()} · ${next.count} ${next.kind} · arrival ${Math.max(0, Math.ceil(next.at - state.time))}s`;
-		if (intel === 'detected') return `${next.sector.toUpperCase()} · unclassified contact`;
-	}
-	const futureWave = !state.scenario && state.wave < WAVE_COUNT && Number.isFinite(state.nextWave) ? waveArrivals(state.wave + 1, state.nextWave) : [];
-	for (const arrival of [...state.arrivals, ...futureWave]) {
-		const radius = Math.hypot(arrival.x, arrival.y);
-		const range = radius + ENEMIES[arrival.kind].speed * Math.max(0, arrival.at - state.time);
-		const intel = contactIntel(state, worldPoint(state, { x: arrival.x * range / radius, y: arrival.y * range / radius }));
-		if (intel === 'classified') return `${contactDirection(arrival)} · ${arrival.kind} · arrival ${Math.max(0, Math.ceil(arrival.at - state.time))}s`;
-		if (intel === 'detected') return `${contactDirection(arrival)} · unclassified contact`;
-	}
-	const contacts = state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy); });
+	// Only real, currently observed actors may generate warnings.
+	const contacts = state.enemies.filter(function (enemy) { return enemy.hp > 0 && canAcquire(state, enemy); })
+		.sort(function (a, b) { return distance(a, state.ark) - distance(b, state.ark); });
 	const contact = contacts[0];
 	if (!contact) return 'Scanning for contacts';
 	if (contactIntel(state, contact) === 'detected') return `${contactDirection(localPoint(state, contact))} · unclassified contact`;
@@ -404,7 +393,7 @@ export const step = function (state: State, dt: number) {
 	state.salvage += dt * 1.2;
 	if (state.time >= state.nextWave) { if (state.scenario) startEncounter(state); else if (state.wave < WAVE_COUNT) startWave(state); }
 	for (const arrival of state.arrivals.filter(function (a) { return a.at <= state.time; })) {
-		const config = ENEMIES[arrival.kind]; const position = arrivalOutsideField(state, worldPoint(state, arrival), arrival.kind); state.enemies.push({ id: state.nextId++, kind: arrival.kind, x: position.x, y: position.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8 });
+		const config = ENEMIES[arrival.kind]; const position = arrivalOutsideField(state, worldPoint(state, arrival), arrival.kind); state.enemies.push({ id: state.nextId++, approaching: true, kind: arrival.kind, x: position.x, y: position.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8 });
 	}
 	state.arrivals = state.arrivals.filter(function (a) { return a.at > state.time; });
 	clearLostPriority(state);
@@ -473,11 +462,15 @@ export const step = function (state: State, dt: number) {
 		const destination = escort ?? arkTarget;
 		enemy.flight ??= createFlight(relative, { x: state.ark.x - enemy.x, y: state.ark.y - enemy.y }, config.speed, enemy.id);
 		const flight = enemy.flight;
-		const waypoint = navigateField(state, enemy, destination, config.speed, dt);
+		const approaching = enemy.approaching === true && distance(enemy, state.ark) > SENSOR_CONFIG.shortRange;
+		if (!approaching && enemy.approaching) enemy.approaching = false;
+		const flightSpeed = approaching ? APPROACH.cruiseSpeed : config.speed;
+		const waypoint = navigateField(state, enemy, destination, flightSpeed, dt);
 		const desired = waypoint ? arriveCourse(enemy, waypoint, { x: 0, y: 0 }, 2)
+			: approaching ? arriveCourse(enemy, destination, carrierVelocity, 0.5)
 			: isCapital(enemy) ? capitalCourse(state, enemy, flight, config.range, config.speed)
 			: fighterCourse(enemy, escort ?? state.ark, escort ? 60 : enemy.kind === 'bomber' ? 265 : 195, escort ? 60 : enemy.kind === 'bomber' ? 225 : 105, config.speed, enemy.id % 2 ? -1 : 1, escort ? flightVelocity(escort.flight) : carrierVelocity, state.enemies);
-		fly(enemy, flight, desired, config.speed, isCapital(enemy) ? 0.7 : 3, dt);
+		fly(enemy, flight, desired, flightSpeed, isCapital(enemy) ? 0.7 : 3, dt);
 		const shotSpeed = enemy.kind === 'bomber' ? 155 : 235;
 		const escortSolution = escort ? hostileSolution(enemy, escort, flightVelocity(escort.flight), shotSpeed) : undefined;
 		const firingEscort = escortSolution ? escort : undefined;

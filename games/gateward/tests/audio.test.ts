@@ -23,7 +23,7 @@ test('combat sounds are deduplicated and paused simulation produces no new cues'
 	state.enemies.push({ id: state.nextId++, kind: 'armored', x: -80, y: -140, hp: 260, maxHp: 260, cooldown: 10 });
 	for (const mount of state.mounts) mount.aim = Math.atan2(-140 - mount.y, -80 - mount.x);
 	step(state, 1 / 60);
-	expect(read(state)).toEqual(['flak']); expect(read(state)).toEqual([]);
+	expect(read(state)).toEqual(['flak', 'contact']); expect(read(state)).toEqual([]);
 	state.paused = true;
 	for (let i = 0; i < 120; i++) { step(state, 1 / 60); expect(read(state)).toEqual([]); }
 	state.paused = false;
@@ -42,13 +42,19 @@ test('point-blank railgun fire is audible even when its projectile hits in the s
 	expect(read(state)).toEqual([]);
 });
 
-test('a hidden systems encounter does not leak its arrival through the contact cue', function () {
-	const state = createState({ scenario: 'drill' }); const sensors = state.systems?.sensors;
-	if (!sensors) throw new Error('Missing sensors');
-	sensors.integrity = 0; state.status = 'running'; state.time = 9.99;
-	state.enemies.push({ id: state.nextId++, kind: 'raider', x: 0, y: -100, hp: 45, maxHp: 45, cooldown: 99 });
+test('hidden approaches stay silent until their first real detection, then cue once', function () {
+	const state = createState({ scenario: 'drill' });
+	state.status = 'running';
 	const read = createSoundObserver(); read(state); step(state, 1 / 60);
 	expect(state.wave).toBe(1); expect(read(state)).not.toContain('contact');
-	const healthy = createState({ scenario: 'drill' }); healthy.status = 'running'; healthy.time = 9.99;
-	read(healthy); step(healthy, 1 / 60); expect(read(healthy)).toContain('contact');
+	state.nextWave = Infinity; state.arrivals = [];
+	const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing approach');
+	state.enemies = [enemy];
+	enemy.x = state.ark.x; enemy.y = state.ark.y - 1500;
+	expect(read(state)).toContain('contact'); expect(read(state)).not.toContain('contact');
+	state.systems.sensors.integrity = 0; read(state);
+	enemy.y = state.ark.y - 1000;
+	expect(read(state)).not.toContain('contact');
+	state.systems.sensors.integrity = 100;
+	expect(read(state)).toContain('contact'); expect(read(state)).not.toContain('contact');
 });
