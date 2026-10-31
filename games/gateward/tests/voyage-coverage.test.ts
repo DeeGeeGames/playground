@@ -5,13 +5,13 @@ import { worldPoint } from '../src/space';
 import { runFlankComparison } from '../scripts/coverage-comparison';
 import { runSpendingControl } from '../scripts/combat-pressure';
 
-test('voyage defaults to 120 degrees while scenarios keep 240 and voyage escorts remain permanent', function () {
+test('voyage defaults to 120 degrees while scenarios keep 240 and voyage fighters start docked', function () {
 	for (const scenario of ['drill', 'systems'] as const) expect(createState({ scenario }).coverageDegrees).toBe(240);
 	const state = createState();
 	expect(state.coverageDegrees).toBe(120);
 	expect(state.experimental).toBe(false);
 	deploy(state, 'interceptor'); deploy(state, 'guardian');
-	expect(state.wings).toHaveLength(0); expect(state.escorts).toHaveLength(4);
+	expect(state.wings).toHaveLength(1); expect(state.wings[0]?.phase).toBe('ready'); expect(state.escorts).toHaveLength(1);
 	expect(setRally(state, { x: 100, y: 200 })).toBe(true);
 	expect(state.rally).toEqual({ x: 100, y: 200 });
 });

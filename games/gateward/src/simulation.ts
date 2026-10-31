@@ -54,6 +54,7 @@ export interface Wing { id: number; phase: 'ready' | 'launching' | 'sortie' | 'r
 export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
 export interface State {
 	coverage: EscortCoverage;
+	fightersScrambled: boolean;
 	repairs: Record<string, number>;
 	ark: Point & { angle: number; speed: number };
 	routeOrigin: Point;
@@ -90,7 +91,7 @@ export const mountTarget = function (state: State, mount: Mount): Enemy | undefi
 export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill' | 'systems' } = {}): State {
 	const scenario = options.scenario === 'systems' ? SYSTEMS_TRIAL : options.scenario === 'drill' ? ESCORT_DRILL : undefined;
 	return {
-		coverage: createEscortCoverage(),
+		coverage: createEscortCoverage(), fightersScrambled: false,
 		repairs: {}, ark: { x: 0, y: 0, angle: 0, speed: 0 }, routeOrigin: { x: 0, y: 0 },
 		resultReason: undefined,
 		systems: createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed),
@@ -187,7 +188,7 @@ export const deploy = function (state: State, kind: EscortKind): boolean {
 	const config = ESCORTS[kind];
 	if (!canOrder(state) || state.salvage < config.cost || craftCount(state) + config.count > 9) return false;
 	state.salvage -= config.cost;
-	if (state.experimental && kind === 'interceptor') {
+	if (kind === 'interceptor') {
 		const wing: Wing = { id: state.nextId++, phase: 'ready', timer: 0, craft: [], assignment: 'port' };
 		wing.craft = Array.from({ length: 3 }, function () { return makeFighter(state, wing.id); }); state.wings.push(wing); updateEscortCoverage(state); return true;
 	}
@@ -218,12 +219,29 @@ const launchWing = function (state: State, id: number, sector: Sector): boolean 
 	}
 	state.launches++; state.orders++; return true;
 };
-// Retain explicit simulation orders for experiments and callers. Radar orders
-// re-enable automatic allocation; the normal UI only exposes coarse coverage.
+// Retain explicit per-wing orders for experiments and callers.
 export const scramble = function (state: State, id: number, sector: Sector): boolean {
 	if (!launchWing(state, id, sector)) return false;
 	for (const craft of state.wings.find(function (wing) { return wing.id === id; })?.craft ?? []) delete craft.sector;
 	state.coverage.enabled = false; return true;
+};
+export const scrambleAll = function (state: State): boolean {
+	if (!canOrder(state) || state.status !== 'running' || state.fightersScrambled || !state.wings.some(function (wing) { return wing.craft.some(function (craft) { return craft.hp > 0; }); })) return false;
+	state.fightersScrambled = true;
+	state.coverage.enabled = true;
+	state.orders++;
+	updateEscortCoverage(state);
+	return true;
+};
+export const recallAll = function (state: State): boolean {
+	if (!canOrder(state) || (!state.fightersScrambled && !state.wings.some(function (wing) { return wing.phase === 'launching' || wing.phase === 'sortie'; }))) return false;
+	state.fightersScrambled = false;
+	for (const wing of state.wings) {
+		if (wing.phase !== 'launching' && wing.phase !== 'sortie') continue;
+		wing.phase = 'returning'; wing.timer = 0;
+	}
+	state.orders++;
+	return true;
 };
 const updateEscortCoverage = function (state: State) {
 	if (!state.coverage.enabled) return;
@@ -231,7 +249,7 @@ const updateEscortCoverage = function (state: State) {
 	for (const wing of state.wings) {
 		const sector = plan.get(`wing-${wing.id}`);
 		if (sector) wing.assignment = sector;
-		if (sector && wing.phase === 'ready' && wing.craft.length > 0 && state.status === 'running') launchWing(state, wing.id, sector);
+		if (state.fightersScrambled && sector && wing.phase === 'ready' && wing.craft.length > 0 && state.status === 'running') launchWing(state, wing.id, sector);
 		for (const craft of wing.craft) { if (sector) craft.sector = sector; else delete craft.sector; }
 	}
 	for (const craft of state.escorts) {
