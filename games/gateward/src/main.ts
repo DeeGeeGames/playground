@@ -3,12 +3,13 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, setRally, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
+import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, setAllocation, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, setRally, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
 import { worldPoint } from './space';
 import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
 import { createEngineeringPanel } from './engineering-panel';
-import { powerOutputs } from './systems';
+import { POWER_PRESETS, powerOutputs } from './systems';
+import { contactDescription, inspectorName, presetFor, type Inspector } from './play-screen';
 import { contactIntel, SENSOR_CONFIG, sensorRanges } from './sensors';
 import { createInterdictionPanel } from './interdiction-panel';
 import { systemsResultMessage, systemsSummary } from './trial-summary';
@@ -35,7 +36,7 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const mountButtons = Array.from({ length: 8 }, function (_, i) {
 		const control = document.createElement('button'); control.type = 'button'; control.setAttribute('aria-label', `Select mount ${i + 1}`);
-		control.addEventListener('click', function () { if (available()) { selected = i; rallyMode = false; placement = undefined; } }, options);
+		control.addEventListener('click', function () { if (available()) { selected = i; inspectedContact = undefined; openInspector('mounts'); rallyMode = false; placement = undefined; } }, options);
 		element('mounts').append(control); return control;
 	});
 	const buildButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-build]')];
@@ -48,14 +49,33 @@ const shutdown = await mountGame('game', async function (container) {
 	let placement: Point | undefined;
 	let frame = 0; let previous = 0; let accumulator = 0; let disposed = false; let contextAvailable = true;
 	const pointers = new Map<number, { x: number; y: number; moved: boolean }>();
-	let multiTouch = false; let engineeringFirst = false;
+	let multiTouch = false;
+	let inspector: Inspector | undefined;
+	let inspectedContact: number | undefined;
+	let inspectorReturn: HTMLElement | undefined;
+	const openInspector = function (view: Inspector) {
+		if (!available()) return;
+		if (!inspector) inspectorReturn = document.activeElement instanceof HTMLElement ? document.activeElement : button('open-systems');
+		inspector = view; element('inspector').hidden = false;
+		for (const section of container.querySelectorAll<HTMLElement>('[data-inspector-content]')) section.hidden = section.dataset['inspectorContent'] !== view;
+		for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) control.setAttribute('aria-pressed', String(control.dataset['inspector'] === view));
+		label(element('inspector-title'), view === 'mounts' ? 'Weapon mounts' : view === 'contact' ? 'Contact' : view === 'field' ? 'Interdiction field' : view === 'reactor' ? 'Reactor allocation' : view === 'escorts' ? 'Escort bay' : 'Sensor array');
+		button('open-systems').setAttribute('aria-expanded', 'true'); button('open-selection').setAttribute('aria-expanded', 'true');
+	};
+	const closeInspector = function () {
+		inspector = undefined; element('inspector').hidden = true;
+		button('open-systems').setAttribute('aria-expanded', 'false'); button('open-selection').setAttribute('aria-expanded', 'false');
+		const target = inspectorReturn?.isConnected && !inspectorReturn.closest('[hidden]') ? inspectorReturn : button('open-systems');
+		target.focus({ preventScroll: true });
+	};
 	const available = function () { return contextAvailable && state.focused && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'); };
-	const focusCanvas = function () { canvas.focus({ preventScroll: true }); };
+	const focusCanvas = function () { for (const child of container.children) if (child instanceof HTMLElement) child.inert = false; canvas.focus({ preventScroll: true }); };
 	const setPause = function (value: boolean) {
 		if (briefing || state.status === 'won' || state.status === 'lost') return;
 		if (!value && !contextAvailable) return;
 		if (value) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); }
 		audio.setActive(!value && state.focused && !document.hidden && contextAvailable);
+		ui.pausePanel.inert = false;
 		paused = value; state.paused = value; rallyMode = false; placement = undefined; accumulator = 0; ui.pausePanel.hidden = !paused;
 		if (paused) button('resume').focus({ preventScroll: true }); else focusCanvas();
 	};
@@ -78,12 +98,12 @@ const shutdown = await mountGame('game', async function (container) {
 	const detachFullscreen = attachFullscreen(container, button('fullscreen'), element('fullscreen-status'));
 	canvas.addEventListener('webglcontextlost', function () { contextAvailable = false; setPause(true); notify(state, 'Graphics interrupted. Voyage paused until the display is restored.'); }, options);
 	canvas.addEventListener('webglcontextrestored', function () { contextAvailable = true; notify(state, 'Display restored. Resume when ready.'); }, options);
-	button('reset-camera').addEventListener('click', function () { presentation.resetCamera(); focusCanvas(); }, options);
+	button('reset-camera').addEventListener('click', function () { presentation.resetCamera(); if (!paused) focusCanvas(); }, options);
 	const restart = function () {
 		audio.reset();
 		pointers.clear(); multiTouch = false;
 		placement = undefined; state = newState(); selected = 0; paused = false; briefing = false; rallyMode = false; speed = 1; accumulator = 0;
-		ui.pausePanel.hidden = true; ui.result.hidden = true; ui.brief.hidden = true; focusCanvas();
+		ui.pausePanel.hidden = true; ui.result.hidden = true; ui.brief.hidden = true; inspectedContact = undefined; openInspector('mounts'); focusCanvas();
 		presentation.resetCamera();
 	};
 	const order = function (action: () => boolean) {
@@ -96,7 +116,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (!available()) return;
 		const reason = interdictionReason(state); if (reason) { notify(state, reason); return; }
 		pointers.clear(); multiTouch = false; presentation.cancelInteraction();
-		placement = { ...point }; rallyMode = false; focusCanvas();
+		placement = { ...point }; rallyMode = false; openInspector('field'); focusCanvas();
 	};
 	const confirmPlacement = function () {
 		if (!available() || !placement) return;
@@ -117,9 +137,9 @@ const shutdown = await mountGame('game', async function (container) {
 	button('repair-sensors').addEventListener('click', function () { order(function () { return repairSensors(state); }); }, options);
 	ui.depart.addEventListener('click', function () {
 		if (!available() || state.status !== 'fitting') return;
-		state.status = 'running'; notify(state, 'Underway. Allocate power and monitor the sensor feed.'); accumulator = 0; focusCanvas();
+		state.status = 'running'; closeInspector(); notify(state, 'Underway. Allocate power and monitor the sensor feed.'); accumulator = 0; focusCanvas();
 	}, options);
-	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; focusCanvas(); }, options);
+	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; openInspector('mounts'); focusCanvas(); }, options);
 	button('prepare').disabled = false;
 	for (const control of container.querySelectorAll<HTMLButtonElement>('[data-mode]')) control.addEventListener('click', function () {
 		mode = control.dataset['mode'] === 'systems' ? 'systems' : control.dataset['mode'] === 'drill' ? 'drill' : 'voyage'; restart();
@@ -127,11 +147,28 @@ const shutdown = await mountGame('game', async function (container) {
 	const escortPanel = createEscortPanel(element('escort-orders'), function () { return state; }, available, abort.signal);
 	const engineeringPanel = createEngineeringPanel(element('engineering'), function () { return state; }, available, abort.signal);
 	const interdictionPanel = createInterdictionPanel(element('interdiction-panel'), function () { return state; }, available, { get: function () { return placement; }, aim: aimPlacement, cancel: cancelPlacement, confirm: confirmPlacement }, abort.signal);
+	button('close-inspector').addEventListener('click', closeInspector, options);
+	button('open-systems').addEventListener('click', function () { openInspector('reactor'); }, options);
+	button('open-selection').addEventListener('click', function () { openInspector(inspectedContact === undefined ? 'mounts' : 'contact'); }, options);
+	for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) control.addEventListener('click', function () {
+		const view = inspectorName(control.dataset['inspector']); if (view) openInspector(view);
+	}, options);
+	button('field-entry').addEventListener('click', function () {
+		if (placement) openInspector('field'); else aimPlacement(worldPoint(state, { x: 300, y: 0 }));
+	}, options);
+	const shortcutButtons = Object.entries(POWER_PRESETS).map(function ([name, allocation]) {
+		const control = document.createElement('button'); control.type = 'button'; control.dataset['reactorPreset'] = name;
+		control.textContent = `${name[0]?.toUpperCase()}${name.slice(1)}`;
+		control.setAttribute('aria-label', `${name}: engines ${allocation.engines}, weapons ${allocation.weapons}, shields ${allocation.shields}`);
+		control.setAttribute('aria-describedby', 'reactor-current reactor-reason');
+		control.addEventListener('click', function () { if (available()) setAllocation(state, allocation); }, options);
+		element('reactor-shortcuts').append(control); return { control, name };
+	});
 	ui.pause.addEventListener('click', function () { setPause(!paused); }, options);
-	button('help').addEventListener('click', function () { setPause(true); }, options);
+	button('help').addEventListener('click', function () { const help = element('systems-help'); if (help instanceof HTMLDetailsElement) { help.open = !help.open; help.scrollIntoView({ block: 'nearest' }); } }, options);
 	button('resume').addEventListener('click', function () { setPause(false); }, options);
 	button('restart').addEventListener('click', restart, options); button('restart-pause').addEventListener('click', restart, options);
-	ui.speed.addEventListener('click', function () { if (available()) speed = speed === 1 ? 2 : 1; }, options);
+	ui.speed.addEventListener('click', function () { if (!briefing && contextAvailable && state.focused && (state.status === 'fitting' || state.status === 'running')) speed = speed === 1 ? 2 : 1; }, options);
 	ui.rally.addEventListener('click', function () { if (available()) { cancelPlacement(); rallyMode = !rallyMode; focusCanvas(); } }, options);
 	ui.clear.addEventListener('click', function () { if (available()) setPriority(state, undefined); }, options);
 	canvas.addEventListener('pointerdown', function (event) {
@@ -148,6 +185,7 @@ const shutdown = await mountGame('game', async function (container) {
 		const gesture = multiTouch;
 		pointers.delete(event.pointerId);
 		if (pointers.size === 0) multiTouch = false;
+		if (document.elementFromPoint(event.clientX, event.clientY) !== canvas) return;
 		if (!start || start.moved || gesture || cancelled || event.button !== 0 || !available()) return;
 		const rect = canvas.getBoundingClientRect();
 		if (placement) {
@@ -156,9 +194,9 @@ const shutdown = await mountGame('game', async function (container) {
 			focusCanvas(); return;
 		}
 		const { mount, enemy, world } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
-		if (mount >= 0 && !rallyMode) selected = mount;
+		if (mount >= 0 && !rallyMode) { selected = mount; inspectedContact = undefined; openInspector('mounts'); }
 		else if (enemy && !rallyMode) {
-			if (setPriority(state, enemy.id)) notify(state, `Priority target: ${contactIntel(state, enemy) === 'classified' ? enemy.kind : 'unclassified contact'}. Eligible weapons in range and coverage will focus fire.`);
+			if (setPriority(state, enemy.id)) { inspectedContact = enemy.id; openInspector('contact'); notify(state, `Priority target: ${contactIntel(state, enemy) === 'classified' ? enemy.kind : 'unclassified contact'}. Eligible weapons in range and coverage will focus fire.`); }
 			else notify(state, 'Contact outside sensor range. Nearby defense remains automatic.');
 		}
 		else if (world && !state.experimental && setRally(state, world)) { rallyMode = false; notify(state, 'Escort rally point updated.'); }
@@ -169,10 +207,22 @@ const shutdown = await mountGame('game', async function (container) {
 	window.addEventListener('pointerup', function (event) { pointers.delete(event.pointerId); if (pointers.size === 0) multiTouch = false; }, options);
 	window.addEventListener('keydown', function (event) {
 		if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
-		if (event.target instanceof HTMLSelectElement) return;
+		if (event.code === 'Tab') {
+			const modal = briefing ? ui.brief : paused ? ui.pausePanel : !ui.result.hidden ? ui.result : undefined;
+			if (modal) {
+				const controls = [...modal.querySelectorAll<HTMLElement>('button:enabled, a[href], summary, select:enabled')].filter(function (control) { return control.getClientRects().length > 0; });
+				const first = controls.at(0); const last = controls.at(-1);
+				if (!modal.contains(document.activeElement) && first) { event.preventDefault(); first.focus(); }
+				else if (event.shiftKey && document.activeElement === first && last) { event.preventDefault(); last.focus(); }
+				else if (!event.shiftKey && document.activeElement === last && first) { event.preventDefault(); first.focus(); }
+			}
+			return;
+		}
+		if (event.target instanceof HTMLSelectElement && event.code !== 'Escape') return;
 		// Preserve native keyboard activation when navigating DOM controls.
 		if (event.code === 'Space' && (event.target instanceof HTMLButtonElement || event.target instanceof HTMLElement && event.target.tagName === 'SUMMARY')) return;
 		if (event.code === 'Escape' && placement) { event.preventDefault(); cancelPlacement(); return; }
+		if (event.code === 'Escape' && inspector && !paused) { event.preventDefault(); closeInspector(); return; }
 		if (event.code === 'Escape' || event.code === 'Space') { event.preventDefault(); setPause(!paused); return; }
 		if (!available()) return;
 		if (event.code === 'KeyI') { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement(worldPoint(state, { x: 300, y: 0 })); return; }
@@ -182,7 +232,7 @@ const shutdown = await mountGame('game', async function (container) {
 			if (event.code === 'Enter') { event.preventDefault(); confirmPlacement(); return; }
 		}
 		const index = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8'].indexOf(event.code);
-		if (index >= 0) { selected = index; rallyMode = false; cancelPlacement(); event.preventDefault(); }
+		if (index >= 0) { selected = index; inspectedContact = undefined; openInspector('mounts'); rallyMode = false; cancelPlacement(); event.preventDefault(); }
 		if (event.code === 'KeyQ') { event.preventDefault(); order(function () { return pulse(state); }); }
 		if (event.code === 'KeyE') { event.preventDefault(); order(function () { return repair(state); }); }
 		if (event.code === 'KeyS') { event.preventDefault(); order(function () { return repairSensors(state); }); }
@@ -193,14 +243,32 @@ const shutdown = await mountGame('game', async function (container) {
 	window.addEventListener('focus', function () { state.focused = true; }, options);
 	document.addEventListener('visibilitychange', function () { if (!document.hidden) state.focused = true; }, options);
 	const hud = function () {
-		if (container.dataset['mode'] !== mode) container.dataset['mode'] = mode;
-		const prioritizeEngineering = state.status !== 'fitting';
-		if (engineeringFirst !== prioritizeEngineering) {
-			engineeringFirst = prioritizeEngineering;
-			if (engineeringFirst) ui.depart.after(element('engineering')); else element('interdiction-panel').after(element('engineering'));
+		container.dataset['fitting'] = String(state.status === 'fitting');
+		const cluster = container.querySelector<HTMLElement>('.command-cluster');
+		const sensorFeed = container.querySelector<HTMLElement>('.sector');
+		if (cluster && sensorFeed) {
+			const height = `${Math.ceil(cluster.getBoundingClientRect().height)}px`;
+			const top = `${Math.ceil(sensorFeed.getBoundingClientRect().bottom - container.getBoundingClientRect().top) + 6}px`;
+			if (container.style.getPropertyValue('--command-height') !== height) container.style.setProperty('--command-height', height);
+			if (container.style.getPropertyValue('--sheet-top') !== top) container.style.setProperty('--sheet-top', top);
 		}
+		if (container.dataset['mode'] !== mode) container.dataset['mode'] = mode;
 		escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
+		const modal = briefing ? ui.brief : paused ? ui.pausePanel : !ui.result.hidden ? ui.result : undefined;
+		for (const child of container.children) if (child instanceof HTMLElement) child.inert = !!modal && child !== modal;
 		const active = available();
+		const allocation = state.systems.allocation; const preset = presetFor(allocation);
+		label(element('reactor-current'), `${preset ?? 'Custom'} · ${allocation.engines}E / ${allocation.weapons}W / ${allocation.shields}S`);
+		label(element('reactor-reason'), active ? '' : 'Commands held');
+		for (const { control, name } of shortcutButtons) { control.disabled = !active; control.setAttribute('aria-pressed', String(preset === name)); }
+		label(element('contact-info'), contactDescription(state, inspectedContact));
+		label(button('open-selection'), inspectedContact === undefined ? `Mount ${selected + 1}` : 'Selected contact');
+		button('open-systems').disabled = !active; button('open-selection').disabled = !active;
+		const field = state.systems.interdiction.field;
+		const fieldReason = interdictionReason(state);
+		button('field-entry').disabled = !active || !!fieldReason && !placement;
+		label(button('field-entry'), placement ? 'Aim field · 90' : field ? `Field active ${Math.ceil(field.remaining)}s` : fieldReason ? `Field · ${fieldReason}` : 'Field ready · 90');
+		button('field-entry').title = fieldReason || 'Preview field (I), then aim and confirm';
 		const systems = state.systems; const energyShield = systems.shield;
 		const sensors = systems.sensors; const ranges = sensorRanges(state);
 		const sensorMeter = element('sensor-meter');
@@ -224,6 +292,7 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.salvage, String(Math.floor(state.salvage))); ui.route.style.width = `${journey.progress * 100}%`;
 		label(ui.distance, `${Math.floor(journey.progress * 100)}%`);
 		label(ui.routeLabel, journey.remaining > 0 ? `KEPLER · ${(journey.remaining / 1000).toFixed(2)} KM` : 'KEPLER · ARRIVED');
+		label(element('travel-eta'), journey.eta === Infinity ? 'TRAVEL STALLED' : `Travel ETA ${clockTime(Math.ceil(journey.eta))} · route only`);
 		const deadline = state.scenario?.deadline; element('trial-status').hidden = deadline === undefined;
 		if (deadline !== undefined) {
 			label(element('trial-clock'), `${clockTime(state.time)} / ${clockTime(deadline)} LIMIT`);
@@ -250,7 +319,7 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.upgrade.disabled = !active || mount.level >= 3 || state.salvage < upgradeCost(mount);
 		ui.upgrade.title = '+55% base damage, +12% range and firing speed per level';
 		label(ui.sell, `Salvage weapon · +${Math.floor(invested(mount) * 0.7)}`); ui.sell.disabled = !active;
-		for (const control of buildButtons) { const kind = control.dataset['build']; if (kind === 'flak' || kind === 'rail' || kind === 'missile' || kind === 'beam') { control.disabled = !active || state.salvage < WEAPONS[kind].cost; control.title = WEAPONS[kind].description; } }
+		for (const control of buildButtons) { const kind = control.dataset['build']; if (kind === 'flak' || kind === 'rail' || kind === 'missile' || kind === 'beam') { control.disabled = !active || state.salvage < WEAPONS[kind].cost; control.title = WEAPONS[kind].description; const detail = control.querySelector('small'); if (detail) label(detail, !active ? 'Commands held' : state.salvage < WEAPONS[kind].cost ? `Needs ${WEAPONS[kind].cost} salvage` : WEAPONS[kind].description); } }
 		for (const control of deployButtons) {
 			const kind = control.dataset['deploy']; if (kind !== 'interceptor' && kind !== 'guardian') continue;
 			const reason = !active ? 'Commands held' : craftCount(state) + ESCORTS[kind].count > 9 ? `Needs ${ESCORTS[kind].count} free slots` : state.salvage < ESCORTS[kind].cost ? 'Insufficient salvage' : '';
@@ -260,22 +329,23 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.escorts, `${craftCount(state)} / 9 CRAFT`);
 		const canvasHelp = `Tactical view. Click a numbered mount to build. Click an enemy for turret priority. ${state.experimental ? 'Use the escort bay sector buttons to scramble wings and assign guardians.' : 'Click empty space to rally escorts.'} Right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
 		if (canvas.getAttribute('aria-label') !== canvasHelp) canvas.setAttribute('aria-label', canvasHelp);
-		label(ui.depart, mode === 'systems' ? 'START SYSTEMS TRIAL →' : state.scenario ? 'START ESCORT DRILL →' : 'DEPART FOR KEPLER →');
+		label(ui.depart, 'Depart →');
+		ui.depart.setAttribute('aria-label', mode === 'systems' ? 'Start Systems Trial' : state.scenario ? 'Start Escort Drill' : 'Depart for Kepler');
 		label(button('restart-pause'), mode === 'systems' ? 'Restart Systems Trial' : state.scenario ? 'Restart drill' : 'Restart voyage');
 		label(button('restart'), mode === 'systems' ? 'RETRY SYSTEMS TRIAL →' : state.scenario ? 'RETRY ESCORT DRILL →' : 'ANOTHER VOYAGE →');
 		ui.depart.hidden = state.status !== 'fitting'; ui.depart.disabled = !active || (!state.mounts.some(function (m) { return !!m.weapon; }) && craftCount(state) === 0);
 		ui.depart.title = ui.depart.disabled ? 'Build a turret or deploy an escort before departure.' : 'Begin the voyage';
 		ui.pulse.disabled = !active || state.status !== 'running' || state.pulseCooldown > 0;
 		label(ui.pulseState, state.pulseCooldown > 0 ? `${Math.ceil(state.pulseCooldown)}s` : 'READY');
-		label(ui.pulseInfo, state.aegisRemaining > 0 ? `Aegis · ${Math.ceil(state.aegisRemaining)}s hull protection` : 'Clear rounds · 5s hull protection');
+		label(ui.pulseInfo, !active ? 'Commands held' : state.status !== 'running' ? 'Depart first' : state.aegisRemaining > 0 ? `Aegis · ${Math.ceil(state.aegisRemaining)}s hull protection` : state.pulseCooldown > 0 ? `Cooldown · ${Math.ceil(state.pulseCooldown)}s` : 'Clear rounds · 5s hull protection');
 		ui.repair.disabled = !active || state.salvage < 80 || state.hull >= MAX_HULL || state.repairCooldown > 0;
-		label(ui.repairInfo, state.repairCooldown > 0 ? `Crews working · ${Math.ceil(state.repairCooldown)}s` : '+240 hull · 15s cooldown');
+		label(ui.repairInfo, !active ? 'Commands held' : state.hull >= MAX_HULL ? 'Hull at full integrity' : state.salvage < 80 ? 'Needs 80 salvage' : state.repairCooldown > 0 ? `Crews working · ${Math.ceil(state.repairCooldown)}s` : '+240 hull · 15s cooldown');
 		ui.rally.hidden = state.experimental; label(element('escort-help'), state.experimental ? 'Buy ready wings, then scramble a sector. Guardians hold their own sector. Reserve craft count toward nine slots.' : 'Escorts engage near their shared rally point.'); ui.rally.disabled = !active; ui.rally.classList.toggle('active', rallyMode); ui.rally.setAttribute('aria-pressed', String(rallyMode));
 		label(ui.rally, rallyMode ? 'Click space to place rally point' : '⌖ Set escort rally point');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
 		label(ui.hint, placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.experimental ? 'Select a mount for coverage · Click hostile for turret priority · Order escorts in bay' : rallyMode ? 'RALLY MODE · Click or tap a location for all escorts' : state.priority !== undefined ? 'PRIORITY LOCK · Weapons focus the marked hostile when in range' : 'Click mount to build · Click empty space to rally · Click hostile to focus');
-		label(ui.message, state.messageTime > 0 ? state.message : ''); label(ui.speed, `${speed}×`); ui.speed.disabled = !active;
-		label(ui.pause, paused ? '▶ Resume' : 'Ⅱ Pause'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
+		label(ui.message, state.messageTime > 0 ? state.message : ''); label(ui.speed, `${speed}×`); ui.speed.disabled = briefing || !contextAvailable || !state.focused || state.status === 'won' || state.status === 'lost';
+		label(ui.pause, paused ? 'Resume' : 'Menu'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
 	};
 	const showResult = function () {
 		ui.result.hidden = false; rallyMode = false; placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
@@ -301,7 +371,10 @@ const shutdown = await mountGame('game', async function (container) {
 			accumulator += elapsed * speed;
 			while (accumulator >= 1 / 60 && state.status === 'running') { step(state, 1 / 60); syncAudio(); accumulator -= 1 / 60; if (state.status !== 'running') showResult(); }
 		} else accumulator = 0;
-		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, rallyMode, !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement);
+		// Shift the projection above a portrait sheet while retaining the player's orbit and zoom.
+		const panelTop = element('inspector').getBoundingClientRect().top - canvas.getBoundingClientRect().top;
+		const screenOffsetY = inspector && canvas.clientWidth <= 600 && canvas.clientHeight > 500 ? Math.max(0, canvas.clientHeight * 0.52 - panelTop + 50) : 0;
+		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, rallyMode, !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, screenOffsetY);
 		syncAudio(); hud();
 		frame = requestAnimationFrame(tick);
 	};

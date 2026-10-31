@@ -38,13 +38,7 @@ export const attachFullscreen = function (container: HTMLElement, control: HTMLB
 		}
 	}, options);
 	document.addEventListener('fullscreenchange', sync, options);
-	window.addEventListener('keydown', function (event) {
-		if (event.key !== 'Escape' || !expanded) return;
-		event.preventDefault();
-		event.stopImmediatePropagation();
-		setExpanded(false);
-		control.focus({ preventScroll: true });
-	}, { ...options, capture: true });
+	// Escape belongs to field / inspector / pause navigation. Exit via the menu control.
 	sync();
 	control.hidden = false;
 	return function () {
