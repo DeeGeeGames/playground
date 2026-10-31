@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createState, type Enemy, type Mount } from '../src/simulation';
-import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, pickEnemy, pickMount, project, resizeView, toScreen, toWorld, TURRET_HEIGHT, viewFor, type View } from '../src/projection';
+import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, pickEnemy, pickMount, project, resizeView, toScreen, toWorld, translateView, TURRET_HEIGHT, viewFor, type View } from '../src/projection';
+import { mountWorld } from '../src/space';
 
 const viewports = [{ width: 1152, height: 844 }, { width: 390, height: 440 }, { width: 320, height: 440 }, { width: 589, height: 620 }];
 const poses = [
@@ -181,4 +182,24 @@ test('invalid or hidden viewports and parallel picking rays fail without NaNs', 
 	expect(toWorld({ x: NaN, y: 0 }, view)).toBeUndefined();
 	expect(toWorld({ x: 0, y: Infinity }, view)).toBeUndefined();
 	expect(edgeIndicator({ x: 0, y: 0 }, viewFor(20, 100))).toBeUndefined();
+});
+
+test('camera travel preserves orbit and zoom while picking world hardpoints after translation and hull rotation', function () {
+	const state = createState(); state.ark.x = 12340; state.ark.y = -3570; state.ark.angle = 0.7;
+	for (const { width, height } of viewports) for (const pose of poses) {
+		const view = viewFor(width, height); orient(view, pose);
+		const quaternion = view.camera.quaternion.clone(); const zoom = view.camera.zoom;
+		translateView(view, { x: 0, y: 0 }, state.ark);
+		expect(view.camera.quaternion.equals(quaternion)).toBe(true); expect(view.camera.zoom).toBe(zoom);
+		expect(toScreen(state.ark, view).x).toBeCloseTo(view.cx); expect(toScreen(state.ark, view).y).toBeCloseTo(view.cy);
+		const mounts = state.mounts.map(function (mount) { return { ...mount, ...mountWorld(state, mount) }; });
+		for (const [index, mount] of mounts.entries()) {
+			const screen = toScreen(mount, view, mountHeight(mount));
+			expect(pickMount(screen, view, mounts)).toBe(index);
+			const world = toWorld(screen, view, mountHeight(mount));
+			expect(world?.x).toBeCloseTo(mount.x); expect(world?.y).toBeCloseTo(mount.y);
+		}
+		const resized = resizeView(view, 390, 844);
+		expect(toScreen(state.ark, resized).x).toBeCloseTo(resized.cx); expect(toScreen(state.ark, resized).y).toBeCloseTo(resized.cy);
+	}
 });

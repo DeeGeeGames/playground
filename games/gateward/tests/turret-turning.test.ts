@@ -58,7 +58,7 @@ test('ballistic barrels align with the moving-target lead before launching', fun
 		step(state, 1 / 60);
 		const shot = state.shots.find(function (entry) { return entry.weapon === 'rail'; });
 		if (!shot) continue;
-		expect(Math.atan2(shot.vy, shot.vx)).toBeCloseTo(mount.aim);
+		expect(Math.atan2(shot.vy - (shot.sourceVelocity?.y ?? 0), shot.vx - (shot.sourceVelocity?.x ?? 0))).toBeCloseTo(mount.aim);
 		return;
 	}
 	throw new Error('Railgun never aligned');

@@ -1,5 +1,6 @@
 import { fieldRelative, INTERDICTION_CONFIG } from './interdiction';
 import { interdictionReason, type Point, type State } from './simulation';
+import { localPoint, worldPoint } from './space';
 
 interface Placement {
 	get: () => Point | undefined;
@@ -39,7 +40,7 @@ export const createInterdictionPanel = function (host: HTMLElement, getState: ()
 		const state = getState();
 		if (holdReason(state, available())) return;
 		if (placement.get()) placement.cancel();
-		else if (!interdictionReason(state)) placement.aim({ x: 300, y: 0 });
+		else if (!interdictionReason(state)) placement.aim(worldPoint(state, { x: 300, y: 0 }));
 		update();
 	}, { signal });
 	host.append(toggle);
@@ -56,7 +57,7 @@ export const createInterdictionPanel = function (host: HTMLElement, getState: ()
 		control.setAttribute('aria-describedby', 'interdiction-reason');
 		control.addEventListener('click', function () {
 			const state = getState();
-			if (!holdReason(state, available()) && !interdictionReason(state)) placement.aim({ ...point });
+			if (!holdReason(state, available()) && !interdictionReason(state)) placement.aim(worldPoint(state, point));
 			update();
 		}, { signal });
 		presets.append(control); return control;
@@ -93,7 +94,7 @@ export const createInterdictionPanel = function (host: HTMLElement, getState: ()
 		toggle.setAttribute('aria-pressed', String(active)); toggle.disabled = active ? !!hold : !!startReason;
 		for (const control of presetButtons) control.disabled = !!startReason;
 		preview.hidden = !active; actions.hidden = !active;
-		text(preview, point ? `Preview: ${relativePosition(point)}` : '');
+		text(preview, point ? `Preview: ${relativePosition(localPoint(state, point))}` : '');
 		confirm.disabled = !active || !!placementReason; cancel.disabled = !!hold;
 		text(reason, placementReason || (active ? 'Position ready. Confirm to spend salvage and place the field.' : 'Preview a position, then confirm to place the field.'));
 	};

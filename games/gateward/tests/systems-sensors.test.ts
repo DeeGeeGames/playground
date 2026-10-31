@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { worldPoint } from '../src/space';
 import { build, contactWarning, createState, deploy, MAX_HULL, pulse, repairSensors, setPriority, step, type Enemy, type State } from '../src/simulation';
 import { canAcquire, contactIntel, SENSOR_CONFIG, sensorRanges } from '../src/sensors';
 
@@ -19,7 +20,7 @@ const enemyAt = function (state: State, x: number, y = 0): Enemy {
 	state.enemies.push(enemy); return enemy;
 };
 const hit = function (state: State, damage = 34, sensorDamage: number | undefined = 35) {
-	state.shots.push({ id: state.nextId++, x: 0, y: 0, vx: 0, vy: 0, damage, sensorDamage, side: 'enemy', weapon: 'hostile', target: undefined, life: 3 });
+	state.shots.push({ id: state.nextId++, x: state.ark.x, y: state.ark.y, vx: 0, vy: 0, damage, sensorDamage, side: 'enemy', weapon: 'hostile', target: undefined, life: 3 });
 };
 
 describe('range-limited sensor intelligence', function () {
@@ -33,6 +34,20 @@ describe('range-limited sensor intelligence', function () {
 			expect(contactIntel(state, { x: detection + 0.01, y: 0 })).toBe('unseen');
 			expect(contactIntel(state, { x: classification, y: 0 })).toBe(integrity > 0 ? 'classified' : 'detected');
 			expect(contactIntel(state, { x: classification + 0.01, y: 0 })).toBe('detected');
+		}
+	});
+	test('detection boundaries and scheduled warnings are centered on a translated ark', function () {
+		const state = quiet(); state.time = 7;
+		const translated = structuredClone(state);
+		translated.routeOrigin = { x: 1250, y: -550 };
+		translated.ark.x = translated.routeOrigin.x; translated.ark.y = translated.routeOrigin.y;
+		for (const integrity of [100, 49, 0]) {
+			state.systems.sensors.integrity = integrity; translated.systems.sensors.integrity = integrity;
+			expect(contactWarning(translated)).toBe(contactWarning(state));
+			const range = sensorRanges(state).detection;
+			for (const offset of [{ x: range, y: 0 }, { x: range + 0.01, y: 0 }, { x: 0, y: -100 }]) {
+				expect(contactIntel(translated, worldPoint(translated, offset))).toBe(contactIntel(state, offset));
+			}
 		}
 	});
 	test('same bomber encounter has six seconds classified warning healthy, uncertain late warning impaired', function () {

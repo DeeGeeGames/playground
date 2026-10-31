@@ -50,7 +50,8 @@ orbit drags, pinches, cancellation, pause, and focus loss cannot leak into rally
 target orders. Lost graphics contexts pause the voyage and can be resumed after
 restoration. Renderer shutdown disposes controls, geometry, materials, shadow
 buffers, labels, and its WebGL context. Gameplay still runs on the original 2D
-plane; no physics, gameplay ECS, persistence, or shared-world migration.
+plane; simulation uses world coordinates without a physics engine, gameplay ECS,
+or persistence migration.
 
 Aircraft occupy a presentation-only flight layer above the bridge. Projectile
 trails join turret height to that layer; incoming fire descends to the existing
@@ -81,11 +82,11 @@ bunx @gltf-transform/cli@4.5.1 prune /tmp/gateward-asset/dedup.glb games/gatewar
 ```
 
 The camera follows the ark along the voyage’s 2.52 km route at a balanced 12 m/s.
-Fixed navigation beacons, a scrolling lattice, distant debris, and layered star parallax communicate
-travel. The gate reaches the ark at the end of the route; scenery and drive stop
-there even if hostiles remain. Pausing freezes the journey, and replay returns to
-departure. Reduced motion disables decorative parallax and engine flicker while
-keeping navigation and the gate tied to route progress.
+The ark advances through world space; the orthographic camera and its orbit
+center follow it. Navigation beacons, the lattice, debris and Kepler Gate keep
+fixed world positions. The ark stops at the gate even if combat continues.
+Pausing freezes the simulation, and replay returns to departure. Reduced motion
+disables decorative star parallax and engine flicker while physical travel remains.
 
 `bun test games/gateward/tests` exercises economy, combat, escort losses, support
 systems, failure, a complete salvage-funded victory, camera-aware picking,
@@ -109,17 +110,35 @@ around contacts during combat. Guardians retain their screening positions, and
 wing sectors, launch/return/rearm phases and rally limits still apply. Ballistic
 guns lead moving targets; weapon damage, reloads, rewards and economy are unchanged.
 
-`src/flight.ts` owns steering, turn limits and broadside geometry. Combat positions
-remain relative to the ark for camera and input compatibility, while flight
-velocities/headings describe world motion. Every flying hostile subtracts actual
-ark travel once per step. Engine reallocations and arrival change relative motion;
-a stopped ark still sees moving attackers. This keeps the planar combat and
-orthographic camera without a physics engine or ECS migration.
+`src/flight.ts` owns shared heading-driven steering, braking, turn limits and
+broadside geometry. Every active ship, projectile, field and effect stores a world
+position. The ark moves along its route; camera movement has no gameplay effect.
+Guardians match the ark's forward course at their screening stations while their
+guns track contacts independently. Fighters use the same steering when launching,
+forming up, fighting and returning to the moving stern. Wing phases, sector
+assignments and local leashes are retained.
 
-`tests/flight.test.ts` covers four-bearing intercepts, moving parallel broadsides,
-bank arcs/origins, stopped/max-power engines, arrival, fighter exchanges,
-determinism and lifecycle freezes. Strategy comparisons below are reproducible
-simulation controls, not owner acceptance of balance or flight feel.
+`src/space.ts` converts explicit local offsets (mount fittings, sector positions
+and rally orders) into world targets. Those anchors travel with the ark; fields,
+shots and effects remain independent once placed or launched. Incoming contacts
+use scheduled bearing offsets only when they enter the world. Sensors, ranges,
+interception, projectile sweeps and input picking use the same world positions.
+
+Projectile speeds are muzzle speeds relative to the firing ship. A round inherits
+its source's world velocity once and records its actual world firing origin.
+Ballistic rounds are unaffected by later engine changes. Guided missiles retain
+their inherited launch velocity and update their guidance separately. Barrels
+track the relative-velocity firing solution and must align before firing; enemy
+side banks also validate that solution against their broadside arc. Swept contact
+checks account for moving ships and hulls. Damage, reloads and economy are unchanged.
+
+`tests/flight.test.ts` covers intercepts and combat maneuvers. The additional
+`tests/world-movement.test.ts` covers every friendly flight phase, moving-stern
+recovery, translated encounters, late world orders/deployment, inherited ballistic
+velocity, fixed fields, swept hull hits and close-field braking. Camera and
+trajectory tests cover translated/rotated picking and world firing origins.
+Strategy comparisons below remain reproducible simulation controls; production
+browser evidence and owner judgment establish visual and flight-feel acceptance.
 
 ## Escort Drill
 
@@ -172,8 +191,8 @@ salvage, repairs, pulses or upgrades. Observed outcomes:
 | Strategy | Result/time | Hull | Kills | Escort losses | Launches/orders | Salvage |
 | --- | --- | ---: | ---: | ---: | --- | ---: |
 | No intervention | Lost / 42s | 0 | 0 | 0 | 0 / 0 | 350 |
-| Wing defense | Won / 90s | 1025 | 24 | 2 | 3 / 3 | 588 |
-| Guardian screen | Won / 90s | 1100 | 24 | 1 | 0 / 1 | 568 |
+| Wing defense | Won / 90s | 949 | 24 | 2 | 2 / 2 | 588 |
+| Guardian screen | Won / 90s | 1134 | 24 | 0 | 0 / 1 | 568 |
 
 With moving attackers, both equipped scripts now clear all contacts. Launching
 the wing preserves more hull than holding it in reserve. Guardian reassignment
@@ -276,17 +295,17 @@ confirm placement. Pause, focus loss, restart and result transitions discard it.
 A field costs 90 salvage, has a 110m radius, lasts 30 simulation seconds and has a
 40-second cooldown. Only one can be active. Its circle must clear the ark and
 hostiles at deployment, stay within 450m and start ahead/beside the ark (X ≥ −50m).
-The field stays at its deployment point along the route, so it drifts aft by the
-ark's actual distance traveled. It expires early once more than 650m astern.
+The field keeps its absolute world position as the ark passes it, so its
+position relative to the ark moves aft by actual route travel. It expires early once more than 650m astern.
 Reduced motion keeps this physical movement. Friendly fire and escort movement
 pass through; hostile firing lines and already flying rounds are blocked.
 
 Hostiles choose a stable side and tangent/arc waypoints around the field, then
 resume their approach once clear. **DETOUR** identifies detected craft being
 redirected. A hostile targeting an escort inside the field waits at the boundary
-until the target emerges or the temporary field expires. During detours, movement
-accounts for ark drift in the field's fixed frame, including slow ships passed
-by fast engines; position changes remain bounded. New arrivals covered by a
+until the target emerges or the temporary field expires. World-space detours
+feed the same bounded steering as open flight, including full braking when a
+new field is placed close to an approaching hull; there is no ark-drift compensation. New arrivals covered by a
 field enter farther out on their original bearing, before first appearing.
 Expiry clears navigation state. Intercept effects preserve the round's actual
 presented trajectory while gameplay geometry remains on the 2D plane.
@@ -322,28 +341,28 @@ other strategies retain their preset. Rounded outcomes:
 | Strategy | Result / time | Distance | Kills | Hull / shield |
 | --- | --- | ---: | ---: | ---: |
 | Balanced | Won / 120.0s | 1440m | 30 | 1200 / 360 |
-| Engine priority | Won / 107.1s | 1440m | 30 | 1016 / 63 |
+| Engine priority | Won / 107.8s | 1440m | 30 | 1000 / 0 |
 | Weapon priority | Deadline / 155.0s | 930m | 30 | 1200 / 360 |
-| Shield priority | Deadline / 155.0s | 930m | 30 | 1115 / 360 |
+| Shield priority | Deadline / 155.0s | 930m | 30 | 1015 / 360 |
 | Weapons → balanced at 50s | Won / 145.0s | 1440m | 30 | 1200 / 360 |
 | Balanced + field at 70s | Won / 120.0s | 1440m | 30 | 1200 / 360 |
 
 | Strategy | Shield absorbed | Power changes | Sensor impairments / repairs | Fields / redirected | Escort losses |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Balanced | 199 | 0 | 0 / 0 | 0 / 0 | 3 |
-| Engine priority | 521 | 1 | 0 / 0 | 0 / 0 | 3 |
-| Weapon priority | 109 | 1 | 0 / 0 | 0 / 0 | 1 |
-| Shield priority | 702 | 1 | 0 / 0 | 0 / 0 | 3 |
-| Weapons → balanced at 50s | 131 | 2 | 0 / 0 | 0 / 0 | 1 |
-| Balanced + field at 70s | 164 | 0 | 0 / 0 | 1 / 12 | 3 |
+| Balanced | 295 | 0 | 0 / 0 | 0 / 0 | 2 |
+| Engine priority | 555 | 1 | 0 / 0 | 0 / 0 | 3 |
+| Weapon priority | 177 | 1 | 0 / 0 | 0 / 0 | 3 |
+| Shield priority | 809 | 1 | 0 / 0 | 0 / 0 | 4 |
+| Weapons → balanced at 50s | 256 | 2 | 0 / 0 | 0 / 0 | 3 |
+| Balanced + field at 70s | 267 | 0 | 0 / 0 | 1 / 12 | 2 |
 
 Engine priority arrives early and resolves all contacts with less hull remaining.
 Static weapon/shield priority travels too slowly; switching weapon priority back
 to balanced at 50s makes the deadline with the same fitting. The field redirects
-12 approaches and reduces shield damage by 35 while preserving all 30 kills.
-These equipped scripts avoid sensor impairment; focused bomber/shield tests
-exercise impairment and recovery separately. Allocation changes warning and
-defensive opportunities rather than the scheduled clock.
+12 approaches and reduces shield damage by 28 while preserving all 30 kills.
+These equipped scripts avoid sensor impairment in this sample. Focused
+bomber/shield tests exercise the exact absorption, impairment and recovery rules.
+Allocation changes warning and defensive opportunities rather than the scheduled clock.
 These examples establish explainable behavior differences, not final balance.
 
 Owner follow-up enables systems in every mode for rapid prototype iteration.

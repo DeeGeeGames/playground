@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { assignGuardian, build, covered, coverageFor, craftCount, createState, deploy, MAX_HULL, pulse, repair, replaceFighters, scramble, SECTOR_POINTS, step, upgrade, type State } from '../src/simulation';
 import { ESCORT_DRILL } from '../src/scenarios';
+import { localPoint, worldPoint } from '../src/space';
 const advance = function (state: State, seconds: number) { for (let i = 0; i < Math.ceil(seconds * 60); i++) step(state, 1 / 60); };
 const quiet = function () { const s = createState({ experimental: true, coverageDegrees: 240 }); s.nextWave = Infinity; return s; };
 const firstWing = function (s: State) { const w = s.wings[0]; if (!w) throw new Error('Missing wing'); return w; };
@@ -43,7 +44,7 @@ describe('wing resources and lifecycle', function () {
 	});
 	test('returning fighters move home and cannot fire at nearby hostiles', function () {
 		const s = quiet(); deploy(s, 'interceptor'); s.status = 'running'; const w = firstWing(s); scramble(s, w.id, 'port'); advance(s, 3); w.phase = 'returning';
-		s.enemies.push({ id: 99, x: 0, y: -250, hp: 2000, maxHp: 2000, kind: 'armored', cooldown: 99 });
+		s.enemies.push({ id: 99, ...worldPoint(s, { x: 0, y: -250 }), hp: 2000, maxHp: 2000, kind: 'armored', cooldown: 99 });
 		advance(s, .5); expect(s.shots.filter(function (shot) { return shot.side === 'player'; })).toHaveLength(0);
 	});
 	test('combat loss frees one slot without respawn; replacement costs 30 and requires ready', function () {
@@ -65,8 +66,8 @@ describe('guardian screens and restrictions', function () {
 	test('independent assignments persist with physical travel and local leash', function () {
 		const s = quiet(); deploy(s, 'guardian'); deploy(s, 'guardian'); const [a, b] = s.escorts; if (!a || !b) throw new Error('Missing guardians');
 		assignGuardian(s, b.id, 'starboard'); s.status = 'running'; advance(s, 7); expect(a.y).toBeLessThan(-220); expect(b.y).toBeGreaterThan(220);
-		assignGuardian(s, a.id, 'ahead'); const before = a.x; advance(s, .1); expect(a.x - before).toBeLessThan(10); advance(s, 8); expect(a.x).toBeGreaterThan(270); expect(b.sector).toBe('starboard');
-		s.enemies.push({ id: 99, x: -400, y: 0, hp: 9999, maxHp: 9999, kind: 'armored', cooldown: 99 }); s.priority = 99; advance(s, 2); expect(a.x).toBeGreaterThan(270);
+		assignGuardian(s, a.id, 'ahead'); const before = a.x; advance(s, .1); expect(a.x - before).toBeLessThan(10); advance(s, 8); expect(localPoint(s, a).x).toBeGreaterThan(270); expect(b.sector).toBe('starboard');
+		s.enemies.push({ id: 99, ...worldPoint(s, { x: -400, y: 0 }), hp: 9999, maxHp: 9999, kind: 'armored', cooldown: 99 }); s.priority = 99; advance(s, 2); expect(localPoint(s, a).x).toBeGreaterThan(270);
 	});
 	test('screen draws hostile fire and dies without damaging ark; replacement uses economy', function () {
 		const s = quiet(); deploy(s, 'guardian'); const g = s.escorts[0]; if (!g) throw new Error('Missing guardian'); Object.assign(g, SECTOR_POINTS.port); g.hp = 1; s.status = 'running';
@@ -94,7 +95,7 @@ export const strategyRun = function (strategy: 'baseline' | 'wings' | 'guardians
 test('drill arrivals obey the schedule and require arrival plus clearance after 90 seconds', function () {
 	const s = createState({ scenario: 'drill' }); s.status = 'running'; advance(s, 9.9); expect(s.wave).toBe(0); expect(s.enemies).toHaveLength(0);
 	advance(s, .2); expect(s.wave).toBe(1); expect(s.enemies[0]?.kind).toBe('raider'); expect(s.enemies[0]?.y).toBeLessThan(0); expect(s.arrivals).toHaveLength(7);
-	s.time = 89.99; s.wave = 4; s.nextWave = Infinity; s.arrivals = []; s.systems.distanceTraveled = s.systems.routeLength;
+	s.time = 89.99; s.wave = 4; s.nextWave = Infinity; s.arrivals = []; s.systems.distanceTraveled = s.systems.routeLength; s.ark.x = s.routeOrigin.x + s.systems.routeLength;
 	step(s, 1 / 60); expect<State['status']>(s.status).toBe('running'); expect(s.enemies.length).toBeGreaterThan(0);
 	s.enemies = []; step(s, 1 / 60); expect<State['status']>(s.status).toBe('won');
 	const time = s.time; advance(s, 1); expect(s.time).toBe(time);

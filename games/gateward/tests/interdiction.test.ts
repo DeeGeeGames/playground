@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { worldPoint } from '../src/space';
 import { circleHit, enemyClearance, fieldBlocks, fieldRelative, INTERDICTION_CONFIG } from '../src/interdiction';
 import { createState, deploy, ENEMIES, interdictionReason, placeInterdiction, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
 
@@ -42,8 +43,8 @@ describe('interdiction placement and lifecycle', function () {
 		expect(placeInterdiction(state, { x: 300, y: 0 })).toBe(false); step(state, 0.05); expect(JSON.stringify(state)).toBe(snapshot);
 	});
 	for (const engines of [0, 1, 4, 10]) test(`${engines * 3}m/s preserves world anchoring under normal and doubled fixed steps`, function () {
-		const state = quiet(engines); const systems = systemsFor(state); systems.distanceTraveled = 77;
-		expect(placeInterdiction(state, { x: 300, y: 0 })).toBe(true); hostile(state);
+		const state = quiet(engines); const systems = systemsFor(state); systems.distanceTraveled = 77; state.ark.x = 77;
+		expect(placeInterdiction(state, worldPoint(state, { x: 300, y: 0 }))).toBe(true); hostile(state);
 		const twice = structuredClone(state);
 		advance(state, 5); for (let frame = 0; frame < 150; frame++) { step(twice, 1 / 60); step(twice, 1 / 60); }
 		expect(twice).toEqual(state); expect(systems.interdiction.field?.world).toEqual({ x: 377, y: 0 });
@@ -108,10 +109,12 @@ describe('field geometry and hostile fire', function () {
 			advance(direct, 8); advance(shaped, 8); expect(shaped.escorts).toEqual(direct.escorts);
 		}
 	});
-	test('a moving field sweeps stationary hostile rounds but not friendly rounds', function () {
+	test('ark travel does not sweep a fixed world field across stationary rounds', function () {
 		const state = quiet(10); placeInterdiction(state, { x: 300, y: 0 });
 		for (const side of ['enemy', 'player'] as const) state.shots.push({ id: state.nextId++, x: 189.5, y: 0, vx: 0, vy: 0, damage: 5, side, weapon: side === 'enemy' ? 'hostile' : 'rail', target: undefined, life: 4 });
-		step(state, 0.05); expect(state.shots.map(function (shot) { return shot.side; })).toEqual(['player']); expect(systemsFor(state).interdiction.blockedShots).toBe(1);
+		step(state, 0.05); expect(state.shots.map(function (shot) { return shot.side; })).toEqual(['enemy', 'player']); expect(systemsFor(state).interdiction.blockedShots).toBe(0);
+		expect(state.shots.every(function (shot) { return shot.x === 189.5 && shot.y === 0; })).toBe(true);
+		expect(systemsFor(state).interdiction.field?.world).toEqual({ x: 300, y: 0 });
 	});
 });
 
@@ -128,8 +131,8 @@ describe('deterministic approach shaping', function () {
 		const speed = ENEMIES[kind].speed; let side: -1 | 1 | undefined;
 		for (let frame = 0; frame < 1800; frame++) {
 			const before = { x: enemy.x, y: enemy.y }; step(state, 1 / 60);
-			expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeLessThanOrEqual((speed + engines * 3) / 60 + 1e-8);
-			const center = fieldRelative(state);
+			expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeLessThanOrEqual(speed / 60 + 1e-8);
+			const center = systemsFor(state).interdiction.field?.world;
 			if (center) expect(Math.hypot(enemy.x - center.x, enemy.y - center.y)).toBeGreaterThan(enemyClearance(enemy) - 12 - 1e-6);
 			if (enemy.detour) { side ??= enemy.detour.side; expect(enemy.detour.side).toBe(side); }
 		}

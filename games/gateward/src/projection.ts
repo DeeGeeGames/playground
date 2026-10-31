@@ -52,6 +52,13 @@ export const resizeView = function (view: View, width: number, height: number): 
 	return fitCamera(view.camera, width, height);
 };
 
+// Follow world travel without changing the owner's orbit pose or zoom.
+export const translateView = function (view: View, from: Point, to: Point): void {
+	view.camera.position.x += to.x - from.x;
+	view.camera.position.z += to.y - from.y;
+	view.camera.updateMatrixWorld(true);
+};
+
 // Default-camera reference coordinates for static artwork and legacy comparisons.
 // Active screen placement must use toScreen(), which follows the live camera.
 export const project = function (point: Point, elevation = 0): Point {

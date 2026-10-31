@@ -34,5 +34,5 @@ export const journeyFor = function (state: State) {
 };
 
 export const beaconFor = function (index: number, state: State) {
-	return { x: index * state.systems.routeLength / 6 - journeyFor(state).distance, y: 0 };
+	return { x: state.routeOrigin.x + index * state.systems.routeLength / 6, y: state.routeOrigin.y };
 };

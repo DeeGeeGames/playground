@@ -9,7 +9,7 @@ const trial = function () { const state = createState({ scenario: 'systems' }); 
 const systemsFor = function (state: State) { if (!state.systems) throw new Error('Missing systems'); return state.systems; };
 const clearRoute = function () {
 	const state = trial(); state.wave = SYSTEMS_TRIAL.encounters.length; state.nextWave = Infinity;
-	systemsFor(state).distanceTraveled = systemsFor(state).routeLength; return state;
+	systemsFor(state).distanceTraveled = systemsFor(state).routeLength; state.ark.x = state.routeOrigin.x + state.systems.routeLength; return state;
 };
 
 describe('Systems Trial route and results', function () {
@@ -26,7 +26,7 @@ describe('Systems Trial route and results', function () {
 		expect(createState({ scenario: 'drill' }).scenario?.duration).toBe(90);
 	});
 	test('early route completion waits for future, pending and live contacts without a duration minimum', function () {
-		const state = trial(); systemsFor(state).distanceTraveled = 1440; state.time = 97.9; state.wave = 4; state.nextWave = 98;
+		const state = trial(); systemsFor(state).distanceTraveled = 1440; state.ark.x = state.routeOrigin.x + 1440; state.time = 97.9; state.wave = 4; state.nextWave = 98;
 		step(state, 0.05); expect(state.status).toBe('running');
 		step(state, 0.05); step(state, 0.05); expect(state.wave).toBe(5); expect(state.arrivals.length).toBeGreaterThan(0);
 		state.enemies = []; step(state, 0.05); expect(state.status).toBe('running');
@@ -35,7 +35,7 @@ describe('Systems Trial route and results', function () {
 		state.enemies = []; step(state, 0.05); expect(state.status).toBe('won'); expect(state.resultReason).toBe('arrival'); expect(state.time).toBeLessThan(120);
 	});
 	for (const engines of [0, 2]) test(`${engines} engines cannot arrive by elapsed time alone`, function () {
-		const state = clearRoute(); systemsFor(state).distanceTraveled = 0;
+		const state = clearRoute(); systemsFor(state).distanceTraveled = 0; state.ark.x = state.routeOrigin.x;
 		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 });
 		for (let i = 0; i < 3200; i++) step(state, 0.05);
 		expect(state.status).toBe('lost'); expect(state.resultReason).toBe('deadline'); expect(state.time).toBe(155);
@@ -45,7 +45,7 @@ describe('Systems Trial route and results', function () {
 		const arrived = clearRoute(); arrived.time = 154.99; step(arrived, 0.05);
 		expect(arrived.status).toBe('lost'); expect(arrived.resultReason).toBe('deadline'); expect(arrived.time).toBe(155);
 		const destroyed = clearRoute(); destroyed.time = 154.99; destroyed.hull = 1; systemsFor(destroyed).shield.charge = 0;
-		destroyed.shots.push({ id: 900, x: 0, y: 0, vx: 0, vy: 0, damage: 10, side: 'enemy', weapon: 'hostile', target: undefined, life: 1 });
+		destroyed.shots.push({ id: 900, x: destroyed.ark.x, y: destroyed.ark.y, vx: 0, vy: 0, damage: 10, side: 'enemy', weapon: 'hostile', target: undefined, life: 1 });
 		step(destroyed, 0.05); expect(destroyed.resultReason).toBe('hull'); expect(destroyed.hull).toBe(0);
 	});
 	test('completed distance with unresolved final contacts still expires', function () {
@@ -54,7 +54,7 @@ describe('Systems Trial route and results', function () {
 		expect(systemsResultMessage(state)).toContain('contacts remained unresolved');
 	});
 	test('arrival on the strict deadline explains the boundary without blaming cleared combat', function () {
-		const state = clearRoute(); state.time = 154.99; systemsFor(state).distanceTraveled = 1439.9;
+		const state = clearRoute(); state.time = 154.99; systemsFor(state).distanceTraveled = 1439.9; state.ark.x = state.routeOrigin.x + 1439.9;
 		step(state, 0.05); expect(state.status).toBe('lost'); expect(systemsFor(state).distanceTraveled).toBe(1440);
 		expect(systemsResultMessage(state)).toContain('at the deadline'); expect(systemsResultMessage(state)).not.toContain('weapon');
 	});

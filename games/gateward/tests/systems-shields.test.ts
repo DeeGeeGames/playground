@@ -16,7 +16,7 @@ const advance = function (state: State, frames: number) {
 	for (let frame = 0; frame < frames; frame++) step(state, 0.05);
 };
 const shot = function (state: State, damage: number, side: Shot['side'] = 'enemy'): Shot {
-	const projectile: Shot = { id: state.nextId++, x: 0, y: 0, vx: 0, vy: 0, damage, side, weapon: side === 'enemy' ? 'hostile' : 'rail', target: undefined, life: 3 };
+	const projectile: Shot = { id: state.nextId++, x: state.ark.x, y: state.ark.y, vx: 0, vy: 0, damage, side, weapon: side === 'enemy' ? 'hostile' : 'rail', target: undefined, life: 3 };
 	state.shots.push(projectile);
 	return projectile;
 };
