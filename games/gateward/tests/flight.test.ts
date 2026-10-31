@@ -1,7 +1,7 @@
 import { CRAFT_MOUNTS } from '../src/craft-turrets';
 import { describe, expect, test } from 'bun:test';
-import { broadsideMuzzle } from '../src/flight';
-import { localPoint } from '../src/space';
+import { broadsideMuzzle, fly, type Flight } from '../src/flight';
+import { flightVelocity, localPoint } from '../src/space';
 import { createState, deploy, scramble, ENEMIES, setAllocation, setRally, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
 
 const quiet = function (): State {
@@ -112,5 +112,48 @@ describe('fighter skirmishing', function () {
 			if (restriction === 'paused') frozen.paused = true; else if (restriction === 'unfocused') frozen.focused = false; else frozen.status = restriction;
 			const snapshot = structuredClone(frozen); advance(frozen, 3); expect(frozen).toEqual(snapshot);
 		}
+	});
+});
+
+describe('small-craft inertia', function () {
+	const flight = function (speed = 0): Flight { return { angle: 0, speed, side: 1, course: 'intercept', run: 1 }; };
+	test('builds speed and brakes over time instead of stopping on command', function () {
+		const point = { x: 0, y: 0 }; const craft = flight();
+		fly(point, craft, { x: 100, y: 0 }, 100, 3, 1 / 60, true);
+		expect(craft.speed).toBeGreaterThan(0); expect(craft.speed).toBeLessThan(2);
+		for (let i = 0; i < 180; i++) fly(point, craft, { x: 100, y: 0 }, 100, 3, 1 / 60, true);
+		expect(craft.speed).toBeCloseTo(100);
+		const before = point.x;
+		fly(point, craft, { x: 0, y: 0 }, 100, 3, 1 / 60, true);
+		expect(point.x).toBeGreaterThan(before); expect(craft.speed).toBeGreaterThan(98);
+		for (let i = 0; i < 180; i++) fly(point, craft, { x: 0, y: 0 }, 100, 3, 1 / 60, true);
+		expect(craft.speed).toBeCloseTo(0);
+	});
+
+	test('retains incoming momentum through a turn, with bounded thrust and yaw acceleration', function () {
+		const point = { x: 0, y: 0 }; const craft = flight(100);
+		let previousVelocity = flightVelocity(craft); let previousYaw = 0;
+		for (let i = 0; i < 240; i++) {
+			fly(point, craft, { x: 0, y: 100, z: 10 }, 100, 3, 1 / 60, true);
+			const velocity = flightVelocity(craft); const yaw = craft.angularVelocity ?? 0;
+			expect(Math.hypot(velocity.x - previousVelocity.x, velocity.y - previousVelocity.y, (velocity.z ?? 0) - (previousVelocity.z ?? 0))).toBeLessThanOrEqual(65 / 60 + 1e-8);
+			expect(Math.abs(yaw - previousYaw)).toBeLessThanOrEqual(2.4 / 60 + 1e-8);
+			expect(Math.hypot(velocity.x, velocity.y, velocity.z ?? 0)).toBeLessThanOrEqual(100 + 1e-8);
+			if (i === 29) {
+				expect(velocity.x).toBeGreaterThan(60);
+				expect(Math.abs(Math.atan2(velocity.y, velocity.x) - craft.angle)).toBeGreaterThan(0.1);
+			}
+			previousVelocity = velocity; previousYaw = yaw;
+		}
+		expect(craft.angle).toBeCloseTo(Math.PI / 2, 1);
+		expect(previousVelocity.y).toBeGreaterThan(90);
+		expect(Math.abs(previousYaw)).toBeLessThan(0.02);
+	});
+
+	test('arrives at a stationary order without sustained circling', function () {
+		const point = { x: -300, y: -100 }; const craft = flight(80);
+		for (let i = 0; i < 1800; i++) fly(point, craft, { x: -point.x * 1.5, y: -point.y * 1.5 }, 100, 3, 1 / 60, true);
+		expect(Math.hypot(point.x, point.y)).toBeLessThan(1);
+		expect(craft.speed).toBeLessThan(1);
 	});
 });
