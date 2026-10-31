@@ -1,3 +1,4 @@
+import { MIN_CAMERA_ZOOM } from './combat-scale';
 import { COMBAT_EFFECT_LIMIT, createCombatVisual } from './combat-feedback';
 import { bomberCue, placeBomberCue } from './bomber-cue';
 import { updateCraftTurrets } from './craft-3d';
@@ -56,7 +57,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	controls.enableDamping = false;
 	controls.minPolarAngle = Math.PI / 8;
 	controls.maxPolarAngle = Math.PI / 2 - 0.35;
-	controls.minZoom = 0.65;
+	controls.minZoom = MIN_CAMERA_ZOOM;
 	controls.maxZoom = 2;
 	controls.mouseButtons.LEFT = undefined;
 	controls.mouseButtons.MIDDLE = MOUSE.DOLLY;

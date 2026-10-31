@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { expect, test } from 'bun:test';
 import { createState, type Enemy, type Point } from '../src/simulation';
 import { ringContacts, ringLayout, TACTICAL_RING_RADIUS } from '../src/tactical-ring';
@@ -5,7 +6,7 @@ import { offsetView, resizeView, toScreen, translateView, viewFor } from '../src
 import { worldPoint } from '../src/space';
 
 const enemy = function (id: number, x: number, y: number): Enemy {
-	return { id, x, y, kind: 'bomber', hp: 100, maxHp: 100, cooldown: 0 };
+	return { id, x: tactical(x), y: tactical(y), kind: 'bomber', hp: 100, maxHp: 100, cooldown: 0 };
 };
 
 test('ring respects classification, detection boundaries, damage and dead contacts', function () {

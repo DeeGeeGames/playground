@@ -1,3 +1,4 @@
+import { tactical } from './combat-scale';
 import { createRadar } from './radar';
 import { createAudio } from './audio';
 import { createSoundObserver } from './audio-events';
@@ -170,7 +171,7 @@ const shutdown = await mountGame('game', async function (container) {
 		const view = inspectorName(control.dataset['inspector']); if (view) openInspector(view);
 	}, options);
 	button('field-entry').addEventListener('click', function () {
-		if (placement || interdictionReason(state)) openInspector('field'); else aimPlacement(worldPoint(state, { x: 300, y: 0 }));
+		if (placement || interdictionReason(state)) openInspector('field'); else aimPlacement(worldPoint(state, { x: tactical(300), y: 0 }));
 	}, options);
 	ui.pause.addEventListener('click', function () { setPause(!paused); }, options);
 	button('help').addEventListener('click', function () { const help = element('systems-help'); if (help instanceof HTMLDetailsElement) { help.open = !help.open; help.scrollIntoView({ block: 'nearest' }); } }, options);
@@ -235,9 +236,9 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'Escape' || event.code === 'Space') { event.preventDefault(); setPause(!paused); return; }
 		if (!available()) return;
 		if (radarOpen && event.code !== 'KeyS' && event.code !== 'KeyQ' && event.code !== 'KeyE') return;
-		if (event.code === 'KeyI') { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement(worldPoint(state, { x: 300, y: 0 })); return; }
+		if (event.code === 'KeyI') { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement(worldPoint(state, { x: tactical(300), y: 0 })); return; }
 		if (placement && event.target === canvas) {
-			const adjustment = event.code === 'ArrowUp' ? { x: 20, y: 0 } : event.code === 'ArrowDown' ? { x: -20, y: 0 } : event.code === 'ArrowLeft' ? { x: 0, y: -20 } : event.code === 'ArrowRight' ? { x: 0, y: 20 } : undefined;
+			const adjustment = event.code === 'ArrowUp' ? { x: tactical(20), y: 0 } : event.code === 'ArrowDown' ? { x: -tactical(20), y: 0 } : event.code === 'ArrowLeft' ? { x: 0, y: -tactical(20) } : event.code === 'ArrowRight' ? { x: 0, y: tactical(20) } : undefined;
 			if (adjustment) { event.preventDefault(); const offset = worldPoint(state, adjustment); placement = { x: placement.x + offset.x - state.ark.x, y: placement.y + offset.y - state.ark.y }; return; }
 			if (event.code === 'Enter') { event.preventDefault(); confirmPlacement(); return; }
 		}
@@ -314,7 +315,7 @@ const shutdown = await mountGame('game', async function (container) {
 		const deadline = state.scenario?.deadline; element('trial-status').hidden = deadline === undefined;
 		if (deadline !== undefined) {
 			label(element('trial-clock'), `${clockTime(state.time)} / ${clockTime(deadline)} LIMIT`);
-			label(element('trial-goal'), state.status === 'won' ? 'ROUTE + CONTACTS COMPLETE' : state.resultReason === 'deadline' ? 'DEADLINE MISSED' : state.resultReason === 'hull' ? 'ARK DESTROYED' : journey.remaining > 0 ? '1.44 KM + CLEAR CONTACTS' : 'GATE REACHED · CLEAR CONTACTS');
+			label(element('trial-goal'), state.status === 'won' ? 'ROUTE + CONTACTS COMPLETE' : state.resultReason === 'deadline' ? 'DEADLINE MISSED' : state.resultReason === 'hull' ? 'ARK DESTROYED' : journey.remaining > 0 ? `${(state.systems.routeLength / 1000).toFixed(2)} KM + CLEAR CONTACTS` : 'GATE REACHED · CLEAR CONTACTS');
 			label(element('trial-eta'), journey.eta === Infinity ? 'TRAVEL STALLED' : `TRAVEL ETA ${clockTime(Math.ceil(journey.eta))}`);
 			element('trial-status').classList.toggle('urgent', state.status === 'running' && (deadline - state.time < 30 || journey.eta > deadline - state.time));
 		}

@@ -8,8 +8,8 @@ salvage, then depart. A voyage takes about 3½ minutes at 1×, or half that at 2
 Six directional waves culminate in a flagship. Reach Kepler Gate and destroy all
 hostiles to win; losing the ark's hull ends the run.
 
-- T / Radar opens the live heading-up tactical screen. Long range covers 2 km;
-  short range covers 700 m, with classification inside 640 m. Both sensor bands
+- T / Radar opens the live heading-up tactical screen. Long range covers 8 km;
+  short range covers 2800 m, with classification inside 2560 m. Both sensor bands
   remain active in either view. Escape or Battle view returns to the 3D battle.
   Space pauses outside native button activation; radar also provides Pause.
 - Long-range returns group contacts by coarse bearing and distance without
@@ -17,19 +17,19 @@ hostiles to win; losing the ark's hull ends the run.
   mark priority; weapons still obey their existing range and firing arcs.
   Lost tracks retain only their last observed world position, show their age,
   and expire after eight simulation seconds. They cannot be targeted.
-- Encounters enter at 2.2–2.4 km and cruise at 60 m/s until entering the 700 m
+- Encounters enter at 8.8–9.6 km and cruise at 240 m/s until entering the 2800 m
   combat zone, then use their normal combat speed. Detection warning time uses
   actual relative closing speed. Voyage approaches start every 28 seconds after
   the first at 5 seconds; scenario approaches start 15 seconds before their
   encounter time, clamped at departure. Mission durations/deadlines are unchanged.
-- Sensor integrity below 50 reduces detection to 1 km and classification to
-  230 m. Offline sensors retain 200 m local automatic defense. Repair from radar
+- Sensor integrity below 50 reduces detection to 4 km and classification to
+  920 m. Offline sensors retain 800 m local automatic defense. Repair from radar
   or the sensor panel costs 70 salvage, with the existing 18-second cooldown.
 - Select one of eight mounts using a visible ship pad, panel buttons, or keys 1–8.
 - Right-drag to orbit and use the wheel to zoom. On touch screens, drag to orbit
   and pinch to zoom; a tap still gives an order. Reset view and restarting restore
   the original orthographic tactical camera. The camera stays centered on the ark.
-- Beam costs 125 salvage, reaches 300m and deals 48 damage per second before armor at balanced weapon power. It automatically tracks one eligible target; upgrades and weapon power scale sustained damage.
+- Beam costs 125 salvage, reaches 1200m and deals 48 damage per second before armor at balanced weapon power. It automatically tracks one eligible target; upgrades and weapon power scale sustained damage.
 - Flak handles light ships; railguns ignore armor; homing missiles deal splash
   damage. All turrets turn toward their firing solution before firing automatically
   within 120° outward arcs in Full Voyage. Flak turns at 360°/s, beams at 180°/s, missiles at 120°/s,
@@ -111,7 +111,7 @@ bunx @gltf-transform/cli@4.5.1 dedup /tmp/gateward-asset/gateward-ark.glb /tmp/g
 bunx @gltf-transform/cli@4.5.1 prune /tmp/gateward-asset/dedup.glb games/gateward/public/models/gateward-ark.glb
 ```
 
-The camera follows the ark along the voyage’s 2.52 km route at a balanced 12 m/s.
+The camera follows the ark along the voyage’s 10.08 km route at a balanced 48 m/s.
 The ark advances through world space; the orthographic camera and its orbit
 center follow it. Navigation beacons, the lattice, debris and Kepler Gate keep
 fixed world positions. The ark stops at the gate even if combat continues.
@@ -130,8 +130,8 @@ Armored ships and flagships intercept a flank, turn onto parallel courses and
 make repeated broadside runs. They gain ground, then ease aft rather than stop
 at a range boundary. Each side battery covers a 100° arc; bow/stern targets wait
 for the ship to turn. Visible side barrels and shot origins share the hull's
-course heading. Heavy ships cruise at up to 40m/s (armored) or 36m/s (flagship),
-so they can intercept even the ark's maximum 30m/s engine allocation.
+course heading. Heavy ships cruise at up to 160m/s (armored) or 144m/s (flagship),
+so they can intercept even the ark's maximum 120m/s engine allocation.
 
 Raiders and bombers continuously circle the ark or skirmish around nearby escorts,
 with local separation between hostile craft. Raiders take close pot shots;
@@ -176,9 +176,9 @@ Choose **Escort Drill** in the briefing, pause menu or result, or open
 `?mode=drill`. Restart retains the selected mode. Full voyage remains the default
 with 120° outward arcs and a shared guardian rally. All modes include reactor
 allocation, rechargeable shields, damageable sensors and interdiction by default.
-The drill requires survival, its real 1.08 km route, and clearance of all four
+The drill requires survival, its real 4.32 km route, and clearance of all four
 contacts after at least 90 seconds. Engines can delay arrival; reaching the gate
-early does not skip contacts. Full voyage uses a 2.52 km route and at least 210s.
+early does not skip contacts. Full voyage uses a 10.08 km route and at least 210s.
 
 Drill mounts cover 240° centered outward (port −Y, starboard +Y). The selected
 fitted mount shows a subtle outline at its actual upgraded range; `coverageFor`
@@ -241,7 +241,7 @@ Physical input and owner play-feel checks remain separate from simulation eviden
 
 Choose **Systems Trial** in the briefing, pause menu or result, or open
 `?mode=systems`. Fit a mixed defense with 500 salvage and complete the actual
-1.44 km route while resolving all required contacts **before 155 seconds**.
+5.76 km route while resolving all required contacts **before 155 seconds**.
 Balanced power takes about 120 seconds of flight; fast engines can arrive early,
 but must still resolve the later contacts. A tick ending exactly at the deadline
 loses. Hull destruction also loses. Time alone cannot complete the route.
@@ -277,12 +277,12 @@ changes. Restart restores 4/4/2, charge and route progress.
 
 | Preset | Engines / weapons / shields | Speed | Ark cadence | Recharge |
 | --- | --- | --- | --- | --- |
-| Balanced | 4 / 4 / 2 | 12 m/s | 1.0× | 8 HP/s |
-| Engines | 6 / 2 / 2 | 18 m/s | 0.5× | 8 HP/s |
-| Weapons | 2 / 6 / 2 | 6 m/s | 1.5× | 8 HP/s |
-| Shields | 2 / 2 / 6 | 6 m/s | 0.5× | 24 HP/s |
+| Balanced | 4 / 4 / 2 | 48 m/s | 1.0× | 8 HP/s |
+| Engines | 6 / 2 / 2 | 72 m/s | 0.5× | 8 HP/s |
+| Weapons | 2 / 6 / 2 | 24 m/s | 1.5× | 8 HP/s |
+| Shields | 2 / 2 / 6 | 24 m/s | 0.5× | 24 HP/s |
 
-Output curves are linear tuning constants: 3 m/s per engine unit, 0.25× reload
+Output curves are linear tuning constants: 12 m/s per engine unit, 0.25× reload
 progress per weapon unit (maximum 2.5×), and 4 HP/s per shield unit. Zero engine
 power stops progress while combat continues; zero weapons freezes ark reload
 progress and firing; zero shields stops recharge. Reallocation never grants
@@ -291,9 +291,9 @@ independent. The engineering panel's travel ETA excludes combat clearance.
 Navigation beacons, gate position, route percentage and drive plumes share the
 same actual distance/speed. Reduced motion retains physical route progress.
 
-Sensors start at 100 integrity. At 50 or more, they detect contacts at 2000m and
-classify them at 640m; below 50, those ranges fall to 1000m and 230m. At zero,
-nearby defense still acquires contacts within 200m, with no classification.
+Sensors start at 100 integrity. At 50 or more, they detect contacts at 8000m and
+classify them at 2560m; below 50, those ranges fall to 4000m and 920m. At zero,
+nearby defense still acquires contacts within 800m, with no classification.
 Only classified contacts provide ship class, exact hull and classified group counts.
 Unclassified craft use a generic amber marker; unseen craft have no physical
 model, radar arrow, label, or health readout. The radar groups coarse returns
@@ -319,17 +319,17 @@ and targeting rules.
 
 Interdiction / **I** previews a single field after departure. Choose Ahead, Port
 or Starboard, tap/click the battlefield to aim, or use arrow keys while the
-canvas is focused (up/down ahead/astern; left/right port/starboard, 20m per press).
+canvas is focused (up/down ahead/astern; left/right port/starboard, 80m per press).
 **Enter** or **Place field** confirms; **Esc** cancels. A tap only updates the
 preview. Green marks a valid position, red an invalid one; the outer ring shows
-the 450m placement range. Orbit drags, pinches and pointer cancellation never
+the 1800m placement range. Orbit drags, pinches and pointer cancellation never
 confirm placement. Pause, focus loss, restart and result transitions discard it.
 
-A field costs 90 salvage, has a 110m radius, lasts 30 simulation seconds and has a
+A field costs 90 salvage, has a 440m radius, lasts 30 simulation seconds and has a
 40-second cooldown. Only one can be active. Its circle must clear the ark and
-hostiles at deployment, stay within 450m and start ahead/beside the ark (X ≥ −50m).
+hostiles at deployment, stay within 1800m and start ahead/beside the ark (X ≥ −200m).
 The field keeps its absolute world position as the ark passes it, so its
-position relative to the ark moves aft by actual route travel. It expires early once more than 650m astern.
+position relative to the ark moves aft by actual route travel. It expires early once more than 2600m astern.
 Reduced motion keeps this physical movement. Friendly fire and escort movement
 pass through; hostile firing lines and already flying rounds are blocked.
 
@@ -543,3 +543,14 @@ hull and altitude boundaries still constrain movement.
 
 These values are an initial handling pass. Simulation and browser checks establish
 navigation behavior; owner playtesting remains the acceptance check for feel.
+
+## Combat space tuning
+
+`src/combat-scale.ts` centralizes the current 4× tactical distance and linear
+speed multiplier. Weapon and sensor reach, flight lanes/orbits, escort stations,
+fields, approach distances, and route length grow together with travel speeds.
+Hull geometry, hardpoints, hit envelopes, damage, reloads, angular rates, wave
+schedules, and mission clocks retain their original values. The camera permits
+zoom down to 0.1625 (four times farther out than the previous 0.65 limit).
+Historical validation snapshots above describe their original tuning; they are
+not balance or play-feel acceptance for this expanded space.

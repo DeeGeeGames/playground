@@ -1,10 +1,11 @@
+import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { createRadarTracker, LOST_TRACK_SECONDS, radarPoint } from '../src/radar-model';
 import { createState, type Enemy, type State } from '../src/simulation';
 import { worldPoint } from '../src/space';
 
 const enemy = function (state: State, id: number, x: number, y = 0): Enemy {
-	return { id, ...worldPoint(state, { x, y }), kind: 'bomber', hp: 95, maxHp: 95, cooldown: 0, flight: { angle: state.ark.angle + Math.PI, speed: 30, side: 1, course: 'intercept', run: 1 } };
+	return { id, ...worldPoint(state, { x: tactical(x), y: tactical(y) }), kind: 'bomber', hp: 95, maxHp: 95, cooldown: 0, flight: { angle: state.ark.angle + Math.PI, speed: tactical(30), side: 1, course: 'intercept', run: 1 } };
 };
 const first = function <T>(items: readonly T[]): T { const item = items[0]; if (!item) throw new Error('Missing fixture'); return item; };
 
@@ -21,7 +22,7 @@ describe('radar observations', function () {
 		const tracker = createRadarTracker(); const contacts = tracker.observe(state);
 		expect(contacts).toHaveLength(1); const contact = first(contacts);
 		expect(contact.intel).toBe('detected'); expect(contact).not.toHaveProperty('kind'); expect(contact).not.toHaveProperty('hull'); expect(contact).not.toHaveProperty('count');
-		expect(contact.range).toBeCloseTo(1500); expect(contact.bearing).toBe(0);
+		expect(contact.range).toBeCloseTo(tactical(1500)); expect(contact.bearing).toBe(0);
 		state.enemies = [enemy(state, 1, 600)];
 		const classified = tracker.observe(state).find(function (item) { return item.intel === 'classified'; });
 		expect(classified?.intel).toBe('classified');
@@ -29,12 +30,12 @@ describe('radar observations', function () {
 		expect(classified.kind).toBe('bomber'); expect(classified.hull).toBe(95);
 	});
 	test('closing and short entry use target and ark velocity, including receding targets', function () {
-		const state = createState(); state.ark.speed = 12; state.enemies = [enemy(state, 1, 1500)];
+		const state = createState(); state.ark.speed = tactical(12); state.enemies = [enemy(state, 1, 1500)];
 		const contact = first(createRadarTracker().observe(state));
-		// Exact 42 m/s closes ahead; coarse returns round to a 5 m/s increment.
-		expect(contact.closing).toBe(40); expect(contact.entry).toBe(20);
+		// Exact 168 m/s closes ahead; coarse returns round to a 5 m/s increment.
+		expect(contact.closing).toBe(170); expect(contact.entry).toBeCloseTo(tactical(800) / 170);
 		const target = first(state.enemies); if (!target.flight) throw new Error('Missing flight'); target.flight.angle = 0;
-		const receding = first(createRadarTracker().observe(state)); expect(receding.closing).toBe(-20); expect(receding.entry).toBeUndefined();
+		const receding = first(createRadarTracker().observe(state)); expect(receding.closing).toBe(-70); expect(receding.entry).toBeUndefined();
 	});
 	test('lost tracks freeze observations, reject new hidden intel and expire on simulation time', function () {
 		const state = createState(); state.enemies = [enemy(state, 1, 600)]; const tracker = createRadarTracker(); const original = first(tracker.observe(state));

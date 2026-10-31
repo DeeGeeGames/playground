@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { worldPoint } from '../src/space';
 import { build, createState, deploy, setAllocation, step, transferPower, WEAPONS, type State } from '../src/simulation';
@@ -15,7 +16,7 @@ const quiet = function () {
 const advance = function (state: State, frames: number) { for (let i = 0; i < frames; i++) step(state, 0.05); };
 const armed = function () {
 	const state = quiet(); build(state, 0, 'rail');
-	state.enemies.push({ id: state.nextId++, kind: 'armored', x: -96, y: -200, hp: 100000, maxHp: 100000, cooldown: 999 });
+	state.enemies.push({ id: state.nextId++, kind: 'armored', x: -96, y: -tactical(200), hp: 100000, maxHp: 100000, cooldown: 999 });
 	return state;
 };
 
@@ -75,7 +76,7 @@ describe('powered cadence and shields', function () {
 		advance(state, 2); expect(mount.cooldown).toBeCloseTo(0.05);
 		// Isolate reload timing from the new aim delay after engine power changes.
 		const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing enemy');
-		Object.assign(enemy, worldPoint(state, { x: mount.x, y: -200 })); delete enemy.flight; mount.aim = -Math.PI / 2;
+		Object.assign(enemy, worldPoint(state, { x: mount.x, y: -tactical(200) })); delete enemy.flight; mount.aim = -Math.PI / 2;
 		step(state, 0.05); expect(mount.cooldown).toBe(WEAPONS.rail.reload); expect(state.shots).toHaveLength(1);
 		const fired = state.nextId; step(state, 0.05); expect(state.nextId).toBe(fired); expect(mount.cooldown).toBeCloseTo(2.075);
 	});
@@ -83,11 +84,11 @@ describe('powered cadence and shields', function () {
 		const state = quiet(); build(state, 0, 'rail'); advance(state, 100);
 		expect(state.mounts.every(function (mount) { return mount.cooldown === 0; })).toBe(true);
 		setAllocation(state, { engines: 10, weapons: 0, shields: 0 });
-		state.enemies.push({ id: state.nextId++, kind: 'armored', x: -96, y: -200, hp: 10000, maxHp: 10000, cooldown: 999 });
+		state.enemies.push({ id: state.nextId++, kind: 'armored', x: -96, y: -tactical(200), hp: 10000, maxHp: 10000, cooldown: 999 });
 		advance(state, 5); expect(state.shots).toHaveLength(0);
 		// Keep restoration independent of travel-induced barrel realignment.
 		const enemy = state.enemies[0]; const mount = state.mounts[0]; if (!enemy || !mount) throw new Error('Missing target fixture');
-		Object.assign(enemy, worldPoint(state, { x: mount.x, y: -200 })); delete enemy.flight; mount.aim = -Math.PI / 2;
+		Object.assign(enemy, worldPoint(state, { x: mount.x, y: -tactical(200) })); delete enemy.flight; mount.aim = -Math.PI / 2;
 		setAllocation(state, POWER_PRESETS.balanced); step(state, 0.05); expect(state.shots).toHaveLength(1);
 	});
 	test('guardian and fighter cadence and damage stay independent of ark weapon power at the same engine speed', function () {
@@ -115,20 +116,20 @@ describe('distance and combat completion', function () {
 		const state = quiet(); const systems = systemsFor(state); state.wave = state.scenario?.encounters.length ?? 0;
 		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 }); advance(state, 1820);
 		expect(state.time).toBeGreaterThan(90); expect(state.status).toBe('running');
-		expect(systems.distanceTraveled).toBeCloseTo(state.time * engines * 3); expect(systems.distanceTraveled).toBeLessThan(systems.routeLength);
+		expect(systems.distanceTraveled).toBeCloseTo(state.time * engines * tactical(3)); expect(systems.distanceTraveled).toBeLessThan(systems.routeLength);
 	});
 	test('arrival clamps while combat continues, and all scheduled and pending contacts must resolve', function () {
 		const state = quiet(); const systems = systemsFor(state);
-		expect(systems.routeLength).toBe(1080); expect(systemsFor(createState()).routeLength).toBe(2520);
+		expect(systems.routeLength).toBe(tactical(1080)); expect(systemsFor(createState()).routeLength).toBe(tactical(2520));
 		setAllocation(state, { engines: 10, weapons: 0, shields: 0 }); advance(state, 1820);
-		expect(systems.distanceTraveled).toBe(1080); expect(state.status).toBe('running');
+		expect(systems.distanceTraveled).toBe(tactical(1080)); expect(state.status).toBe('running');
 		state.wave = state.scenario?.encounters.length ?? 0; state.arrivals.push({ at: 999, kind: 'raider', x: 600, y: 0 }); step(state, 0.05); expect(state.status).toBe('running');
 		state.arrivals = []; state.enemies.push({ id: state.nextId++, kind: 'raider', x: 600, y: 0, hp: 45, maxHp: 45, cooldown: 999 }); step(state, 0.05); expect(state.status).toBe('running');
 		state.enemies = []; step(state, 0.05); expect(state.status).toBe('won');
 	});
 	test('early arrival waits for scenario duration and every mode requires scheduled contacts', function () {
 		const state = quiet(); state.wave = state.scenario?.encounters.length ?? 0; setAllocation(state, { engines: 10, weapons: 0, shields: 0 });
-		advance(state, 800); expect(systemsFor(state).distanceTraveled).toBe(1080); expect(state.status).toBe('running');
+		advance(state, 800); expect(systemsFor(state).distanceTraveled).toBe(tactical(1080)); expect(state.status).toBe('running');
 		advance(state, 1010); expect(state.status).toBe('won');
 		const waiting = createState({ scenario: 'drill' }); waiting.status = 'running'; waiting.nextWave = Infinity;
 		advance(waiting, 1810); expect<State['status']>(waiting.status).toBe('running');

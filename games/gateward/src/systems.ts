@@ -1,3 +1,4 @@
+import { tactical } from './combat-scale';
 import type { InterdictionField } from './interdiction';
 import { SENSOR_CONFIG } from './sensors';
 export const POWER_CHANNELS = ['engines', 'weapons', 'shields'] as const;
@@ -11,7 +12,7 @@ export const POWER_PRESETS = {
 	shields: { engines: 2, weapons: 2, shields: 6 },
 } as const;
 export const POWER_OUTPUTS = {
-	speedPerUnit: 3,
+	speedPerUnit: tactical(3),
 	weaponRatePerUnit: 0.25,
 	maxWeaponRate: 2.5,
 	shieldRechargePerUnit: 4,

@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { worldPoint } from '../src/space';
 import { build, contactWarning, createState, deploy, MAX_HULL, pulse, repairSensors, assignRepair, setPriority, step, type Enemy, type State } from '../src/simulation';
@@ -16,7 +17,7 @@ const advance = function (state: State, seconds: number) {
 	for (let frame = 0; frame < Math.round(seconds / 0.05); frame++) step(state, 0.05);
 };
 const enemyAt = function (state: State, x: number, y = 0): Enemy {
-	const enemy: Enemy = { id: state.nextId++, x, y, kind: 'bomber', hp: 95, maxHp: 95, cooldown: 99 };
+	const enemy: Enemy = { id: state.nextId++, x: tactical(x), y: tactical(y), kind: 'bomber', hp: 95, maxHp: 95, cooldown: 99 };
 	state.enemies.push(enemy); return enemy;
 };
 const hit = function (state: State, damage = 34, sensorDamage: number | undefined = 35) {
@@ -29,11 +30,11 @@ describe('range-limited sensor intelligence', function () {
 		for (const [integrity, detection, classification] of [[100, 2000, 640], [50, 2000, 640], [49, 1000, 230], [0, 200, 0]]) {
 			if (integrity === undefined || detection === undefined || classification === undefined) throw new Error('Missing fixture');
 			sensors.integrity = integrity;
-			expect(sensorRanges(state)).toEqual({ detection, classification });
-			expect(canAcquire(state, { x: detection, y: 0 })).toBe(true);
-			expect(contactIntel(state, { x: detection + 0.01, y: 0 })).toBe('unseen');
-			expect(contactIntel(state, { x: classification, y: 0 })).toBe(integrity > 0 ? 'classified' : 'detected');
-			expect(contactIntel(state, { x: classification + 0.01, y: 0 })).toBe('detected');
+			expect(sensorRanges(state)).toEqual({ detection: tactical(detection), classification: tactical(classification) });
+			expect(canAcquire(state, { x: tactical(detection), y: 0 })).toBe(true);
+			expect(contactIntel(state, { x: tactical(detection) + 0.01, y: 0 })).toBe('unseen');
+			expect(contactIntel(state, { x: tactical(classification), y: 0 })).toBe(integrity > 0 ? 'classified' : 'detected');
+			expect(contactIntel(state, { x: tactical(classification) + 0.01, y: 0 })).toBe('detected');
 		}
 	});
 	test('detection boundaries and scheduled warnings are centered on a translated ark', function () {
@@ -57,13 +58,13 @@ describe('range-limited sensor intelligence', function () {
 		expect(contactWarning(state)).toBe('STARBOARD · unclassified contact');
 		state.systems.sensors.integrity = 49;
 		expect(contactWarning(state)).toBe('Scanning for contacts');
-		enemy.y = 900;
+		enemy.y = tactical(900);
 		expect(contactWarning(state)).toBe('STARBOARD · unclassified contact');
 		expect(repairSensors(state)).toBe(true);
 		expect(state.systems.sensors.integrity).toBe(49);
 		advance(state, 0.3);
 		expect(contactWarning(state)).not.toContain('bomber');
-		enemy.y = 600;
+		enemy.y = tactical(600);
 		expect(contactWarning(state)).toBe('STARBOARD · 1 bomber · in range');
 	});
 	test('voyage and drill both use sensors without an opt-in', function () {
@@ -89,7 +90,7 @@ describe('acquisition and local defense', function () {
 		expect(state.priority).toBeUndefined();
 		expect(setPriority(state, enemy.id)).toBe(false);
 		expect(repairSensors(state)).toBe(true);
-		advance(state, 5); enemy.x = state.ark.x + 1400; enemy.y = state.ark.y;
+		advance(state, 5); enemy.x = state.ark.x + tactical(1400); enemy.y = state.ark.y;
 		expect(setPriority(state, enemy.id)).toBe(true);
 		expect(setPriority(state, undefined)).toBe(true);
 		enemy.hp = 0; expect(setPriority(state, enemy.id)).toBe(false);
@@ -100,19 +101,19 @@ describe('acquisition and local defense', function () {
 		build(state, 0, 'rail'); sensors.integrity = 0;
 		const enemy = enemyAt(state, -96, -300); step(state, 0.05);
 		expect(state.shots).toHaveLength(0);
-		enemy.y = -160; step(state, 0.05);
+		enemy.x = state.ark.x - 96; enemy.y = -tactical(160); step(state, 0.05);
 		expect(state.shots.some(function (shot) { return shot.weapon === 'rail'; })).toBe(true);
-		state.shots = []; enemy.y = -300;
+		state.shots = []; enemy.y = -tactical(300);
 		state.shots.push({ id: state.nextId++, x: 500, y: 500, vx: 100, vy: 0, damage: 1, side: 'player', weapon: 'missile', target: enemy.id, life: 4 });
 		const missile = state.shots[0]; if (!missile) throw new Error('Missing missile');
 		step(state, 0.05); expect(missile.vy).toBe(0);
 		repairSensors(state); assignRepair(state, 'sensors', 4); advance(state, 0.05);
-		enemy.y = state.ark.y - 300; step(state, 0.05); expect(missile.vy).toBeLessThan(0);
+		enemy.y = state.ark.y - tactical(300); step(state, 0.05); expect(missile.vy).toBeLessThan(0);
 	});
 	test('guardian self-defense remains active outside offline ark range', function () {
 		const state = quiet(); systemsFor(state).sensors.integrity = 0;
 		deploy(state, 'guardian'); const guardian = state.escorts[0]; if (!guardian) throw new Error('Missing guardian');
-		guardian.x = 0; guardian.y = -230; enemyAt(state, 0, -320);
+		guardian.x = 0; guardian.y = -tactical(230); enemyAt(state, 0, -320);
 		step(state, 0.05);
 		expect(state.shots.some(function (shot) { return shot.weapon === 'escort'; })).toBe(true);
 	});

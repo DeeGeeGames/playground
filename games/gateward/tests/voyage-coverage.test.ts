@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { expect, test } from 'bun:test';
 import { priorityCoverage } from '../src/play-screen';
 import { build, covered, coverageFor, createState, deploy, setPriority, setRally, step, upgrade } from '../src/simulation';
@@ -29,7 +30,7 @@ test('voyage eligibility and priority explanations follow travel, rotation, upgr
 	const enemy = { id: 99, ...worldPoint(state, { x: -96, y: 220 }), hp: 260, maxHp: 260, kind: 'armored' as const, cooldown: 99 };
 	state.enemies.push(enemy); expect(setPriority(state, enemy.id)).toBe(true);
 	expect(priorityCoverage(state, 0)).toContain('outside firing arc');
-	Object.assign(enemy, worldPoint(state, { x: mount.x, y: mount.y - 450 }));
+	Object.assign(enemy, worldPoint(state, { x: mount.x, y: mount.y - tactical(450) }));
 	expect(priorityCoverage(state, 0)).toContain('outside range');
 	upgrade(state, 0); expect(covered(state, mount, enemy)).toBe(true);
 	expect(priorityCoverage(state, 0)).toContain('within range and coverage');

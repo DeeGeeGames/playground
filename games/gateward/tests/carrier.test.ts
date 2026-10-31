@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { expect, test } from 'bun:test';
 import { CARRIER_BAYS, CARRIER_LAUNCH, craftScale } from '../src/ship-config';
 import { createState, embarkFighters, ENEMIES, step, type Enemy, type State } from '../src/simulation';
@@ -39,7 +40,7 @@ test('finite complement launches from all four rotated model anchors then stops'
 });
 
 test('approach retains housed fighters; destruction cancels remaining launches but keeps airborne fighters', function () {
-	const { state, carrier } = setup(); carrier.y = -2000; advance(state, 1);
+	const { state, carrier } = setup(); carrier.y = -tactical(2000); advance(state, 1);
 	expect(state.enemies).toHaveLength(1); expect(carrier.hangar?.remaining).toBe(4);
 	carrier.y = -380; step(state, 1 / 60); expect(state.enemies).toHaveLength(2);
 	carrier.hp = 0; advance(state, 5);

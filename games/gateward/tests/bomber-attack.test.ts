@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { BOMBER_ATTACK, createState, deploy, ENEMIES, pulse, step, type State } from '../src/simulation';
 import { bomberCue, placeBomberCue } from '../src/bomber-cue';
@@ -7,7 +8,7 @@ const setup = function (scenario?: 'drill' | 'systems') {
 	state.status = 'running'; state.nextWave = Infinity;
 	state.systems.allocation = { engines: 4, weapons: 6, shields: 0 };
 	state.systems.shield.charge = 0;
-	state.enemies.push({ id: state.nextId++, kind: 'bomber', x: 0, y: -250, hp: 95, maxHp: 95, cooldown: 0 });
+	state.enemies.push({ id: state.nextId++, kind: 'bomber', x: 0, y: -tactical(250), hp: 95, maxHp: 95, cooldown: 0 });
 	return state;
 };
 const advance = function (state: State, seconds: number) { for (let i = 0; i < Math.round(seconds * 60); i++) step(state, 1 / 60); };
@@ -31,14 +32,14 @@ describe('bomber response window', function () {
 	test('moving target is tracked, range loss cancels and returning requires full preparation', function () {
 		const state = setup(); step(state, 1 / 60); advance(state, 1);
 		bomber(state).x += 20; step(state, 1 / 60); expect(bomber(state).bomberAttack?.phase).toBe('windup');
-		bomber(state).y = -1000; step(state, 1 / 60); expect(bomber(state).bomberAttack).toBeUndefined();
-		bomber(state).x = state.ark.x; bomber(state).y = -250; step(state, 1 / 60);
+		bomber(state).y = -tactical(1000); step(state, 1 / 60); expect(bomber(state).bomberAttack).toBeUndefined();
+		bomber(state).x = state.ark.x; bomber(state).y = -tactical(250); step(state, 1 / 60);
 		expect(bomber(state).bomberAttack).toEqual({ phase: 'windup', remaining: 2, target: undefined });
 		advance(state, 1); expect(state.shots).toHaveLength(0);
 	});
 	test('escort loss cancels instead of transferring a ready shot to the ark', function () {
 		const state = setup(); deploy(state, 'guardian'); const escort = state.escorts[0]; if (!escort) throw new Error('Missing escort');
-		escort.x = 0; escort.y = -150; escort.cooldown = 100;
+		escort.x = 0; escort.y = -tactical(150); escort.cooldown = 100;
 		step(state, 1 / 60); expect(bomber(state).bomberAttack).toEqual({ phase: 'windup', remaining: 2, target: escort.id });
 		advance(state, 1); escort.hp = 0; step(state, 1 / 60);
 		expect(bomber(state).bomberAttack).toBeUndefined(); expect(state.shots).toHaveLength(0);
@@ -46,7 +47,7 @@ describe('bomber response window', function () {
 	});
 	test('a blocked firing line cancels; clearing it cannot release a stale shot', function () {
 		const state = setup(); step(state, 1 / 60); advance(state, 1);
-		state.systems.interdiction.field = { id: state.nextId++, world: { x: 0, y: -130 }, remaining: 10 };
+		state.systems.interdiction.field = { id: state.nextId++, world: { x: 0, y: -tactical(130) }, remaining: 10 };
 		step(state, 1 / 60); expect(bomber(state).bomberAttack).toBeUndefined(); expect(state.shots).toHaveLength(0);
 		state.systems.interdiction.field = undefined; step(state, 1 / 60); expect(bomber(state).bomberAttack?.remaining).toBe(2);
 	});
@@ -67,7 +68,7 @@ describe('bomber response window', function () {
 	});
 	test('eligible field blocks a released round', function () {
 		const state = setup(); untilShot(state);
-		state.systems.interdiction.field = { id: state.nextId++, world: { x: state.ark.x, y: -130 }, remaining: 10 };
+		state.systems.interdiction.field = { id: state.nextId++, world: { x: state.ark.x, y: -tactical(130) }, remaining: 10 };
 		advance(state, 2); expect(state.systems.interdiction.blockedShots).toBe(1);
 		expect(state.systems.sensors.integrity).toBe(100); expect(state.hull).toBe(1200);
 	});
@@ -82,7 +83,7 @@ describe('bomber response window', function () {
 	test('cues expose only living classified bombers in a running game', function () {
 		const state = setup(); step(state, 1 / 60); const enemy = bomber(state);
 		expect(bomberCue(state, enemy)).toBeDefined(); state.systems.sensors.integrity = 49;
-		expect(bomberCue(state, enemy)).toBeUndefined(); enemy.y = -100;
+		expect(bomberCue(state, enemy)).toBeUndefined(); enemy.y = -tactical(100);
 		expect(bomberCue(state, enemy)).toBeDefined(); state.systems.sensors.integrity = 0;
 		expect(bomberCue(state, enemy)).toBeUndefined(); state.systems.sensors.integrity = 100;
 		enemy.hp = 0; expect(bomberCue(state, enemy)).toBeUndefined(); enemy.hp = 95; state.status = 'lost';

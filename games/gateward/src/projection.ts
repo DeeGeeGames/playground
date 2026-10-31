@@ -1,3 +1,4 @@
+import { tactical } from './combat-scale';
 import { DECK_HEIGHT, FLIGHT_HEIGHT, TURRET_RISE, TURRET_SCALE, enemyRadius } from './ship-config';
 import { OrthographicCamera, Plane, Raycaster, Vector2, Vector3 } from 'three';
 import { distance, type Enemy, type Mount, type Point } from './simulation';
@@ -40,8 +41,10 @@ const fitCamera = function (camera: OrthographicCamera, width: number, height: n
 };
 
 export const viewFor = function (width: number, height: number): View {
-	const camera = new OrthographicCamera(-1, 1, 1, -1, 1, 12000);
-	camera.position.set(1000, 1000, 1000);
+	const camera = new OrthographicCamera(-1, 1, 1, -1, 1, tactical(12000));
+	// Orthographic image size is independent of distance. Keep the entire
+	// detection volume in front of the near plane, even at a low orbit.
+	camera.position.set(tactical(3000), tactical(3000), tactical(3000));
 	camera.lookAt(0, 0, 0);
 	return fitCamera(camera, width, height);
 };

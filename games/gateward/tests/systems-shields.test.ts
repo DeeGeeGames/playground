@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { createState, deploy, MAX_HULL, pulse, step, type Shot, type State } from '../src/simulation';
 import { absorbShieldDamage, SHIELD_CONFIG, type SystemsState } from '../src/systems';
@@ -201,13 +202,13 @@ describe('Aegis remains distinct from persistent shields', function () {
 		const state = quiet();
 		const systems = systemsFor(state);
 		systems.shield.charge = 50; systems.shield.rechargeDelay = 2;
-		state.enemies.push({ id: state.nextId++, x: 200, y: 0, hp: 100, maxHp: 100, kind: 'raider', cooldown: 99 });
-		state.enemies.push({ id: state.nextId++, x: 400, y: 0, hp: 100, maxHp: 100, kind: 'raider', cooldown: 99 });
+		state.enemies.push({ id: state.nextId++, x: tactical(200), y: 0, hp: 100, maxHp: 100, kind: 'raider', cooldown: 99 });
+		state.enemies.push({ id: state.nextId++, x: tactical(400), y: 0, hp: 100, maxHp: 100, kind: 'raider', cooldown: 99 });
 		shot(state, 999);
 		const friendly = shot(state, 10, 'player');
 		expect(pulse(state)).toBe(true);
 		expect(state.shots).toEqual([friendly]);
-		expect(state.enemies.map(function (enemy) { return { hp: enemy.hp, x: enemy.x }; })).toEqual([{ hp: 55, x: 275 }, { hp: 100, x: 400 }]);
+		expect(state.enemies.map(function (enemy) { return { hp: enemy.hp, x: enemy.x }; })).toEqual([{ hp: 55, x: tactical(275) }, { hp: 100, x: tactical(400) }]);
 		expect(state.aegisRemaining).toBe(5);
 		expect(systems.shield.charge).toBe(50);
 		expect(systems.shield.rechargeDelay).toBe(2);

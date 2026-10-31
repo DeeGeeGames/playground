@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { hullClearance, traffic } from '../src/ship-traffic';
 import { describe, expect, test } from 'bun:test';
 import { arkVelocity, flightVelocity, localPoint, mountWorld, worldPoint } from '../src/space';
@@ -34,8 +35,9 @@ describe('one world and shared friendly steering', function () {
 			const before = { x: guardian.x, y: guardian.y }; const angle = guardian.angle;
 			step(state, 1 / 60); followsVelocity(state, guardian, before, angle, 1.6);
 		}
+		// Arrival follows the moving station with one fixed-step integration of lead.
 		const offset = localPoint(state, guardian);
-		expect(offset.y).toBeCloseTo(230, 0); expect(offset.x).toBeCloseTo(0, 0);
+		expect(offset.y).toBeCloseTo(tactical(230), 0); expect(offset.x).toBeCloseTo(state.ark.speed / 60, 4);
 		expect(Math.cos(guardian.angle)).toBeGreaterThan(0.99);
 		expect(guardian.flight?.speed).toBeCloseTo(state.ark.speed, 1);
 	});
@@ -61,7 +63,7 @@ describe('one world and shared friendly steering', function () {
 		deploy(state, 'guardian'); const guardian = state.escorts[0]; if (!guardian) throw new Error('Missing guardian');
 		expect(localPoint(state, guardian).x).toBeCloseTo(-220);
 		advance(state, 12); expect(guardian.y).toBeGreaterThan(-700);
-		expect(localPoint(state, guardian).x).toBeCloseTo(165, 0);
+		expect(localPoint(state, guardian).x).toBeCloseTo(120 + tactical(45) + state.ark.speed / 60, 4);
 		expect(localPoint(state, guardian).y).toBeCloseTo(-200, 0);
 	});
 });
@@ -69,8 +71,8 @@ describe('one world and shared friendly steering', function () {
 describe('world combat and anchoring', function () {
 	for (const kind of ['raider', 'bomber', 'armored', 'flagship'] as const) test(`${kind} can brake and turn clear of a field placed just outside its hull`, function () {
 		const state = quiet(); setAllocation(state, { engines: 0, weapons: 0, shields: 10 });
-		const center = { x: 300, y: 0 }; const distance = enemyClearance({ kind }) + 1;
-		const enemy = { id: state.nextId++, kind, x: 300, y: -distance, hp: 100000, maxHp: 100000, cooldown: 999, flight: { angle: Math.PI / 2, speed: ENEMIES[kind].speed, side: -1 as const, course: 'intercept' as const, run: 1 as const } };
+		const center = { x: tactical(300), y: 0 }; const distance = enemyClearance({ kind }) + 1;
+		const enemy = { id: state.nextId++, kind, x: tactical(300), y: -distance, hp: 100000, maxHp: 100000, cooldown: 999, flight: { angle: Math.PI / 2, speed: ENEMIES[kind].speed, side: -1 as const, course: 'intercept' as const, run: 1 as const } };
 		state.enemies.push(enemy); expect(placeInterdiction(state, center)).toBe(true);
 		for (let frame = 0; frame < 1800; frame++) { step(state, 1 / 60); expect(Math.hypot(enemy.x - center.x, enemy.y - center.y)).toBeGreaterThanOrEqual(enemyClearance(enemy) - 12 - 1e-8); }
 	});
@@ -88,11 +90,11 @@ describe('world combat and anchoring', function () {
 		expect(shot.x).toBeCloseTo(before.x + before.vx * 0.05); expect(shot.y).toBeCloseTo(before.y + before.vy * 0.05);
 	});
 	test('fixed fields and rounds remain in the world when the ark passes them', function () {
-		const state = quiet({ x: 2000, y: 400 }); const position = worldPoint(state, { x: 300, y: 0 });
+		const state = quiet({ x: 2000, y: 400 }); const position = worldPoint(state, { x: tactical(300), y: 0 });
 		expect(placeInterdiction(state, position)).toBe(true);
 		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field');
 		state.shots.push({ id: state.nextId++, x: 1900, y: 200, vx: 0, vy: 0, damage: 1, side: 'enemy', weapon: 'hostile', target: undefined, life: 4 });
-		advance(state, 2); expect(field.world).toEqual(position); expect(state.ark.x).toBeCloseTo(2024);
+		advance(state, 2); expect(field.world).toEqual(position); expect(state.ark.x).toBeCloseTo(2000 + tactical(24));
 		expect(state.shots[0]?.x).toBe(1900); expect(state.shots[0]?.y).toBe(200);
 	});
 	test('moving hull contact is swept even when a fast round crosses the entire ark in one tick', function () {
@@ -104,7 +106,7 @@ describe('world combat and anchoring', function () {
 	test('translating the whole encounter preserves flight, damage, sensor intel and field interaction', function () {
 		const scene = function (origin: Point): State {
 			const state = quiet(origin); build(state, 0, 'rail'); deploy(state, 'guardian'); deploy(state, 'interceptor');
-			placeInterdiction(state, worldPoint(state, { x: 300, y: 0 }));
+			placeInterdiction(state, worldPoint(state, { x: tactical(300), y: 0 }));
 			for (const [index, kind] of (['raider', 'armored', 'bomber'] as const).entries()) state.enemies.push({ id: state.nextId++, kind, ...worldPoint(state, { x: 600, y: (index - 1) * 100 }), hp: 5000, maxHp: 5000, cooldown: 0 });
 			return state;
 		};

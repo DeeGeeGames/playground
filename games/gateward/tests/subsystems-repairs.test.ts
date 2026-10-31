@@ -1,3 +1,4 @@
+import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { assignRepair, build, createState, MAX_HULL, sell, step, subsystemAimPoint, subsystemAt, upgrade, type State } from '../src/simulation';
 import { conditionMultiplier, effectiveOutputs } from '../src/systems';
@@ -14,7 +15,7 @@ const penetratingShot = function (state: State, target: string, damage: number, 
 	const aim = subsystemAimPoint(state, target); if (!aim) throw new Error('Invalid subsystem fixture');
 	const origin = from ?? worldPoint(state, { x: target === 'engines' ? -155 : target === 'sensors' ? 155 : target.startsWith('mount:') ? mountAt(state, Number(target.slice(6))).x : 0, y: target === 'engines' || target === 'sensors' ? 0 : target.startsWith('mount:') ? Math.sign(mountAt(state, Number(target.slice(6))).y) * 50 : -50 });
 	// Relative aim plus ark velocity: even a translated, rotated moving ark is hit at the surface anchor.
-	state.shots.push({ id: state.nextId++, ...origin, vx: (aim.x - origin.x) / 0.05 + Math.cos(state.ark.angle) * 12, vy: (aim.y - origin.y) / 0.05 + Math.sin(state.ark.angle) * 12, damage, side: 'enemy', weapon: 'hostile', target: undefined, life: 3 });
+	state.shots.push({ id: state.nextId++, ...origin, vx: (aim.x - origin.x) / 0.05 + Math.cos(state.ark.angle) * tactical(12), vy: (aim.y - origin.y) / 0.05 + Math.sin(state.ark.angle) * tactical(12), damage, side: 'enemy', weapon: 'hostile', target: undefined, life: 3 });
 };
 
 describe('surface subsystem impacts', function () {
@@ -69,7 +70,7 @@ describe('condition changes output independently of power', function () {
 	test('thresholds and actual engine speed/ETA agree with simulation', function () {
 		expect([100, 50, 49, 0].map(conditionMultiplier)).toEqual([1, 1, 0.5, 0]);
 		const state = quiet(); state.systems.engines.integrity = 49;
-		expect(journeyFor(state).eta).toBe(420); step(state, 0.05); expect(state.ark.speed).toBeCloseTo(6);
+		expect(journeyFor(state).eta).toBe(420); step(state, 0.05); expect(state.ark.speed).toBeCloseTo(tactical(6));
 		state.systems.engines.integrity = 0; step(state, 0.05); expect(state.ark.speed).toBe(0); expect(journeyFor(state).eta).toBe(Infinity);
 	});
 	test('generator impairment/offline only alters recharge; repairs never directly create charge', function () {

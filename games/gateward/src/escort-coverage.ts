@@ -1,3 +1,4 @@
+import { tactical } from './combat-scale';
 import type { EscortKind, Point, Sector, State } from './simulation';
 import { localPoint, worldPoint } from './space';
 
@@ -52,12 +53,12 @@ export const coveragePlan = function (state: State): ReadonlyMap<string, Sector 
 };
 
 export const coverageStation = function (state: State, craftId: number, sector: Sector | undefined): Point {
-	if (!sector) return worldPoint(state, { x: -100, y: 0 });
+	if (!sector) return worldPoint(state, { x: -tactical(100), y: 0 });
 	const craft = state.escorts.find(function (craft) { return craft.id === craftId; });
 	const peers = state.escorts.filter(function (other) { return other.hp > 0 && other.sector === sector && other.kind === craft?.kind; }).sort(function (a, b) { return a.id - b.id; });
 	const index = Math.max(0, peers.findIndex(function (other) { return other.id === craftId; }));
-	const spread = (index - (peers.length - 1) / 2) * 30;
-	const radius = craft?.kind === 'guardian' ? 230 : 280;
+	const spread = (index - (peers.length - 1) / 2) * tactical(30);
+	const radius = tactical(craft?.kind === 'guardian' ? 230 : 280);
 	const offset = sector === 'ahead' ? { x: radius, y: spread } : sector === 'astern' ? { x: -radius, y: spread } : sector === 'port' ? { x: spread, y: -radius } : { x: spread, y: radius };
 	return worldPoint(state, offset);
 };
@@ -65,6 +66,6 @@ export const coverageReadiness = function (state: State, sector: Sector) {
 	const plan = coveragePlan(state); const groups = coverageGroups(state).filter(function (group) { return plan.get(group.id) === sector; });
 	const ids = new Set(groups.flatMap(function (group) { return [...group.craft]; }));
 	const active = state.escorts.filter(function (craft) { const wing = state.wings.find(function (wing) { return wing.id === craft.wingId; }); return ids.has(craft.id) && craft.sector === sector && craft.hp > 0 && (!wing || wing.phase === 'sortie'); });
-	const onStation = active.filter(function (craft) { const station = coverageStation(state, craft.id, sector); return pointSector(state, craft) === sector && Math.hypot(craft.x - station.x, craft.y - station.y) <= 180; }).length;
+	const onStation = active.filter(function (craft) { const station = coverageStation(state, craft.id, sector); return pointSector(state, craft) === sector && Math.hypot(craft.x - station.x, craft.y - station.y) <= tactical(180); }).length;
 	return { planned: ids.size, onStation, inbound: active.length - onStation, unavailable: ids.size - active.length };
 };

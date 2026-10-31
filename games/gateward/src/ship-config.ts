@@ -1,3 +1,4 @@
+import { tactical } from './combat-scale';
 export const FLIGHT_HEIGHT = 130;
 export const DECK_HEIGHT = 22;
 export const TURRET_SCALE = 0.8;
@@ -17,4 +18,4 @@ export const enemyRadius = function (kind: string): number {
 export const CARRIER_BAYS = [
 	{ x: -6, y: 53 }, { x: -6, y: -53 }, { x: 69, y: 28 }, { x: 69, y: -28 },
 ] as const;
-export const CARRIER_LAUNCH = { interval: 0.9, range: 620, clearanceTime: 1.5, speed: 90 } as const;
+export const CARRIER_LAUNCH = { interval: 0.9, range: tactical(620), clearanceTime: 1.5, speed: tactical(90) } as const;
