@@ -4,7 +4,7 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, REPAIR_CREWS, repair, repairSensors, setPriority, setRally, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
+import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, REPAIR_CREWS, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
 import { worldPoint } from './space';
 import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
@@ -31,13 +31,13 @@ const shutdown = await mountGame('game', async function (container) {
 		hull: element('hull'), salvage: element('salvage'), route: element('route-progress'), routeLabel: element('route-label'), distance: element('distance'),
 		wave: element('wave-label'), waveInfo: element('wave-info'), mountTitle: element('mount-title'), mountInfo: element('mount-info'),
 		build: element('build-options'), upgradeOptions: element('upgrade-options'), upgrade: button('upgrade'), sell: button('sell'),
-		escorts: element('escort-count'), depart: button('depart'), pause: button('pause'), speed: button('speed'), rally: button('rally'),
+		escorts: element('escort-count'), depart: button('depart'), pause: button('pause'), speed: button('speed'), coverage: button('escort-coverage'),
 		pulse: button('pulse'), pulseInfo: element('pulse-info'), pulseState: element('pulse-state'), repair: button('repair'), repairInfo: element('repair-info'),
 		brief: element('brief'), pausePanel: element('pause-panel'), result: element('result'), message: element('message'), hint: element('field-hint'), clear: button('clear-target'),
 	};
 	const mountButtons = Array.from({ length: 8 }, function (_, i) {
 		const control = document.createElement('button'); control.type = 'button'; control.setAttribute('aria-label', `Select mount ${i + 1}`);
-		control.addEventListener('click', function () { if (available()) { selected = i; inspectedContact = undefined; openInspector('mounts'); rallyMode = false; placement = undefined; } }, options);
+		control.addEventListener('click', function () { if (available()) { selected = i; inspectedContact = undefined; openInspector('mounts'); placement = undefined; } }, options);
 		element('mounts').append(control); return control;
 	});
 	const buildButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-build]')];
@@ -46,7 +46,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const requestedMode = new URLSearchParams(location.search).get('mode');
 	let mode = requestedMode === 'systems' ? 'systems' : requestedMode === 'drill' ? 'drill' : 'voyage';
 	const newState = function () { return createState(mode === 'systems' ? { scenario: 'systems' } : mode === 'drill' ? { scenario: 'drill' } : {}); };
-	let state = newState(); let selected = 0; let paused = false; let briefing = true; let rallyMode = false; let speed = 1;
+	let state = newState(); let selected = 0; let paused = false; let briefing = true; let speed = 1;
 	let placement: Point | undefined;
 	let frame = 0; let previous = 0; let accumulator = 0; let disposed = false; let contextAvailable = true;
 	const pointers = new Map<number, { x: number; y: number; moved: boolean }>();
@@ -60,7 +60,7 @@ const shutdown = await mountGame('game', async function (container) {
 		radarOpen = open;
 		radarHost.hidden = !open; container.dataset['radarOpen'] = String(open);
 		button('open-radar').setAttribute('aria-expanded', String(open));
-		pointers.clear(); multiTouch = false; placement = undefined; rallyMode = false; presentation.cancelInteraction();
+		pointers.clear(); multiTouch = false; placement = undefined; presentation.cancelInteraction();
 		for (const child of container.children) if (child instanceof HTMLElement && child !== radarHost && child !== ui.pausePanel && child !== ui.result && child !== ui.brief) child.inert = open;
 		if (open) { closeInspector(); radar.update(); radar.focus(); }
 		else button('open-radar').focus({ preventScroll: true });
@@ -89,7 +89,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (value) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); }
 		audio.setActive(!value && state.focused && !document.hidden && contextAvailable);
 		ui.pausePanel.inert = false; radarHost.inert = value;
-		paused = value; state.paused = value; rallyMode = false; placement = undefined; accumulator = 0; ui.pausePanel.hidden = !paused;
+		paused = value; state.paused = value; placement = undefined; accumulator = 0; ui.pausePanel.hidden = !paused;
 		if (paused) button('resume').focus({ preventScroll: true }); else focusCanvas();
 	};
 	const presentation = await createPresentation(canvas);
@@ -116,7 +116,7 @@ const shutdown = await mountGame('game', async function (container) {
 		audio.reset();
 		setRadar(false); radar.reset();
 		pointers.clear(); multiTouch = false;
-		placement = undefined; state = newState(); selected = 0; paused = false; briefing = false; rallyMode = false; speed = 1; accumulator = 0;
+		placement = undefined; state = newState(); selected = 0; paused = false; briefing = false; speed = 1; accumulator = 0;
 		ui.pausePanel.hidden = true; ui.result.hidden = true; ui.brief.hidden = true; inspectedContact = undefined; openInspector('mounts'); focusCanvas();
 		presentation.resetCamera();
 	};
@@ -130,7 +130,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (!available()) return;
 		const reason = interdictionReason(state); if (reason) { notify(state, reason); return; }
 		pointers.clear(); multiTouch = false; presentation.cancelInteraction();
-		placement = { ...point }; rallyMode = false; openInspector('field'); focusCanvas();
+		placement = { ...point }; openInspector('field'); focusCanvas();
 	};
 	const confirmPlacement = function () {
 		if (!available() || !placement) return;
@@ -177,7 +177,7 @@ const shutdown = await mountGame('game', async function (container) {
 	button('resume').addEventListener('click', function () { setPause(false); }, options);
 	button('restart').addEventListener('click', restart, options); button('restart-pause').addEventListener('click', restart, options);
 	ui.speed.addEventListener('click', function () { if (!briefing && contextAvailable && state.focused && (state.status === 'fitting' || state.status === 'running')) speed = speed === 1 ? 2 : 1; }, options);
-	ui.rally.addEventListener('click', function () { if (available()) { cancelPlacement(); rallyMode = !rallyMode; focusCanvas(); } }, options);
+	ui.coverage.addEventListener('click', function () { setRadar(true); }, options);
 	ui.clear.addEventListener('click', function () { if (available()) setPriority(state, undefined); }, options);
 	canvas.addEventListener('pointerdown', function (event) {
 		if (event.button !== 0 || radarOpen) return;
@@ -201,13 +201,12 @@ const shutdown = await mountGame('game', async function (container) {
 			if (point) { placement = point; notify(state, 'Field preview updated. Enter or Place field confirms; Esc cancels.'); }
 			focusCanvas(); return;
 		}
-		const { mount, enemy, world } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
-		if (mount >= 0 && !rallyMode) { selected = mount; inspectedContact = undefined; openInspector('mounts'); }
-		else if (enemy && !rallyMode) {
+		const { mount, enemy } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
+		if (mount >= 0) { selected = mount; inspectedContact = undefined; openInspector('mounts'); }
+		else if (enemy) {
 			if (setPriority(state, enemy.id)) { inspectedContact = enemy.id; openInspector('contact'); notify(state, `Priority target: ${contactIntel(state, enemy) === 'classified' ? enemy.kind : 'unclassified contact'}. Eligible weapons in range and coverage will focus fire.`); }
 			else notify(state, 'Contact outside sensor range. Nearby defense remains automatic.');
 		}
-		else if (world && !state.experimental && setRally(state, world)) { rallyMode = false; notify(state, 'Escort rally point updated.'); }
 		focusCanvas();
 	};
 	canvas.addEventListener('pointerup', function (event) { releasePointer(event, false); }, options);
@@ -243,14 +242,14 @@ const shutdown = await mountGame('game', async function (container) {
 			if (event.code === 'Enter') { event.preventDefault(); confirmPlacement(); return; }
 		}
 		const index = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8'].indexOf(event.code);
-		if (index >= 0) { selected = index; inspectedContact = undefined; openInspector('mounts'); rallyMode = false; cancelPlacement(); event.preventDefault(); }
+		if (index >= 0) { selected = index; inspectedContact = undefined; openInspector('mounts'); cancelPlacement(); event.preventDefault(); }
 		if (event.code === 'KeyQ') { event.preventDefault(); order(function () { return pulse(state); }); }
 		if (event.code === 'KeyE') { event.preventDefault(); order(function () { return repair(state); }); }
 		if (event.code === 'KeyS') { event.preventDefault(); order(function () { return repairSensors(state); }); }
-		if (event.code === 'KeyR' && !state.experimental) { event.preventDefault(); cancelPlacement(); rallyMode = !rallyMode; }
+		if (event.code === 'KeyR') { event.preventDefault(); setRadar(true); }
 	}, options);
-	window.addEventListener('blur', function () { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); rallyMode = false; setPause(true); }, options);
-	document.addEventListener('visibilitychange', function () { if (document.hidden) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); rallyMode = false; setPause(true); } }, options);
+	window.addEventListener('blur', function () { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); setPause(true); }, options);
+	document.addEventListener('visibilitychange', function () { if (document.hidden) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); setPause(true); } }, options);
 	window.addEventListener('focus', function () { state.focused = true; }, options);
 	document.addEventListener('visibilitychange', function () { if (!document.hidden) state.focused = true; }, options);
 	const hud = function () {
@@ -348,7 +347,7 @@ const shutdown = await mountGame('game', async function (container) {
 			const detail = control.querySelector('small'); if (detail) label(detail, reason || (kind === 'interceptor' ? state.experimental ? 'Buy 3 ready fighters' : '3 fighters · fragile, fast' : '1 gunship · draws enemy fire'));
 		}
 		label(ui.escorts, `${craftCount(state)} / 9 CRAFT`);
-		const canvasHelp = `Tactical view. Click a numbered mount to build. Click an enemy for turret priority. ${state.experimental ? 'Use the escort bay sector buttons to scramble wings and assign guardians.' : 'Click empty space to rally escorts.'} Right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
+		const canvasHelp = `Tactical view. Click a numbered mount to build. Click an enemy for turret priority. Use tactical radar to allocate escort coverage. Right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
 		if (canvas.getAttribute('aria-label') !== canvasHelp) canvas.setAttribute('aria-label', canvasHelp);
 		label(ui.depart, 'Depart →');
 		ui.depart.setAttribute('aria-label', mode === 'systems' ? 'Start Systems Trial' : state.scenario ? 'Start Escort Drill' : 'Depart for Kepler');
@@ -364,17 +363,16 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.repairInfo, !active ? 'Commands held' : hullCrews > 0 ? `${hullCrews} hull crews · E releases crews` : state.hull >= MAX_HULL ? 'Hull at full integrity' : 'Assign one free crew · split crews in Reactor');
 		label(element('repair-state'), hullCrews > 0 ? `${hullCrews} crews` : `${REPAIR_CREWS - usedCrews} crews free`);
 		ui.pulse.title = `Aegis (Q): ${ui.pulseInfo.textContent}`; ui.repair.title = `Repair (E): ${ui.repairInfo.textContent}`;
-		ui.rally.hidden = state.experimental; label(element('escort-help'), state.experimental ? 'Buy ready wings, then scramble a sector. Guardians hold their own sector. Reserve craft count toward nine slots.' : 'Escorts engage near their shared rally point.'); ui.rally.disabled = !active; ui.rally.classList.toggle('active', rallyMode); ui.rally.setAttribute('aria-pressed', String(rallyMode));
-		label(ui.rally, rallyMode ? 'Click space to place rally point' : '⌖ Set escort rally point');
+		ui.coverage.disabled = !active; label(element('escort-help'), 'Allocate escort coverage on tactical radar. Ready wings launch automatically. Replace losses during rearm in Escort Bay.');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
 		label(element('coverage-setting'), `${mode === 'voyage' ? 'Full Voyage' : mode === 'drill' ? 'Escort Drill' : 'Systems Trial'} · ${state.coverageDegrees}° ${state.coverageDegrees < 360 ? 'outward coverage' : 'full coverage'}`);
-		label(ui.hint, placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.experimental ? 'Select a mount for coverage · Click hostile for turret priority · Order escorts in bay' : rallyMode ? 'RALLY MODE · Click or tap a location for all escorts' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Click empty space to rally · Click hostile to focus');
+		label(ui.hint, placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Radar for escort coverage · Click hostile to focus');
 		label(ui.message, state.messageTime > 0 ? state.message : ''); label(ui.speed, `${speed}×`); ui.speed.disabled = briefing || !contextAvailable || !state.focused || state.status === 'won' || state.status === 'lost';
 		label(ui.pause, paused ? 'Resume' : 'Menu'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
 	};
 	const showResult = function () {
 		setRadar(false);
-		ui.result.hidden = false; rallyMode = false; placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
+		ui.result.hidden = false; placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
 		label(element('result-title'), mode === 'systems' ? state.status === 'won' ? 'SYSTEMS TRIAL COMPLETE.' : 'SYSTEMS TRIAL LOST.' : state.scenario ? state.status === 'won' ? 'DRILL COMPLETE.' : 'DRILL LOST.' : state.status === 'won' ? 'THE ARK ARRIVES.' : 'THE LIGHTS GO OUT.');
 		const summary = systemsSummary(state);
 		label(element('result-copy'), systemsResultMessage(state));
@@ -400,7 +398,7 @@ const shutdown = await mountGame('game', async function (container) {
 		// Shift the projection above a portrait sheet while retaining the player's orbit and zoom.
 		const panelTop = element('inspector').getBoundingClientRect().top - canvas.getBoundingClientRect().top;
 		const screenOffsetY = inspector && canvas.clientWidth <= 600 && canvas.clientHeight > 500 ? Math.max(0, canvas.clientHeight * 0.52 - panelTop + 50) : 0;
-		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, rallyMode, !radarOpen && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, screenOffsetY);
+		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, false, !radarOpen && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, screenOffsetY);
 		syncAudio(); hud(); radar.update();
 		frame = requestAnimationFrame(tick);
 	};

@@ -2,7 +2,7 @@ import { CRAFT_MOUNTS } from '../src/craft-turrets';
 import { describe, expect, test } from 'bun:test';
 import { broadsideMuzzle } from '../src/flight';
 import { localPoint } from '../src/space';
-import { createState, deploy, ENEMIES, setAllocation, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
+import { createState, deploy, ENEMIES, setAllocation, setRally, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
 
 const quiet = function (): State {
 	const state = createState(); state.status = 'running'; state.nextWave = Infinity;
@@ -52,7 +52,7 @@ describe('capital ship courses and batteries', function () {
 		const state = quiet(); const enemy = hostile(state, 'armored', 0, -160);
 		enemy.flight = { angle: 0, speed: 20, side: -1, course: 'broadside', run: 1 };
 		state.escorts.push({ id: state.nextId++, kind: 'guardian', x: 90, y: -80, hp: 100000, cooldown: 999, angle: 0 });
-		state.rally = { x: 400, y: -80 };
+		setRally(state, { x: 400, y: -80 });
 		step(state, 1 / 60);
 		const shot = state.shots.find(function (shot) { return shot.side === 'enemy'; });
 		if (!shot) throw new Error('Missing fallback broadside');
@@ -87,7 +87,7 @@ describe('fighter skirmishing', function () {
 		expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeGreaterThan(30);
 	});
 	test('hostile and deployed interceptors maneuver, exchange fire, and resume ark attacks after escorts disappear', function () {
-		const state = quiet(); deploy(state, 'interceptor'); state.rally = { x: 0, y: -180 };
+		const state = quiet(); deploy(state, 'interceptor'); setRally(state, { x: 0, y: -180 });
 		for (const escort of state.escorts) { escort.hp = 100000; escort.x = 0; escort.y = -150; }
 		const enemy = hostile(state, 'raider', 60, -220); const before = structuredClone(state.escorts);
 		let hostileShots = 0; let friendlyShots = 0;

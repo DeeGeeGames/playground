@@ -38,6 +38,7 @@ describe('one world and shared friendly steering', function () {
 	test('fighters launch, form up, return to the moving stern and rearm without snapping their hulls', function () {
 		const state = createState({ scenario: 'drill' }); state.status = 'running'; state.nextWave = Infinity;
 		state.ark.x = 800; state.routeOrigin.x = 800; setAllocation(state, { engines: 10, weapons: 0, shields: 0 });
+		state.coverage.enabled = false; // Exercise the explicit launch API independently of automatic radar orders.
 		deploy(state, 'interceptor'); const wing = state.wings[0]; if (!wing) throw new Error('Missing wing');
 		scramble(state, wing.id, 'port'); const phases = new Set<string>();
 		for (let frame = 0; frame < 3000; frame++) {

@@ -82,7 +82,7 @@ describe('guardian screens and restrictions', function () {
 });
 
 export const strategyRun = function (strategy: 'baseline' | 'wings' | 'guardians', issueOrders = true): { strategy: string; result: State['status']; time: number; hull: number; minimumShield: number; kills: number; losses: number; launches: number; orders: number; salvage: number } {
-	const s = createState({ scenario: 'drill' });
+	const s = createState({ scenario: 'drill' }); s.coverage.enabled = false;
 	if (strategy !== 'baseline') { build(s, 0, 'rail'); if (strategy === 'wings') { deploy(s, 'interceptor'); build(s, 4, 'flak'); } else { deploy(s, 'guardian'); build(s, 4, 'flak'); } }
 	s.status = 'running'; let minimumShield = s.systems.shield.charge;
 	for (let second = 0; second < 300 && s.status === 'running'; second++) {

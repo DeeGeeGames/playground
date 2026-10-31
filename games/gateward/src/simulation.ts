@@ -5,6 +5,7 @@ import { ESCORT_DRILL, SYSTEMS_TRIAL, type Scenario } from './scenarios';
 import { conditionMultiplier, effectiveOutputs, absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
 import { arriveCourse, capitalCourse, createFlight, fighterCourse, fly, isCapital, type Flight } from './flight';
 import { arkVelocity, flightVelocity, localPoint, mountWorld, worldPoint } from './space';
+import { createEscortCoverage, coveragePlan, coverageStation, pointSector, type CoveragePriority, type EscortCoverage } from './escort-coverage';
 export type Point = { x: number; y: number };
 export type Weapon = 'flak' | 'rail' | 'missile' | 'beam';
 export type EnemyKind = 'raider' | 'bomber' | 'armored' | 'flagship';
@@ -50,6 +51,7 @@ export const SECTOR_POINTS: Record<Sector, Point> = { port: { x: 0, y: -230 }, s
 export interface Wing { id: number; phase: 'ready' | 'launching' | 'sortie' | 'returning' | 'rearming'; timer: number; craft: Escort[]; assignment: Sector; }
 export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
 export interface State {
+	coverage: EscortCoverage;
 	repairs: Record<string, number>;
 	ark: Point & { angle: number; speed: number };
 	routeOrigin: Point;
@@ -86,6 +88,7 @@ export const mountTarget = function (state: State, mount: Mount): Enemy | undefi
 export const createState = function (options: { coverageDegrees?: number; experimental?: boolean; scenario?: 'drill' | 'systems' } = {}): State {
 	const scenario = options.scenario === 'systems' ? SYSTEMS_TRIAL : options.scenario === 'drill' ? ESCORT_DRILL : undefined;
 	return {
+		coverage: createEscortCoverage(),
 		repairs: {}, ark: { x: 0, y: 0, angle: 0, speed: 0 }, routeOrigin: { x: 0, y: 0 },
 		resultReason: undefined,
 		systems: createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed),
@@ -98,6 +101,17 @@ export const createState = function (options: { coverageDegrees?: number; experi
 };
 export const notify = function (state: State, message: string) { state.message = message; state.messageTime = 4; };
 const canOrder = function (state: State) { return !state.paused && state.focused && (state.status === 'fitting' || state.status === 'running'); };
+export const setCoveragePriority = function (state: State, sector: Sector, priority: CoveragePriority): boolean {
+	if (!canOrder(state) || (state.coverage.all !== undefined && state.coverage.all !== sector)) return false;
+	state.coverage.enabled = true;
+	if (priority === 'all') state.coverage.all = sector;
+	else { state.coverage.all = undefined; state.coverage.priorities[sector] = priority; }
+	state.orders++; updateEscortCoverage(state); return true;
+};
+export const balanceCoverage = function (state: State): boolean {
+	if (!canOrder(state) || state.coverage.all !== undefined) return false;
+	state.coverage = createEscortCoverage(); state.orders++; updateEscortCoverage(state); return true;
+};
 export const interdictionReason = function (state: State, point?: Point): string {
 	const interdiction = state.systems.interdiction;
 	if (!canOrder(state)) return state.paused ? 'Paused' : !state.focused ? 'Command link unfocused' : 'Run ended';
@@ -173,9 +187,10 @@ export const deploy = function (state: State, kind: EscortKind): boolean {
 	state.salvage -= config.cost;
 	if (state.experimental && kind === 'interceptor') {
 		const wing: Wing = { id: state.nextId++, phase: 'ready', timer: 0, craft: [], assignment: 'port' };
-		wing.craft = Array.from({ length: 3 }, function () { return makeFighter(state, wing.id); }); state.wings.push(wing); return true;
+		wing.craft = Array.from({ length: 3 }, function () { return makeFighter(state, wing.id); }); state.wings.push(wing); updateEscortCoverage(state); return true;
 	}
 	for (let i = 0; i < config.count; i++) state.escorts.push({ id: state.nextId++, kind, ...(state.experimental && kind === 'guardian' ? { sector: 'port' as const } : {}), ...worldPoint(state, { x: -110, y: (i - 1) * 18 }), hp: config.hp, cooldown: i * 0.1, angle: state.ark.angle });
+	updateEscortCoverage(state);
 	return true;
 };
 export const craftCount = function (state: State): number {
@@ -190,7 +205,7 @@ export const scrambleReason = function (state: State, wing: Wing): string {
 	if (wing.phase !== 'ready') return wing.phase;
 	return wing.craft.length ? '' : 'Replace lost fighters';
 };
-export const scramble = function (state: State, id: number, sector: Sector): boolean {
+const launchWing = function (state: State, id: number, sector: Sector): boolean {
 	const wing = state.wings.find(function (w) { return w.id === id; });
 	if (!wing || scrambleReason(state, wing)) return false;
 	wing.assignment = sector; wing.phase = 'launching'; wing.timer = WING_TIMING.launch;
@@ -201,9 +216,30 @@ export const scramble = function (state: State, id: number, sector: Sector): boo
 	}
 	state.launches++; state.orders++; return true;
 };
+// Retain explicit simulation orders for experiments and callers. Radar orders
+// re-enable automatic allocation; the normal UI only exposes coarse coverage.
+export const scramble = function (state: State, id: number, sector: Sector): boolean {
+	if (!launchWing(state, id, sector)) return false;
+	for (const craft of state.wings.find(function (wing) { return wing.id === id; })?.craft ?? []) delete craft.sector;
+	state.coverage.enabled = false; return true;
+};
+const updateEscortCoverage = function (state: State) {
+	if (!state.coverage.enabled) return;
+	const plan = coveragePlan(state);
+	for (const wing of state.wings) {
+		const sector = plan.get(`wing-${wing.id}`);
+		if (sector) wing.assignment = sector;
+		if (sector && wing.phase === 'ready' && wing.craft.length > 0 && state.status === 'running') launchWing(state, wing.id, sector);
+		for (const craft of wing.craft) { if (sector) craft.sector = sector; else delete craft.sector; }
+	}
+	for (const craft of state.escorts) {
+		if (craft.wingId !== undefined) continue;
+		const sector = plan.get(`craft-${craft.id}`); if (sector) craft.sector = sector; else delete craft.sector;
+	}
+};
 export const replaceFighters = function (state: State, id: number): boolean {
 	const wing = state.wings.find(function (w) { return w.id === id; });
-	if (!canOrder(state) || !wing || wing.phase !== 'ready' || wing.craft.length >= 3) return false;
+	if (!canOrder(state) || !wing || (wing.phase !== 'ready' && wing.phase !== 'rearming') || wing.craft.length >= 3) return false;
 	const count = 3 - wing.craft.length; const cost = count * 30;
 	if (state.salvage < cost || craftCount(state) + count > 9) return false;
 	state.salvage -= cost;
@@ -228,11 +264,12 @@ const updateWings = function (state: State, dt: number) {
 export const assignGuardian = function (state: State, id: number, sector: Sector): boolean {
 	const guardian = state.escorts.find(function (e) { return e.id === id && e.kind === 'guardian' && e.hp > 0; });
 	if (!canOrder(state) || !state.experimental || !guardian || guardian.sector === sector) return false;
-	guardian.sector = sector; state.orders++; return true;
+	guardian.sector = sector; state.coverage.enabled = false; state.orders++; return true;
 };
 export const setRally = function (state: State, point: Point): boolean {
 	if (!canOrder(state) || state.experimental || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return false;
 	const offset = localPoint(state, point);
+	state.coverage.enabled = false; for (const craft of state.escorts) delete craft.sector;
 	state.rally = { x: Math.max(-450, Math.min(450, offset.x)), y: Math.max(-370, Math.min(370, offset.y)) }; return true;
 };
 export const REPAIR_CREWS = 4;
@@ -477,14 +514,17 @@ export const step = function (state: State, dt: number) {
 		if (mount.cooldown <= 0) { fire(state, origin, aim, config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id, carrierVelocity); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); state.effects.push({ ...origin, radius: 1, life: 0.18, maxLife: 0.18, color: '#ffffff', feedback: { kind: 'muzzle', mount: mountIndex, weapon: mount.weapon, aim: mount.aim } }); }
 	}
 	updateWings(state, dt);
+	updateEscortCoverage(state);
 	for (const [i, escort] of state.escorts.entries()) {
 		if (escort.hp <= 0) continue;
 		const config = ESCORTS[escort.kind]; escort.cooldown -= dt;
 		const wing = state.wings.find(function (w) { return w.id === escort.wingId; });
 		const phaseAllowsFire = !wing || wing.phase === 'sortie';
 		const offset = escort.sector ? SECTOR_POINTS[escort.sector] : wing ? SECTOR_POINTS[wing.assignment] : { x: state.rally.x + Math.cos(i * 2.4) * 45, y: state.rally.y + Math.sin(i * 2.4) * 45 };
-		const formation = worldPoint(state, offset);
-		const target = !phaseAllowsFire ? undefined : wing || escort.sector ? nearest(escort, state.enemies.filter(function (enemy) { return enemy.hp > 0 && distance(enemy, formation) <= 180; }), 300) : targetFor(state, escort, 300);
+		const formation = state.coverage.enabled ? coverageStation(state, escort.id, escort.sector) : worldPoint(state, offset);
+		const target = state.coverage.enabled
+			? !phaseAllowsFire || !escort.sector ? undefined : nearest(escort, state.enemies.filter(function (enemy) { return enemy.hp > 0 && pointSector(state, enemy) === escort.sector && distance(enemy, formation) <= 300; }), 300)
+			: !phaseAllowsFire ? undefined : wing || escort.sector ? nearest(escort, state.enemies.filter(function (enemy) { return enemy.hp > 0 && distance(enemy, formation) <= 180; }), 300) : targetFor(state, escort, 300);
 		const engaging = escort.kind === 'interceptor' && target && distance(target, formation) < 320;
 		const destination = wing?.phase === 'returning' ? worldPoint(state, { x: -110, y: 0 }) : formation;
 		const desired = engaging ? fighterCourse(escort, target, 65, 65, config.speed, escort.id % 2 ? -1 : 1, flightVelocity(target.flight), state.escorts)

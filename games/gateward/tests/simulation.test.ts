@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { build, createState, deploy, MAX_HULL, pulse, repair, ROUTE_SECONDS, sell, step, upgrade, type State, type Weapon } from '../src/simulation';
+import { build, createState, setRally, deploy, MAX_HULL, pulse, repair, ROUTE_SECONDS, sell, step, upgrade, type State, type Weapon } from '../src/simulation';
 
 const advance = function (state: State, seconds: number) { for (let i = 0; i < Math.ceil(seconds * 60); i++) step(state, 1 / 60); };
 
@@ -51,7 +51,7 @@ describe('combat and voyage', function () {
 		state.priority = 91; step(state, 1 / 60); expect(state.shots.find(function (shot) { return shot.side === 'player'; })?.target).toBe(91);
 	});
 	test('escorts move toward the player rally point during a quiet approach', function () {
-		const state = createState(); deploy(state, 'interceptor'); state.rally = { x: 200, y: -200 }; state.status = 'running';
+		const state = createState(); deploy(state, 'interceptor'); setRally(state, { x: 200, y: -200 }); state.status = 'running';
 		advance(state, 3); expect(state.escorts.every(function (escort) { return escort.x > 100 && escort.y < -100; })).toBe(true);
 	});
 	test('railguns bypass armor while flak damage is reduced', function () {
