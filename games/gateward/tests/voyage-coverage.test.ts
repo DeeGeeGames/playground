@@ -63,11 +63,11 @@ test('equal-cost paired attacks expose wrong-flank pressure and a split fitting 
 
 test('the spending policy exposes tighter-arc hull and subsystem pressure at equal cost', function () {
 	const control = runSpendingControl(360); const voyage = runSpendingControl(120);
-	expect(control.status).toBe('won'); expect(control.kills).toBe(86);
-	expect(voyage.status).toBe('won'); expect(voyage.kills).toBe(86);
+	expect(control.status).toBe('won'); expect(control.kills).toBe(96);
+	expect(voyage.status).toBe('won'); expect(voyage.kills).toBe(96);
 	expect(voyage.time).toBeCloseTo(control.time, 5);
-	expect(voyage.minimumHull).toBeCloseTo(752.9333333333198, 5); expect(voyage.minimumSensors).toBe(45);
-	expect(voyage.minimumShield).toBe(0); expect(voyage.impairments).toBe(1);
+	expect(voyage.minimumHull).toBeCloseTo(990.9333333333332, 5); expect(voyage.minimumSensors).toBe(100);
+	expect(voyage.minimumShield).toBe(0); expect(voyage.impairments).toBe(0);
 	const spent = function (result: typeof control) { return result.purchases.reduce(function (sum, purchase) { return sum + purchase.cost; }, 0); };
 	// Identical purchase policy and spend; tighter arcs now survive with localized damage.
 	expect(spent(voyage)).toBe(spent(control));

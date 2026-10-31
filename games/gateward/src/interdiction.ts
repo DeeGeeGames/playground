@@ -1,3 +1,4 @@
+import { enemyRadius } from './ship-config';
 import type { Enemy, Point, State } from './simulation';
 import { localPoint } from './space';
 
@@ -31,7 +32,7 @@ export const fieldBlocks = function (state: State, from: Point, to: Point): bool
 	return center !== undefined && circleHit(from, to, center, INTERDICTION_CONFIG.radius) !== undefined;
 };
 export const enemyClearance = function (enemy: Pick<Enemy, 'kind'>): number {
-	return INTERDICTION_CONFIG.radius + (enemy.kind === 'flagship' ? 38 : enemy.kind === 'armored' ? 23 : 15) + 12;
+	return INTERDICTION_CONFIG.radius + enemyRadius(enemy.kind) + 12;
 };
 // Encounters enter on their established bearing. A field at the edge of placement
 // range can cover that entry point, so begin the new ship farther out on the same ray.
@@ -53,7 +54,7 @@ export const arrivalOutsideField = function (state: State, point: Point, kind: E
 export const navigateField = function (state: State, enemy: Enemy, destination: Point, speed: number, dt: number): Point | undefined {
 	const systems = state.systems; const field = systems.interdiction.field; const center = field?.world;
 	if (!field || !center) { delete enemy.detour; delete enemy.interdictionSide; return undefined; }
-	const turnRate = enemy.kind === 'armored' || enemy.kind === 'flagship' ? 0.7 : 3;
+	const turnRate = enemy.kind === 'carrier' || enemy.kind === 'armored' || enemy.kind === 'flagship' ? 0.7 : 3;
 	const radius = enemyClearance(enemy) + speed / turnRate;
 	const blocked = circleHit(enemy, destination, center, radius - 8) !== undefined;
 	if (!blocked) { delete enemy.detour; return undefined; }

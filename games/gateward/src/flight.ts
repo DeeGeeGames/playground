@@ -11,7 +11,7 @@ export interface Flight {
 
 const clamp = function (value: number, limit: number): number { return Math.max(-limit, Math.min(limit, value)); };
 const length = function (point: Point): number { return Math.hypot(point.x, point.y); };
-export const isCapital = function (enemy: Pick<Enemy, 'kind'>): boolean { return enemy.kind === 'armored' || enemy.kind === 'flagship'; };
+export const isCapital = function (enemy: Pick<Enemy, 'kind'>): boolean { return enemy.kind === 'carrier' || enemy.kind === 'armored' || enemy.kind === 'flagship'; };
 
 // Every flying craft advances along its hull heading in world space. Brake into
 // turns rather than translating sideways or rotating the model after movement.

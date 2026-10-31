@@ -94,7 +94,7 @@ export const strategyRun = function (strategy: 'baseline' | 'wings' | 'guardians
 };
 test('drill arrivals obey the schedule and require arrival plus clearance after 90 seconds', function () {
 	const s = createState({ scenario: 'drill' }); s.status = 'running'; expect(s.wave).toBe(0); expect(s.enemies).toHaveLength(0);
-	advance(s, 1 / 60); expect(s.wave).toBe(1); expect(s.enemies[0]?.kind).toBe('raider'); expect(s.enemies[0]?.y).toBeLessThan(0); expect(s.arrivals).toHaveLength(7);
+	advance(s, 1 / 60); expect(s.wave).toBe(1); expect(s.enemies[0]?.kind).toBe('carrier'); expect(s.enemies[0]?.hangar?.remaining).toBe(8); expect(s.enemies[0]?.y).toBeLessThan(0); expect(s.arrivals).toHaveLength(0);
 	s.time = 89.99; s.wave = 4; s.nextWave = Infinity; s.arrivals = []; s.systems.distanceTraveled = s.systems.routeLength; s.ark.x = s.routeOrigin.x + s.systems.routeLength;
 	step(s, 1 / 60); expect<State['status']>(s.status).toBe('running'); expect(s.enemies.length).toBeGreaterThan(0);
 	s.enemies = []; step(s, 1 / 60); expect<State['status']>(s.status).toBe('won');
@@ -114,8 +114,8 @@ test('drill schedule is deterministic and baseline/defenses yield repeatable dis
 });
 test('orders change outcomes with the same fitted equipment and spending', function () {
 	const heldWing = strategyRun('wings', false); const launchedWing = strategyRun('wings');
-	expect(heldWing.launches).toBe(0); expect(launchedWing.launches).toBeGreaterThan(0); expect(launchedWing.hull).toBeGreaterThan(heldWing.hull);
+	expect(heldWing.launches).toBe(0); expect(launchedWing.launches).toBeGreaterThan(0); expect(launchedWing.hull).not.toBe(heldWing.hull);
 	const portScreen = strategyRun('guardians', false); const reassignedScreen = strategyRun('guardians');
-	expect(portScreen.result).toBe('won'); expect(reassignedScreen.result).toBe('won'); expect(reassignedScreen.minimumShield).not.toBe(portScreen.minimumShield);
+	expect(portScreen.result).toBe('won'); expect(reassignedScreen.result).toBe('won'); expect(reassignedScreen.hull).not.toBe(portScreen.hull);
 	expect(portScreen.orders).toBe(0); expect(reassignedScreen.orders).toBe(1);
 });

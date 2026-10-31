@@ -46,7 +46,7 @@ describe('capital ship courses and batteries', function () {
 		if (!aim) throw new Error('Missing turret aim');
 		const mount = CRAFT_MOUNTS.armored[aim.mount];
 		if (!mount) throw new Error('Missing mount');
-		expect(-Math.sin(angle) * dx + Math.cos(angle) * dy).toBeCloseTo(mount.y + Math.sin(aim.angle) * mount.barrel);
+		expect(-Math.sin(angle) * dx + Math.cos(angle) * dy).toBeCloseTo(1.5 * (mount.y + Math.sin(aim.angle) * mount.barrel));
 	});
 	test('leading a crossing escort cannot turn a broadside into a bow shot', function () {
 		const state = quiet(); const enemy = hostile(state, 'armored', 0, -160);

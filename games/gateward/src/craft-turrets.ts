@@ -1,3 +1,4 @@
+import { craftScale } from './ship-config';
 import type { Point } from './simulation';
 
 export type TurretCraft = 'guardian' | 'bomber' | 'armored' | 'flagship';
@@ -26,18 +27,19 @@ export const hasCraftTurrets = function (kind: string): kind is TurretCraft {
 const deltaAngle = function (angle: number): number { return Math.atan2(Math.sin(angle), Math.cos(angle)); };
 export const craftTurretSolution = function (kind: TurretCraft, craft: Point, heading: number, predict: (from: Point) => Point): CraftAim | undefined {
 	for (const [index, mount] of CRAFT_MOUNTS[kind].entries()) {
+		const scale = craftScale(kind);
 		const c = Math.cos(heading); const s = Math.sin(heading);
-		const pivot = { x: craft.x + c * mount.x - s * mount.y, y: craft.y + s * mount.x + c * mount.y };
+		const pivot = { x: craft.x + scale * (c * mount.x - s * mount.y), y: craft.y + scale * (s * mount.x + c * mount.y) };
 		let aim = predict(pivot);
 		let angle = Math.atan2(aim.y - pivot.y, aim.x - pivot.x);
 		// Recompute lead at the barrel tip rather than firing from the hull center.
-		let muzzle = { x: pivot.x + Math.cos(angle) * mount.barrel, y: pivot.y + Math.sin(angle) * mount.barrel };
+		let muzzle = { x: pivot.x + Math.cos(angle) * (mount.barrel * scale), y: pivot.y + Math.sin(angle) * (mount.barrel * scale) };
 		aim = predict(muzzle); angle = Math.atan2(aim.y - pivot.y, aim.x - pivot.x);
 		const local = deltaAngle(angle - heading);
 		if (Math.abs(deltaAngle(local - mount.bearing)) > mount.arc / 2) continue;
-		if (Math.hypot(aim.x - pivot.x, aim.y - pivot.y) <= mount.barrel) continue;
-		muzzle = { x: pivot.x + Math.cos(angle) * mount.barrel, y: pivot.y + Math.sin(angle) * mount.barrel };
-		return { mount: index, angle: local, muzzle, aim, height: mount.height };
+		if (Math.hypot(aim.x - pivot.x, aim.y - pivot.y) <= (mount.barrel * scale)) continue;
+		muzzle = { x: pivot.x + Math.cos(angle) * (mount.barrel * scale), y: pivot.y + Math.sin(angle) * (mount.barrel * scale) };
+		return { mount: index, angle: local, muzzle, aim, height: mount.height * scale };
 	}
 	return undefined;
 };

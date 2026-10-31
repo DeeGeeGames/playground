@@ -97,10 +97,12 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		overlay.remove();
 	};
 	let ark: Group;
+	let enemyCarrier: Group;
 	try {
 		const model = await new GLTFLoader().loadAsync(new URL('./models/gateward-ark.glb', document.baseURI).href);
-		ark = model.scene;
-		carrier.add(ark);
+		ark = model.scene; carrier.add(ark);
+		enemyCarrier = (await new GLTFLoader().loadAsync(new URL('./models/gateward-carrier.glb', document.baseURI).href)).scene;
+		enemyCarrier.visible = false; scene.add(enemyCarrier);
 		ark.updateMatrixWorld(true);
 		const mounts = createState().mounts;
 		for (const [index, mount] of mounts.entries()) {
@@ -272,8 +274,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				cuePositions.push(cueAt);
 				cues.push({ ...cue, point: cueAt, anchor });
 			}
-			if (intel === 'classified' && (enemy.hp < enemy.maxHp || enemy.kind === 'flagship')) {
-				const at = toScreen(enemy, view, FLIGHT_HEIGHT + (enemy.kind === 'flagship' ? 74 : 29)); const width = enemy.kind === 'flagship' ? 75 : 26;
+			if (intel === 'classified' && (enemy.hp < enemy.maxHp || enemy.kind === 'flagship' || enemy.kind === 'carrier')) {
+				const at = toScreen(enemy, view, FLIGHT_HEIGHT + (enemy.kind === 'carrier' ? 58 : enemy.kind === 'flagship' ? 100 : 40)); const width = enemy.kind === 'carrier' || enemy.kind === 'flagship' ? 90 : 32;
 				ctx.fillStyle = '#142332'; ctx.fillRect(at.x - width / 2, at.y, width, 3);
 				ctx.fillStyle = '#e78b82'; ctx.fillRect(at.x - width / 2, at.y, width * Math.max(0, enemy.hp / enemy.maxHp), 3);
 			}
@@ -347,7 +349,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				if (!marker && detected) { marker = new Mesh(new IcosahedronGeometry(11, 0), new MeshBasicMaterial({ color: '#edbc7e', wireframe: true })); detectedMarkers.set(enemy.id, marker); targets.set(marker, { kind: 'enemy', id: enemy.id }); scene.add(marker); }
 				if (marker) { marker.visible = detected; marker.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); }
 			}
-			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.visible = contactIntel(state, enemy) === 'classified'; updateCraftTurrets(model, enemy.turretAim); model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); }
+			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy, enemyCarrier); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.visible = contactIntel(state, enemy) === 'classified'; updateCraftTurrets(model, enemy.turretAim); model.position.set(enemy.x, FLIGHT_HEIGHT - (enemy.launchRemaining ?? 0) * 4, enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); }
 			const liveEscorts = new Set(state.escorts.map(function (escort) { return escort.id; }));
 			for (const [id, model] of escortModels) if (!liveEscorts.has(id)) { scene.remove(model); disposeObject(model); escortModels.delete(id); }
 			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } updateCraftTurrets(model, escort.turretAim); model.position.set(escort.x, FLIGHT_HEIGHT, escort.y); model.rotation.y = -escort.angle; }

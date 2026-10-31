@@ -28,6 +28,6 @@ export const contactDescription = function (state: State, id: number | undefined
 	if (intel === 'unseen') return 'Contact outside sensor range. Nearby defense remains automatic.';
 	const priority = state.priority === enemy.id ? 'Priority target. ' : '';
 	return intel === 'classified'
-		? `${priority}${enemy.kind} · ${Math.ceil(enemy.hp)} / ${enemy.maxHp} hull · ${Math.round(Math.hypot(enemy.x - state.ark.x, enemy.y - state.ark.y))}m away`
+		? `${priority}${enemy.kind} · ${Math.ceil(enemy.hp)} / ${enemy.maxHp} hull · ${Math.round(Math.hypot(enemy.x - state.ark.x, enemy.y - state.ark.y))}m away${enemy.kind === 'carrier' && enemy.hangar ? ` · ${enemy.hangar.remaining} fighters aboard` : ''}`
 		: `${priority}Unclassified contact · within detection range`;
 };
