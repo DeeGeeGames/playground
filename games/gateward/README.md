@@ -389,3 +389,74 @@ keyboard interaction. **Sound on/off** toggles a session-only mute; restart keep
 that choice. Pause, hidden tabs and focus loss cut active effects; resuming never
 replays missed sounds. Simultaneous cues are grouped and rate/voice limited at
 both simulation speeds. Audio is optional when browser playback is unavailable.
+
+## Full Voyage directional-coverage comparison (#52)
+
+The permanent default remains the **360° control** pending owner playtesting.
+Open `games/gateward/?coverage=240` for the **240° outward-arc trial**, or
+`games/gateward/?coverage=360` (also the bare URL) for the control. Choose Full
+Voyage / Prepare as usual. Invalid coverage values use 360°. Restart retains the
+URL choice; switching to Escort Drill or Systems Trial retains those scenarios'
+existing 240° coverage and escort rules. No extra mission or persistence is added.
+The mount inspector identifies the active mode and coverage. Select a fitted mount
+for its temporary range/arc outline; upgrades expand it. Port mounts 1–4 cover
+port, starboard mounts 5–8 cover starboard, with fore/aft overlap. A priority cannot
+bypass coverage. The selected mount and contact inspector explain whether its
+priority is outside range, outside the arc, or eligible but still needs to turn.
+Voyage rally and permanent escorts remain unchanged.
+
+Reproduce the deterministic placement fixture and rerun #51's spending policy:
+
+```sh
+bun games/gateward/scripts/coverage-comparison.ts
+bun test games/gateward/tests/voyage-coverage.test.ts
+```
+
+The fixture uses Full Voyage simulation rules with two simultaneous bomber
+arrivals 340m off either flank, 30 seconds, two level-one railguns (230 salvage),
+and no further spending or support orders. Port fitting uses mounts 1/4,
+starboard 5/8, split 1/5. The fixture is not a playable mode. Opposite attacks are
+mirrored in ship coordinates; travel and enemy flight remain active, so ship
+motion and turn history can produce asymmetric damage.
+
+| Arc | Fitting | Attack flank | Minimum shield | Kills / hull |
+| --- | --- | --- | ---: | --- |
+| 360° | Any of the three | Either | 240 | 2 / 1200 |
+| 240° | Port | Port | 240 | 2 / 1200 |
+| 240° | Port | Starboard | 137.47 | 2 / 1200 |
+| 240° | Starboard | Port | 152.93 | 2 / 1200 |
+| 240° | Starboard | Starboard | 240 | 2 / 1200 |
+| 240° | Split | Either | 240 | 2 / 1200 |
+
+Moving the same firepower to the attacked flank or splitting it avoids the
+wrong-flank shield loss. This supports an understandable placement choice; it
+does not establish difficulty or feel. For a production playtest, compare two
+railguns on 1/4 against 1/5 using the URLs above, watch the opening contacts, and
+select each mount to inspect coverage. Do not add upgrades or escorts to just one
+side of the comparison. The script's mirrored attack is a controlled fixture;
+the playable voyage retains its original six waves.
+
+The #51 full-voyage spending policy wins both runs at 210.017s with 86 kills,
+1200 minimum/final hull, 100 minimum sensors and zero impairments. Both spend
+1835 salvage after the identical 265-salvage opening fitting (19 purchases).
+Minimum shield is 166.33 at 360° and 240 at 240°. These runs use the same purchase
+policy and total budget; timings respond to earned income. Directional coverage
+can change target selection beneficially, so these results do not justify a
+combat-pressure rebalance.
+
+Recommendation: retain the opt-in comparison and 360° default until the owner
+plays both. Owner feedback on placement clarity, fore/aft overlap, blind spots
+and preferred lasting arc is **pending**. Browser-emulated input and deterministic
+results do not establish physical touch/controller behavior or owner acceptance.
+
+Implementation verification: `bun run check` passed (429 tests, typecheck, lint,
+production build). A local Chromium production preview at desktop 1380×840,
+portrait 390×844 and landscape 844×390 exercised all eight selection keys,
+pointer and emulated-touch panel selection, rail upgrade to 493m, travel,
+orbit/zoom, resize, pause and restart. The active arc survived restart; explicit
+360° on drill/systems URLs did not override those scenarios' 240° rules. The
+final responsive pass reported no page errors. Opening-wave captures compared
+230-salvage port and split rail fittings at 240°, plus the port fitting at 360°;
+these captures are visual evidence, not timing-matched outcome measurements.
+The table above supplies the controlled paired outcomes. Physical devices and
+owner playtest feedback remain unverified.

@@ -1,6 +1,20 @@
 import { contactIntel } from './sensors';
-import type { State } from './simulation';
+import { covered, coverageFor, distance, type State } from './simulation';
+import { mountWorld } from './space';
 import { POWER_CHANNELS, POWER_PRESETS, type Allocation } from './systems';
+
+// Only the explicit trial opts Full Voyage into directional coverage.
+export const voyageCoverage = function (search: string): 240 | 360 {
+	return new URLSearchParams(search).get('coverage') === '240' ? 240 : 360;
+};
+export const priorityCoverage = function (state: State, selected: number): string {
+	const target = state.enemies.find(function (enemy) { return enemy.id === state.priority && enemy.hp > 0; });
+	const mount = state.mounts[selected];
+	if (!target || !mount?.weapon || contactIntel(state, target) === 'unseen') return '';
+	const name = `Mount ${selected + 1}`;
+	if (distance(mountWorld(state, mount), target) > coverageFor(state, mount).range + 1e-8) return `${name}: priority outside range.`;
+	return covered(state, mount, target) ? `${name}: priority within range and coverage; turret must turn before firing.` : `${name}: priority outside firing arc; other eligible weapons may engage.`;
+};
 
 export type Inspector = 'mounts' | 'reactor' | 'escorts' | 'sensors' | 'field' | 'contact';
 export const inspectorName = function (value: string | undefined): Inspector | undefined {
