@@ -1,8 +1,9 @@
+import { craftTurretSolution, hasCraftTurrets, type CraftAim } from './craft-turrets';
 import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fieldBlocks, INTERDICTION_CONFIG, navigateField, type Detour } from './interdiction';
 import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
 import { ESCORT_DRILL, SYSTEMS_TRIAL, type Scenario } from './scenarios';
 import { absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
-import { arriveCourse, broadsideMuzzle, capitalCourse, createFlight, fighterCourse, fly, inBroadside, isCapital, type Flight } from './flight';
+import { arriveCourse, capitalCourse, createFlight, fighterCourse, fly, isCapital, type Flight } from './flight';
 import { arkVelocity, flightVelocity, localPoint, mountWorld, worldPoint } from './space';
 export type Point = { x: number; y: number };
 export type Weapon = 'flak' | 'rail' | 'missile' | 'beam';
@@ -29,9 +30,9 @@ export const ENEMIES = {
 	flagship: { hp: 2400, speed: 36, range: 370, damage: 55, reload: 2.8, reward: 180, armor: 0.7 },
 };
 export interface Mount extends Point { weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
-export interface Enemy extends Point { flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
-export interface Escort extends Point { flight?: Flight; wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
-export interface Shot extends Point { origin?: Point; sourceVelocity?: Point; beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
+export interface Enemy extends Point { turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
+export interface Escort extends Point { turretAim?: CraftAim; flight?: Flight; wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
+export interface Shot extends Point { originHeight?: number; origin?: Point; sourceVelocity?: Point; beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
 export interface Effect extends Point { sourceShot?: Shot; radius: number; life: number; maxLife: number; color: string }
 export interface Arrival { at: number; kind: EnemyKind; x: number; y: number }
 export const SECTORS = ['port', 'starboard', 'ahead', 'astern'] as const;
@@ -309,12 +310,11 @@ const aimAhead = function (from: Point, target: Point, velocity: Point, speed: n
 	const time = interceptTime(from, target, velocity, speed);
 	return { x: target.x + velocity.x * time, y: target.y + velocity.y * time };
 };
-const hostileSolution = function (enemy: Enemy, target: Point, velocity: Point, speed: number): { muzzle: Point; aim: Point } | undefined {
-	const muzzle = isCapital(enemy) ? broadsideMuzzle(enemy, target) : enemy;
-	if (!muzzle) return undefined;
+const hostileSolution = function (enemy: Enemy, target: Point, velocity: Point, speed: number): { muzzle: Point; aim: Point; mount?: undefined; height?: undefined; angle?: undefined } | CraftAim | undefined {
 	const source = flightVelocity(enemy.flight);
-	const aim = aimAhead(muzzle, target, { x: velocity.x - source.x, y: velocity.y - source.y }, speed);
-	return isCapital(enemy) && !inBroadside(enemy.flight?.angle ?? 0, muzzle, aim) ? undefined : { muzzle, aim };
+	const predict = function (from: Point) { return aimAhead(from, target, { x: velocity.x - source.x, y: velocity.y - source.y }, speed); };
+	if (!hasCraftTurrets(enemy.kind)) return { muzzle: enemy, aim: predict(enemy) };
+	return craftTurretSolution(enemy.kind, enemy, enemy.flight?.angle ?? 0, predict);
 };
 const nearest = function <T extends Point>(from: Point, targets: readonly T[], range: number): T | undefined {
 	let best: T | undefined; let closest = range;
@@ -417,9 +417,17 @@ export const step = function (state: State, dt: number) {
 		escort.flight ??= { angle: escort.angle, speed: state.ark.speed, side: i % 2 ? -1 : 1, course: 'intercept', run: 1 };
 		fly(escort, escort.flight, desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt);
 		escort.angle = escort.flight.angle;
-		if (target && distance(escort, target) <= config.range && escort.cooldown <= 0) {
+		if (target && distance(escort, target) <= config.range) {
 			const velocity = flightVelocity(target.flight); const sourceVelocity = flightVelocity(escort.flight);
-			fire(state, escort, aimAhead(escort, target, { x: velocity.x - sourceVelocity.x, y: velocity.y - sourceVelocity.y }, 550), config.damage, 550, 'player', 'escort', target.id, sourceVelocity); escort.cooldown = config.reload;
+			const predict = function (from: Point) { return aimAhead(from, target, { x: velocity.x - sourceVelocity.x, y: velocity.y - sourceVelocity.y }, 550); };
+			const solution = escort.kind === 'guardian' ? craftTurretSolution('guardian', escort, escort.angle, predict) : { muzzle: escort, aim: predict(escort) };
+			if (solution) {
+				if ('mount' in solution) escort.turretAim = solution;
+				if (escort.cooldown > 0) continue;
+				fire(state, solution.muzzle, solution.aim, config.damage, 550, 'player', 'escort', target.id, sourceVelocity);
+				if ('height' in solution) { const shot = state.shots.at(-1); if (shot) shot.originHeight = solution.height; }
+				escort.cooldown = config.reload;
+			}
 		}
 	}
 	for (const enemy of state.enemies) {
@@ -441,8 +449,10 @@ export const step = function (state: State, dt: number) {
 		const firingEscort = escortSolution ? escort : undefined;
 		const firingTarget = firingEscort ?? arkTarget;
 		const solution = escortSolution ?? hostileSolution(enemy, arkTarget, carrierVelocity, shotSpeed);
+		if (solution && solution.mount !== undefined) enemy.turretAim = solution;
 		if (enemy.cooldown <= 0 && solution && distance(enemy, firingTarget) <= config.range && !fieldBlocks(state, solution.muzzle, solution.aim)) {
 			fire(state, solution.muzzle, solution.aim, config.damage, shotSpeed, 'enemy', 'hostile', firingEscort?.id, flightVelocity(flight), enemy.kind === 'bomber' ? SENSOR_CONFIG.damagePerBomberHit : undefined); enemy.cooldown = config.reload;
+			const shot = state.shots.at(-1); if (shot && solution.height !== undefined) shot.originHeight = solution.height;
 		}
 	}
 	let arkHit = false;

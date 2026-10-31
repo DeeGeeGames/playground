@@ -1,3 +1,4 @@
+import { CRAFT_MOUNTS, hasCraftTurrets, type CraftAim, type TurretCraft } from './craft-turrets';
 import { BoxGeometry, BufferGeometry, Color, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Enemy, EnemyKind, Escort } from './simulation';
@@ -128,6 +129,29 @@ const finish = function (name: string, parts: Parts, materials: Palette, slender
 	return root;
 };
 
+const addCraftTurrets = function (root: Group, kind: TurretCraft): Group {
+	for (const [index, mount] of CRAFT_MOUNTS[kind].entries()) {
+		const supportParts: Parts = new Map();
+		const side = Math.abs(Math.sin(mount.bearing)) > 0.5;
+		box(supportParts, 'armor', mount.x - Math.cos(mount.bearing) * 4, (mount.height - 3) / 2, mount.y - Math.sin(mount.bearing) * 4, side ? 4 : 12, mount.height + 1, side ? 12 : 4);
+		root.add(finish(`TurretSupport_${index}`, supportParts, palette(kind === 'guardian' ? undefined : kind)));
+
+		const parts: Parts = new Map();
+		plate(parts, 'armor', 0, -0.8, 0, 4, 4, 2);
+		plate(parts, 'plate', 0.5, 0, 0, 4, 3.5, 2.5);
+		box(parts, 'edge', mount.barrel / 2, 0, 0, mount.barrel, 0.8, 0.9);
+		const turret = finish(`CraftTurret_${index}`, parts, palette(kind === 'guardian' ? undefined : kind));
+		turret.position.set(mount.x, mount.height, mount.y);
+		turret.rotation.y = -mount.bearing; root.add(turret);
+	}
+	return root;
+};
+export const updateCraftTurrets = function (root: Group, aim: CraftAim | undefined): void {
+	if (!aim) return;
+	const turret = root.getObjectByName(`CraftTurret_${aim.mount}`);
+	if (turret) turret.rotation.y = -aim.angle;
+};
+
 export const createEscort = function (escort: Escort): Group {
 	const parts: Parts = new Map();
 	if (escort.kind === 'interceptor') {
@@ -163,7 +187,8 @@ export const createEscort = function (escort: Escort): Group {
 		vents(parts, -14, 5.8, 0, 4, 1.5);
 		vents(parts, 10, 6.8, 0, 3, 1.3);
 	}
-	return finish(`Escort_${escort.kind}_${escort.id}`, parts, palette(), escort.kind === 'guardian');
+	const root = finish(`Escort_${escort.kind}_${escort.id}`, parts, palette(), escort.kind === 'guardian');
+	return escort.kind === 'guardian' ? addCraftTurrets(root, 'guardian') : root;
 };
 
 export const createEnemy = function (enemy: Enemy): Group {
@@ -249,5 +274,6 @@ export const createEnemy = function (enemy: Enemy): Group {
 		box(parts, 'edge', -28, 28.5, -6, 0.8, 8, 0.8);
 		for (const x of [3, 21, 38]) vents(parts, x, 13.2, 0, 4, 2.2);
 	}
-	return finish(`Hostile_${enemy.kind}_${enemy.id}`, parts, palette(enemy.kind), enemy.kind === 'bomber' || enemy.kind === 'armored');
+	const root = finish(`Hostile_${enemy.kind}_${enemy.id}`, parts, palette(enemy.kind), enemy.kind === 'bomber' || enemy.kind === 'armored');
+	return hasCraftTurrets(enemy.kind) ? addCraftTurrets(root, enemy.kind) : root;
 };

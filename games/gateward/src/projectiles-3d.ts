@@ -20,7 +20,7 @@ export const createTrajectory = function (shot: Shot, state: State): Trajectory 
 	const launch = shot.origin ?? { x: shot.x - shot.vx * age, y: shot.y - shot.vy * age };
 	if (shot.side === 'enemy') {
 		const escort = state.escorts.find(function (candidate) { return candidate.id === shot.target; });
-		if (shot.target !== undefined) return { from: launch, to: escort ? { x: escort.x, y: escort.y } : { x: shot.x + shot.vx, y: shot.y + shot.vy }, startHeight: FLIGHT_HEIGHT, endHeight: FLIGHT_HEIGHT };
+		if (shot.target !== undefined) return { from: launch, to: escort ? { x: escort.x, y: escort.y } : { x: shot.x + shot.vx, y: shot.y + shot.vy }, startHeight: FLIGHT_HEIGHT + (shot.originHeight ?? 0), endHeight: FLIGHT_HEIGHT };
 		// Predict the deck boundary in the moving ark's frame, then put the
 		// intersection back on the projectile's independent world trajectory.
 		const local = localPoint(state, shot); const velocity = arkVelocity(state);
@@ -33,10 +33,10 @@ export const createTrajectory = function (shot: Shot, state: State): Trajectory 
 		const hit = inside ? ray.origin : speed > 0 ? ray.intersectBox(new Box3(new Vector3(-145, -1, -40), new Vector3(145, 1, 40)), new Vector3()) : null;
 		const time = hit && speed > 0 ? hit.distanceTo(ray.origin) / speed : 0;
 		const impact = hit ? inside ? worldPoint(state, local) : { x: shot.x + shot.vx * time, y: shot.y + shot.vy * time } : { x: shot.x + shot.vx, y: shot.y + shot.vy };
-		return { from: launch, to: impact, startHeight: FLIGHT_HEIGHT, endHeight: hit ? DECK_HEIGHT : FLIGHT_HEIGHT };
+		return { from: launch, to: impact, startHeight: FLIGHT_HEIGHT + (shot.originHeight ?? 0), endHeight: hit ? DECK_HEIGHT : FLIGHT_HEIGHT };
 	}
 	const target = state.enemies.find(function (candidate) { return candidate.id === shot.target; });
-	return { from: launch, to: target ? { x: target.x, y: target.y } : { x: shot.x + shot.vx * 0.3, y: shot.y + shot.vy * 0.3 }, startHeight: shot.weapon === 'escort' ? FLIGHT_HEIGHT : TURRET_HEIGHT, endHeight: FLIGHT_HEIGHT };
+	return { from: launch, to: target ? { x: target.x, y: target.y } : { x: shot.x + shot.vx * 0.3, y: shot.y + shot.vy * 0.3 }, startHeight: shot.weapon === 'escort' ? FLIGHT_HEIGHT + (shot.originHeight ?? 0) : TURRET_HEIGHT, endHeight: FLIGHT_HEIGHT };
 };
 
 export const projectileHeight = function (point: Point, trajectory: Trajectory, target: Point = trajectory.to): number {

@@ -1,3 +1,4 @@
+import { CRAFT_MOUNTS } from '../src/craft-turrets';
 import { describe, expect, test } from 'bun:test';
 import { broadsideMuzzle } from '../src/flight';
 import { localPoint } from '../src/space';
@@ -41,7 +42,11 @@ describe('capital ship courses and batteries', function () {
 		if (!shot) throw new Error('Missing broadside');
 		const dx = shot.x - shot.vx / 60 - enemy.x; const dy = shot.y - shot.vy / 60 - enemy.y;
 		const angle = enemy.flight.angle;
-		expect(-Math.sin(angle) * dx + Math.cos(angle) * dy).toBeCloseTo(20);
+		const aim = enemy.turretAim;
+		if (!aim) throw new Error('Missing turret aim');
+		const mount = CRAFT_MOUNTS.armored[aim.mount];
+		if (!mount) throw new Error('Missing mount');
+		expect(-Math.sin(angle) * dx + Math.cos(angle) * dy).toBeCloseTo(mount.y + Math.sin(aim.angle) * mount.barrel);
 	});
 	test('leading a crossing escort cannot turn a broadside into a bow shot', function () {
 		const state = quiet(); const enemy = hostile(state, 'armored', 0, -160);

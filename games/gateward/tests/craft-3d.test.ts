@@ -11,11 +11,11 @@ const escort = function (kind: EscortKind): Group {
 };
 const fixtures = [
 	{ name: 'interceptor', create: function () { return escort('interceptor'); }, length: 30, beam: 20 },
-	{ name: 'guardian', create: function () { return escort('guardian'); }, length: 58, beam: 21 },
+	{ name: 'guardian', create: function () { return escort('guardian'); }, length: 66, beam: 31 },
 	{ name: 'raider', create: function () { return hostile('raider'); }, length: 35, beam: 24 },
-	{ name: 'bomber', create: function () { return hostile('bomber'); }, length: 53, beam: 30 },
-	{ name: 'armored', create: function () { return hostile('armored'); }, length: 70, beam: 31 },
-	{ name: 'flagship', create: function () { return hostile('flagship'); }, length: 115, beam: 76 },
+	{ name: 'bomber', create: function () { return hostile('bomber'); }, length: 63, beam: 38 },
+	{ name: 'armored', create: function () { return hostile('armored'); }, length: 70, beam: 48 },
+	{ name: 'flagship', create: function () { return hostile('flagship'); }, length: 115, beam: 99 },
 ];
 
 test.each(fixtures)('$name keeps its tactical scale, closed hull and independently disposable buffers', function (fixture) {
