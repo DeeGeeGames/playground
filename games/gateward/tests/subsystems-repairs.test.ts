@@ -53,7 +53,7 @@ describe('surface subsystem impacts', function () {
 		const state = quiet(); build(state, 0, 'rail'); build(state, 1, 'rail');
 		mountAt(state, 0).cooldown = mountAt(state, 1).cooldown = 100;
 		state.systems.shield.charge = 0; state.systems.allocation = { engines: 0, weapons: 10, shields: 0 };
-		state.enemies.push({ id: state.nextId++, kind: 'raider', x: -96, y: -130, hp: 100, maxHp: 100, cooldown: 0, subsystemTarget: 'mount:0' });
+		state.enemies.push({ id: state.nextId++, kind: 'raider', x: -96, y: -130, z: -65, hp: 100, maxHp: 100, cooldown: 0, subsystemTarget: 'mount:0' });
 		advance(state, 0.5);
 		expect(mountAt(state, 0).integrity).toBe(93); expect(mountAt(state, 1).integrity).toBe(100); expect(state.hull).toBe(MAX_HULL - 7);
 	});

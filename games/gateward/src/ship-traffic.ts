@@ -1,6 +1,6 @@
 import { enemyClearance } from './interdiction';
 import type { EnemyKind, EscortKind, Point, State } from './simulation';
-import { arkVelocity, flightVelocity, localPoint, worldPoint } from './space';
+import { DECK_ALTITUDE, arkVelocity, flightVelocity, localPoint, worldPoint } from './space';
 
 export interface Hull {
 	id: number;
@@ -12,14 +12,14 @@ export interface Hull {
 	launchParent?: number | undefined;
 }
 
-// Capsules form conservative, elongated hulls in the simulation plane.
+// Horizontal capsules with vertical clearance form conservative ship hulls.
 // Turrets, shields and engine plumes are deliberately outside these envelopes.
 const dimensions: Record<EnemyKind | EscortKind, readonly [number, number]> = {
 	interceptor: [6, 5], raider: [7.5, 5], bomber: [28, 16],
 	guardian: [26, 25], armored: [30, 30], flagship: [56, 50], carrier: [65, 65],
 };
 export const traffic = function (state: State): Hull[] {
-	return [{ id: 0, point: state.ark, angle: state.ark.angle, velocity: arkVelocity(state), radius: 52, spine: 100 },
+	return [{ id: 0, point: { ...state.ark, z: DECK_ALTITUDE }, angle: state.ark.angle, velocity: arkVelocity(state), radius: 52, spine: 100 },
 		...[...state.escorts, ...state.enemies].filter(function (ship) { return ship.hp > 0; }).map(function (ship): Hull {
 			const [radius, spine] = dimensions[ship.kind];
 			return { id: ship.id, point: ship, angle: ship.flight?.angle ?? ('angle' in ship ? ship.angle : 0), velocity: flightVelocity(ship.flight), radius, spine, launchParent: 'launchRemaining' in ship && (ship.launchRemaining ?? 0) > 0 ? ship.launchedBy : undefined };
@@ -39,8 +39,11 @@ const clearance = function (a: Hull, b: Hull): { gap: number; normal: Point } {
 	const alongB = clamp((bb * alongA + ee) / cc);
 	alongA = clamp((bb * alongB - dd) / aa);
 	const dx = rx + ux * alongA - vx * alongB; const dy = ry + uy * alongA - vy * alongB;
+	const vertical = Math.abs((a.point.z ?? 0) - (b.point.z ?? 0));
+	const combined = a.radius + b.radius;
+	const horizontal = Math.sqrt(Math.max(0, combined * combined - vertical * vertical));
 	const length = Math.hypot(dx, dy);
-	return { gap: length - a.radius - b.radius, normal: length > 1e-5 ? { x: dx / length, y: dy / length } : { x: 0, y: a.id < b.id ? -1 : 1 } };
+	return { gap: vertical >= combined ? Math.hypot(length, vertical) - combined : length - horizontal, normal: length > 1e-5 ? { x: dx / length, y: dy / length } : { x: 0, y: a.id < b.id ? -1 : 1 } };
 };
 
 // Predict the desired course against each neighbour's current velocity. A
@@ -56,8 +59,8 @@ export const avoidTraffic = function (hull: Hull, desired: Point, neighbors: rea
 		if (Math.hypot(dx, dy) > hull.spine + other.spine + hull.radius + other.radius + speed * 3) continue;
 		let threat = 0; const normal = clearance(hull, other).normal;
 		for (const time of [0, 0.5, 1, 1.5]) {
-			const predicted = clearance({ ...hull, point: { x: hull.point.x + forward.x * Math.min(speed, magnitude) * time, y: hull.point.y + forward.y * Math.min(speed, magnitude) * time } },
-				{ ...other, point: { x: other.point.x + other.velocity.x * time, y: other.point.y + other.velocity.y * time } });
+			const predicted = clearance({ ...hull, point: { z: (hull.point.z ?? 0) + (hull.velocity.z ?? 0) * time, x: hull.point.x + forward.x * Math.min(speed, magnitude) * time, y: hull.point.y + forward.y * Math.min(speed, magnitude) * time } },
+				{ ...other, point: { z: (other.point.z ?? 0) + (other.velocity.z ?? 0) * time, x: other.point.x + other.velocity.x * time, y: other.point.y + other.velocity.y * time } });
 			const weight = Math.max(0, 1 - predicted.gap / 12) / (1 + time * 0.3);
 			if (weight > threat) threat = weight;
 		}
@@ -70,7 +73,7 @@ export const avoidTraffic = function (hull: Hull, desired: Point, neighbors: rea
 		y += (normal.y + tangent.y * side * 2 - forward.y) * strength;
 	}
 	const length = Math.hypot(x, y);
-	return length > speed ? { x: x / length * speed, y: y / length * speed } : { x, y };
+	return length > speed ? { x: x / length * speed, y: y / length * speed, z: desired.z ?? 0 } : { x, y, z: desired.z ?? 0 };
 };
 
 // Resolve residual penetration after all ships move. The ark owns its route;

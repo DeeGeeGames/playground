@@ -1,11 +1,9 @@
-import { enemyRadius } from './ship-config';
+import { DECK_HEIGHT, FLIGHT_HEIGHT, TURRET_RISE, TURRET_SCALE, enemyRadius } from './ship-config';
 import { OrthographicCamera, Plane, Raycaster, Vector2, Vector3 } from 'three';
 import { distance, type Enemy, type Mount, type Point } from './simulation';
-import { TURRET_RISE, TURRET_SCALE } from './ship-config';
 
-export const DECK_HEIGHT = 22;
+export { DECK_HEIGHT, FLIGHT_HEIGHT } from './ship-config';
 export const TURRET_HEIGHT = DECK_HEIGHT + TURRET_RISE * TURRET_SCALE;
-export const FLIGHT_HEIGHT = 130;
 
 export interface View {
 	readonly width: number;
@@ -116,9 +114,9 @@ export const pickEnemy = function (point: Point, view: View, enemies: readonly E
 	return enemies.map(function (enemy) {
 		return {
 			enemy,
-			d: distance(point, toScreen(enemy, view, FLIGHT_HEIGHT)),
+			d: distance(point, toScreen(enemy, view, FLIGHT_HEIGHT + (enemy.z ?? 0))),
 			radius: Math.max(14, (enemyRadius(enemy.kind) * 1.5) * view.scale),
-			cameraDistance: cameraDistance(enemy, view, FLIGHT_HEIGHT),
+			cameraDistance: cameraDistance(enemy, view, FLIGHT_HEIGHT + (enemy.z ?? 0)),
 		};
 	}).filter(function (candidate) { return candidate.d <= candidate.radius; })
 		.sort(nearestScreenCenter)[0]?.enemy;
@@ -128,7 +126,7 @@ export const depth = function (point: Point): number { return point.x + point.y;
 
 export const edgeIndicator = function (point: Point, view: View): { point: Point; angle: number } | undefined {
 	if (!usable(view)) return undefined;
-	const at = toScreen(point, view, FLIGHT_HEIGHT);
+	const at = toScreen(point, view, FLIGHT_HEIGHT + (point.z ?? 0));
 	if (!finitePoint(at)) return undefined;
 	const left = 18;
 	const right = view.width - 18;

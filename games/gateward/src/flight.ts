@@ -3,6 +3,8 @@ import { arkVelocity, localPoint, worldPoint } from './space';
 
 export interface Flight {
 	angle: number;
+	pitch?: number;
+	vz?: number;
 	speed: number;
 	side: -1 | 1;
 	course: 'intercept' | 'broadside';
@@ -18,11 +20,21 @@ export const isCapital = function (enemy: Pick<Enemy, 'kind'>): boolean { return
 export const fly = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number): void {
 	const angle = length(desired) < 0.01 ? flight.angle : Math.atan2(desired.y, desired.x);
 	const turn = Math.atan2(Math.sin(angle - flight.angle), Math.cos(angle - flight.angle));
-	const desiredSpeed = Math.min(maxSpeed, length(desired)) * Math.max(0, Math.cos(turn));
+	const climb = clamp(desired.z ?? 0, maxSpeed * 0.3);
+	const planarLimit = Math.sqrt(Math.max(0, maxSpeed * maxSpeed - climb ** 2));
+	const desiredSpeed = Math.min(planarLimit, length(desired)) * Math.max(0, Math.cos(turn));
 	flight.angle += clamp(turn, turnRate * dt);
-	flight.speed += clamp(desiredSpeed - flight.speed, maxSpeed * 2 * dt);
+	flight.speed = Math.min(planarLimit, flight.speed + clamp(desiredSpeed - flight.speed, maxSpeed * 2 * dt));
+
+	const vz = clamp(desired.z ?? 0, maxSpeed * 0.3);
+	flight.vz = (flight.vz ?? 0) + clamp(vz - (flight.vz ?? 0), maxSpeed * dt);
+	const before = point.z ?? 0;
+	point.z = clamp(before + flight.vz * dt, FLIGHT_BAND);
+	flight.vz = (point.z - before) / dt;
+	flight.speed = Math.min(flight.speed, Math.sqrt(Math.max(0, maxSpeed * maxSpeed - flight.vz ** 2)));
 	point.x += Math.cos(flight.angle) * flight.speed * dt;
 	point.y += Math.sin(flight.angle) * flight.speed * dt;
+	flight.pitch = Math.atan2(flight.vz, Math.max(1, flight.speed));
 };
 
 export const createFlight = function (point: Point, desired: Point, speed: number, id: number): Flight {
@@ -80,4 +92,13 @@ export const broadsideMuzzle = function (enemy: Enemy, target: Point): Point | u
 export const inBroadside = function (angle: number, from: Point, to: Point): boolean {
 	const dx = to.x - from.x; const dy = to.y - from.y; const distance = Math.hypot(dx, dy);
 	return distance > 0 && Math.abs((dx * Math.cos(angle) + dy * Math.sin(angle)) / distance) <= Math.sin(50 * Math.PI / 180);
+};
+
+// A 130m deep operating volume around the nominal flight layer. Capitals hold
+// stable lanes; lighter craft weave through them while tracking target altitude.
+export const FLIGHT_BAND = 65;
+export const altitudeCourse = function (id: number, time: number, capital: boolean, target: Point, returning = false): number {
+	if (returning) return 0;
+	const lane = (id % 5 - 2) * (capital ? 24 : 12);
+	return clamp((target.z ?? 0) + lane + (capital ? 0 : Math.sin(time * 0.45 + id * 1.7) * 28), FLIGHT_BAND);
 };

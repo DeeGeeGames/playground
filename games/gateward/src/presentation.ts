@@ -265,23 +265,23 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		for (const enemy of state.enemies) {
 			const intel = contactIntel(state, enemy);
 			if (intel === 'unseen') continue;
-			if (enemy.detour) text('DETOUR', toScreen(enemy, view, FLIGHT_HEIGHT + 20), '#d7bf89', 9);
-			if (intel === 'detected') text('?', toScreen(enemy, view, FLIGHT_HEIGHT + 36), '#d7bf89', 12);
+			if (enemy.detour) text('DETOUR', toScreen(enemy, view, (enemy.z ?? 0) + FLIGHT_HEIGHT + 20), '#d7bf89', 9);
+			if (intel === 'detected') text('?', toScreen(enemy, view, (enemy.z ?? 0) + FLIGHT_HEIGHT + 36), '#d7bf89', 12);
 			const cue = bomberCue(state, enemy);
-			const anchor = toScreen(enemy, view, FLIGHT_HEIGHT + 52);
+			const anchor = toScreen(enemy, view, (enemy.z ?? 0) + FLIGHT_HEIGHT + 52);
 			const cueAt = cue && !edgeIndicator(enemy, view) ? placeBomberCue(anchor, view.width, view.height, cuePositions) : undefined;
 			if (cue && cueAt) {
 				cuePositions.push(cueAt);
 				cues.push({ ...cue, point: cueAt, anchor });
 			}
 			if (intel === 'classified' && (enemy.hp < enemy.maxHp || enemy.kind === 'flagship' || enemy.kind === 'carrier')) {
-				const at = toScreen(enemy, view, FLIGHT_HEIGHT + (enemy.kind === 'carrier' ? 58 : enemy.kind === 'flagship' ? 100 : 40)); const width = enemy.kind === 'carrier' || enemy.kind === 'flagship' ? 90 : 32;
+				const at = toScreen(enemy, view, (enemy.z ?? 0) + FLIGHT_HEIGHT + (enemy.kind === 'carrier' ? 58 : enemy.kind === 'flagship' ? 100 : 40)); const width = enemy.kind === 'carrier' || enemy.kind === 'flagship' ? 90 : 32;
 				ctx.fillStyle = '#142332'; ctx.fillRect(at.x - width / 2, at.y, width, 3);
 				ctx.fillStyle = '#e78b82'; ctx.fillRect(at.x - width / 2, at.y, width * Math.max(0, enemy.hp / enemy.maxHp), 3);
 			}
 		}
-		for (const escort of state.escorts) if (escort.sector) text(`G${escort.id} · ${escort.sector}`, toScreen(escort, view, FLIGHT_HEIGHT + 42), '#a6d4d9', 9);
-		for (const escort of state.escorts) if (escort.hp < ESCORTS[escort.kind].hp) { const at = toScreen(escort, view, FLIGHT_HEIGHT + 29); ctx.fillStyle = '#89d5de'; ctx.fillRect(at.x - 13, at.y, 26 * Math.max(0, escort.hp / ESCORTS[escort.kind].hp), 3); }
+		for (const escort of state.escorts) if (escort.sector) text(`G${escort.id} · ${escort.sector}`, toScreen(escort, view, (escort.z ?? 0) + FLIGHT_HEIGHT + 42), '#a6d4d9', 9);
+		for (const escort of state.escorts) if (escort.hp < ESCORTS[escort.kind].hp) { const at = toScreen(escort, view, (escort.z ?? 0) + FLIGHT_HEIGHT + 29); ctx.fillStyle = '#89d5de'; ctx.fillRect(at.x - 13, at.y, 26 * Math.max(0, escort.hp / ESCORTS[escort.kind].hp), 3); }
 		const activeField = state.systems.interdiction.field; const position = activeField?.world;
 		if (position && activeField) text(`INTERDICTION · ${Math.ceil(activeField.remaining)}s`, toScreen(position, view, FLIGHT_HEIGHT + 30), '#d7bf89', 10);
 		for (let i = 0; i <= 6; i++) { const point = beaconFor(i, state); if (Math.abs(point.x - state.ark.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: point.y + 180 }, view, -5), '#6e939f', 9); }
@@ -339,7 +339,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			rally.visible = !state.coverage.enabled && !state.experimental && (state.escorts.length > 0 || rallyMode); rally.position.set(state.rally.x, 1, state.rally.y);
 			if (rally.material instanceof MeshBasicMaterial) rally.material.color.set(rallyMode ? '#d5ed9b' : '#9edbf0');
 			const target = state.enemies.find(function (enemy) { return enemy.id === state.priority && canAcquire(state, enemy); }); priority.visible = !!target;
-			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT, target.y); priority.scale.setScalar(contactIntel(state, target) === 'classified' && target.kind === 'flagship' ? 70 : 42); }
+			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT + (target.z ?? 0), target.y); priority.scale.setScalar(contactIntel(state, target) === 'classified' && target.kind === 'flagship' ? 70 : 42); }
 			const liveEnemies = new Set(state.enemies.map(function (enemy) { return enemy.id; }));
 			for (const [id, model] of enemyModels) if (!liveEnemies.has(id)) { scene.remove(model); targets.delete(model); disposeObject(model); enemyModels.delete(id); }
 			for (const [id, marker] of detectedMarkers) if (!liveEnemies.has(id)) { scene.remove(marker); targets.delete(marker); disposeObject(marker); detectedMarkers.delete(id); }
@@ -347,12 +347,12 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				const detected = contactIntel(state, enemy) === 'detected';
 				let marker = detectedMarkers.get(enemy.id);
 				if (!marker && detected) { marker = new Mesh(new IcosahedronGeometry(11, 0), new MeshBasicMaterial({ color: '#edbc7e', wireframe: true })); detectedMarkers.set(enemy.id, marker); targets.set(marker, { kind: 'enemy', id: enemy.id }); scene.add(marker); }
-				if (marker) { marker.visible = detected; marker.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); }
+				if (marker) { marker.visible = detected; marker.position.set(enemy.x, FLIGHT_HEIGHT + (enemy.z ?? 0), enemy.y); }
 			}
-			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy, enemyCarrier); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.visible = contactIntel(state, enemy) === 'classified'; updateCraftTurrets(model, enemy.turretAim); model.position.set(enemy.x, FLIGHT_HEIGHT - (enemy.launchRemaining ?? 0) * 4, enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); }
+			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy, enemyCarrier); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.visible = contactIntel(state, enemy) === 'classified'; updateCraftTurrets(model, enemy.turretAim); model.position.set(enemy.x, FLIGHT_HEIGHT + (enemy.z ?? 0), enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); model.rotation.z = enemy.flight?.pitch ?? 0; }
 			const liveEscorts = new Set(state.escorts.map(function (escort) { return escort.id; }));
 			for (const [id, model] of escortModels) if (!liveEscorts.has(id)) { scene.remove(model); disposeObject(model); escortModels.delete(id); }
-			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } updateCraftTurrets(model, escort.turretAim); model.position.set(escort.x, FLIGHT_HEIGHT, escort.y); model.rotation.y = -escort.angle; }
+			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } updateCraftTurrets(model, escort.turretAim); model.position.set(escort.x, FLIGHT_HEIGHT + (escort.z ?? 0), escort.y); model.rotation.y = -escort.angle; model.rotation.z = escort.flight?.pitch ?? 0; }
 			if (state.shots.length > shotCapacity) { shotGeometry.dispose(); shotCapacity = state.shots.length * 2; shotPositions = new Float32Array(shotCapacity * 6); shotColors = new Float32Array(shotCapacity * 6); shotGeometry.setAttribute('position', new BufferAttribute(shotPositions, 3)); shotGeometry.setAttribute('color', new BufferAttribute(shotColors, 3)); }
 			const liveShots = new Set(state.shots.map(function (shot) { return shot.id; }));
 			for (const id of trajectories.keys()) if (!liveShots.has(id)) trajectories.delete(id);
@@ -360,7 +360,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				let trajectory = trajectories.get(shot.id); if (!trajectory || shot.side === 'enemy' && shot.target === undefined) { trajectory = createTrajectory(shot, state); trajectories.set(shot.id, trajectory); }
 				const target = shot.side === 'player' ? state.enemies.find(function (enemy) { return enemy.id === shot.target; }) : state.escorts.find(function (escort) { return escort.id === shot.target; });
 				const tailTime = shot.weapon === 'rail' ? 0.04 : 0.025;
-				const tail = shot.beamFrom ?? { x: shot.x - shot.vx * tailTime, y: shot.y - shot.vy * tailTime };
+				const tail = shot.beamFrom ?? { x: shot.x - shot.vx * tailTime, y: shot.y - shot.vy * tailTime, ...(shot.z === undefined ? {} : { z: shot.z - (shot.vz ?? 0) * tailTime }) };
 				shotPositions.set([tail.x, projectileHeight(tail, trajectory, target), tail.y, shot.x, projectileHeight(shot, trajectory, target), shot.y], index * 6);
 				color.set(shot.side === 'enemy' ? shot.sensorDamage ? '#f7c76e' : '#ff8d7f' : shot.weapon === 'beam' ? '#ff86c8' : shot.weapon === 'rail' ? '#dbbeff' : shot.weapon === 'missile' ? '#f5ce8a' : '#99ece1'); shotColors.set([color.r, color.g, color.b, color.r, color.g, color.b], index * 6);
 			}
@@ -381,7 +381,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			let mount = direct?.kind === 'mount' ? direct.index : -1;
 			let enemy = direct?.kind === 'enemy' ? state.enemies.find(function (candidate) { return candidate.id === direct.id; }) : undefined;
 			if (mount < 0 && !enemy) { const candidate = pickMount(point, view, state.mounts.map(function (mount) { return { ...mount, ...mountWorld(state, mount) }; })); if (candidate >= 0 && mountVisibility[candidate]) mount = candidate; }
-			if (mount < 0 && !enemy) { const candidate = pickEnemy(point, view, state.enemies); if (candidate) { const center = hit(toScreen(candidate, view, FLIGHT_HEIGHT), roots); if (center?.kind === 'enemy' && center.id === candidate.id) enemy = candidate; } }
+			if (mount < 0 && !enemy) { const candidate = pickEnemy(point, view, state.enemies); if (candidate) { const center = hit(toScreen(candidate, view, FLIGHT_HEIGHT + (candidate.z ?? 0)), roots); if (center?.kind === 'enemy' && center.id === candidate.id) enemy = candidate; } }
 			return { mount, enemy, world: toWorld(point, view) };
 		},
 		placementPoint: function (point) { resize(); return toWorld(point, view, FLIGHT_HEIGHT); },

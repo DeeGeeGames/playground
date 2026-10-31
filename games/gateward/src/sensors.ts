@@ -23,7 +23,7 @@ export const sensorRanges = function (state: State): { detection: number; classi
 };
 
 export const contactIntel = function (state: State, point: Point): 'unseen' | 'detected' | 'classified' {
-	const range = Math.hypot(point.x - state.ark.x, point.y - state.ark.y);
+	const range = Math.hypot(point.x - state.ark.x, point.y - state.ark.y, point.z ?? 0);
 	const ranges = sensorRanges(state);
 	if (range > ranges.detection) return 'unseen';
 	return state.systems.sensors.integrity > 0 && range <= ranges.classification ? 'classified' : 'detected';

@@ -1,3 +1,5 @@
+export const FLIGHT_HEIGHT = 130;
+export const DECK_HEIGHT = 22;
 export const TURRET_SCALE = 0.8;
 export const TURRET_RISE = 9;
 

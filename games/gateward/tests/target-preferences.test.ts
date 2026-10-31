@@ -55,10 +55,10 @@ for (const weapon of ['flak', 'rail'] as const) {
 
 test('missile clusters use detected live neighbours and the strict splash radius', function () {
 	const { state, mount } = fixture('missile', 360); state.systems.sensors.integrity = 25;
-	state.enemies = [contact(100, 'bomber', -96, -100), contact(101, 'bomber', 240, -120), contact(102, 'raider', 300, -120)];
+	state.enemies = [contact(100, 'bomber', -96, -100), contact(101, 'bomber', 225, -120), contact(102, 'raider', 285, -120)];
 	expect(mountTarget(state, mount)?.id).toBe(101);
 	const neighbour = state.enemies[2]; if (!neighbour) throw new Error('Missing neighbour');
-	neighbour.x = 325; expect(mountTarget(state, mount)?.id).toBe(100); // exactly 85m
+	neighbour.x = 310; expect(mountTarget(state, mount)?.id).toBe(100); // exactly 85m
 	neighbour.x = 1001; neighbour.y = -140; // outside impaired detection
 	expect(mountTarget(state, mount)?.id).toBe(100);
 	neighbour.x = 300; neighbour.y = -120; neighbour.hp = 0;
@@ -67,7 +67,7 @@ test('missile clusters use detected live neighbours and the strict splash radius
 
 test('upgraded range admits preferred targets without ignoring mount coverage', function () {
 	const { state, mount } = fixture('flak');
-	state.enemies = [contact(100, 'bomber', -96, -100), contact(101, 'raider', -96, -320)];
+	state.enemies = [contact(100, 'bomber', -96, -100), contact(101, 'raider', -96, -305)];
 	expect(mountTarget(state, mount)?.id).toBe(100);
 	mount.level = 2; expect(mountTarget(state, mount)?.id).toBe(101);
 });

@@ -1,5 +1,5 @@
 import { BoxGeometry, DoubleSide, Group, Mesh, MeshBasicMaterial, RingGeometry, SphereGeometry } from 'three';
-import { DECK_HEIGHT, FLIGHT_HEIGHT } from './projection';
+import { DECK_HEIGHT } from './projection';
 import { effectHeight } from './projectiles-3d';
 import type { Effect, State } from './simulation';
 
@@ -21,7 +21,7 @@ export const createCombatVisual = function () {
 		const feedback = effect.feedback;
 		const remaining = Math.max(0, effect.life / effect.maxLife);
 		const age = 1 - remaining;
-		root.position.set(effect.x, feedback?.kind === 'impact' ? feedback.deck ? DECK_HEIGHT : FLIGHT_HEIGHT : effectHeight(effect, state), effect.y);
+		root.position.set(effect.x, feedback?.kind === 'impact' ? feedback.deck ? DECK_HEIGHT : effectHeight(effect, state) : effectHeight(effect, state), effect.y);
 		ring.material.depthTest = !feedback;
 		ring.visible = !feedback || feedback.kind === 'impact' && feedback.shield > 0;
 		core.visible = feedback?.kind === 'destruction' || feedback?.kind === 'impact' && feedback.hull > 0;

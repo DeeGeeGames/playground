@@ -10,9 +10,10 @@ export interface Trajectory {
 	readonly endHeight: number;
 }
 
-// Altitude belongs to presentation; shot positions and their recorded firing
-// origins belong to the world even after their source has moved or turned.
+// Simulation owns altitude. Rounds retain world firing origins after their
+// source moves; older rounds without altitude use the nominal flight layer.
 export const createTrajectory = function (shot: Shot, state: State): Trajectory {
+	if (shot.z !== undefined) return { from: shot.beamFrom ?? shot.origin ?? shot, to: shot, startHeight: FLIGHT_HEIGHT + (shot.beamFrom?.z ?? shot.origin?.z ?? shot.z), endHeight: FLIGHT_HEIGHT + shot.z };
 	if (shot.beamFrom) return { from: shot.beamFrom, to: { x: shot.x, y: shot.y }, startHeight: TURRET_HEIGHT, endHeight: FLIGHT_HEIGHT };
 	// Simulation rounds start with four seconds of life. Rewind their movement,
 	// rather than associating a fast round with a hardpoint it has already passed.
@@ -40,6 +41,7 @@ export const createTrajectory = function (shot: Shot, state: State): Trajectory 
 };
 
 export const projectileHeight = function (point: Point, trajectory: Trajectory, target: Point = trajectory.to): number {
+	if (point.z !== undefined) return FLIGHT_HEIGHT + point.z;
 	const dx = target.x - trajectory.from.x;
 	const dy = target.y - trajectory.from.y;
 	const lengthSquared = dx * dx + dy * dy;
@@ -49,6 +51,7 @@ export const projectileHeight = function (point: Point, trajectory: Trajectory, 
 };
 
 export const effectHeight = function (effect: Effect, state: State): number {
+	if (effect.z !== undefined) return FLIGHT_HEIGHT + effect.z;
 	if (effect.sourceShot) {
 		// Interdiction stores the 2D round at impact; altitude remains presentation-only.
 		// Escort-bound rounds stay on the flight layer even if the escort has since died.

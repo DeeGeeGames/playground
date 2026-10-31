@@ -5,10 +5,11 @@ import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fi
 import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
 import { ESCORT_DRILL, SYSTEMS_TRIAL, type Scenario } from './scenarios';
 import { conditionMultiplier, effectiveOutputs, absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
-import { arriveCourse, capitalCourse, createFlight, fighterCourse, fly, isCapital, type Flight } from './flight';
-import { arkVelocity, flightVelocity, localPoint, mountWorld, worldPoint } from './space';
+import { altitudeCourse, arriveCourse, capitalCourse, createFlight, fighterCourse, fly, isCapital, type Flight } from './flight';
+import { DECK_ALTITUDE, arkVelocity, flightVelocity, localPoint, mountWorld, worldPoint } from './space';
 import { createEscortCoverage, coveragePlan, coverageStation, pointSector, type CoveragePriority, type EscortCoverage } from './escort-coverage';
-export type Point = { x: number; y: number };
+// z is altitude relative to the nominal flight layer; omitted values use zero.
+export type Point = { x: number; y: number; z?: number };
 export type Weapon = 'flak' | 'rail' | 'missile' | 'beam';
 export type EnemyKind = 'raider' | 'bomber' | 'armored' | 'flagship' | 'carrier';
 export type EscortKind = 'interceptor' | 'guardian';
@@ -41,7 +42,7 @@ export const BOMBER_ATTACK = { windup: 2, releaseCue: 0.35 } as const;
 export type BomberAttack = { phase: 'windup'; remaining: number; target: number | undefined } | { phase: 'released'; remaining: number };
 export interface Enemy extends Point { hangar?: { remaining: number; launched: number; cooldown: number }; launchRemaining?: number; launchedBy?: number; subsystemTarget?: string; approaching?: boolean; bomberAttack?: BomberAttack; turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
 export interface Escort extends Point { turretAim?: CraftAim; flight?: Flight; wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
-export interface Shot extends Point { originHeight?: number; origin?: Point; sourceVelocity?: Point; beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
+export interface Shot extends Point { vz?: number; originHeight?: number; origin?: Point; sourceVelocity?: Point; beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
 export type CombatFeedback =
 	| { kind: 'muzzle'; mount: number; weapon: Weapon; aim: number }
 	| { kind: 'impact'; shield: number; armor: number; hull: number; deck: boolean }
@@ -68,7 +69,7 @@ export interface State {
 	rally: Point; priority: number | undefined; pulseCooldown: number; aegisRemaining: number; repairCooldown: number;
 	cleared: boolean; message: string; messageTime: number;
 }
-export const distance = function (a: Point, b: Point): number { return Math.hypot(a.x - b.x, a.y - b.y); };
+export const distance = function (a: Point, b: Point): number { return Math.hypot(a.x - b.x, a.y - b.y, (a.z ?? 0) - (b.z ?? 0)); };
 export const MISSILE_SPLASH_RADIUS = 85;
 
 // Scores use only available intel. Range and arc constrain the aim point;
@@ -176,7 +177,7 @@ export const covered = function (state: State, mount: Mount, target: Point): boo
 	const { range, center, arc } = coverageFor(state, mount);
 	const local = localPoint(state, target);
 	const angle = Math.atan2(local.y - mount.y, local.x - mount.x) - center;
-	return distance(mount, local) <= range + 1e-8 && Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle))) <= arc / 2 + 1e-8;
+	return distance({ ...mount, z: mountWorld(state, mount).z ?? 0 }, local) <= range + 1e-8 && Math.abs(Math.atan2(Math.sin(angle), Math.cos(angle))) <= arc / 2 + 1e-8;
 };
 export const invested = function (mount: Mount): number {
 	return mount.weapon ? WEAPONS[mount.weapon].cost + (mount.level >= 2 ? Math.round(WEAPONS[mount.weapon].cost * 0.8) : 0) + (mount.level >= 3 ? Math.round(WEAPONS[mount.weapon].cost * 1.2) : 0) : 0;
@@ -214,7 +215,7 @@ const launchWing = function (state: State, id: number, sector: Sector): boolean 
 	if (!wing || scrambleReason(state, wing)) return false;
 	wing.assignment = sector; wing.phase = 'launching'; wing.timer = WING_TIMING.launch;
 	for (const [i, craft] of wing.craft.entries()) {
-		Object.assign(craft, worldPoint(state, { x: -180, y: (i - 1) * 22 }));
+		Object.assign(craft, worldPoint(state, { x: -180, y: (i - 1) * 22, z: 0 }));
 		craft.flight = { angle: state.ark.angle, speed: state.ark.speed, side: i % 2 ? -1 : 1, course: 'intercept', run: 1 }; craft.angle = state.ark.angle;
 		state.escorts.push(craft);
 	}
@@ -271,7 +272,7 @@ const updateWings = function (state: State, dt: number) {
 	for (const wing of state.wings) {
 		wing.craft = wing.craft.filter(function (craft) { return craft.hp > 0; });
 		if (wing.phase === 'ready' || wing.phase === 'rearming') {
-			for (const craft of wing.craft) { Object.assign(craft, worldPoint(state, { x: -110, y: 0 })); craft.angle = state.ark.angle; }
+			for (const craft of wing.craft) { Object.assign(craft, worldPoint(state, { x: -110, y: 0, z: 0 })); craft.angle = state.ark.angle; delete craft.flight; }
 		}
 		if (wing.phase === 'ready') continue;
 		wing.timer = Math.max(0, wing.timer - dt);
@@ -343,11 +344,11 @@ export const subsystemAt = function (state: State, point: Point): string | undef
 	return index < 0 ? undefined : `mount:${index}`;
 };
 export const subsystemAimPoint = function (state: State, target: string, from?: Point): Point | undefined {
-	if (target === 'engines') return worldPoint(state, { x: -145, y: 0 });
-	if (target === 'sensors') return worldPoint(state, { x: 16, y: from && localPoint(state, from).y > 0 ? 30 : -30 });
-	if (target === 'generator') return worldPoint(state, { x: 0, y: -40 });
+	if (target === 'engines') return worldPoint(state, { x: -145, y: 0, z: DECK_ALTITUDE });
+	if (target === 'sensors') return worldPoint(state, { x: 16, y: from && localPoint(state, from).y > 0 ? 30 : -30, z: DECK_ALTITUDE });
+	if (target === 'generator') return worldPoint(state, { x: 0, y: -40, z: DECK_ALTITUDE });
 	const mount = target.startsWith('mount:') ? state.mounts[Number(target.slice(6))] : undefined;
-	return mount?.weapon ? worldPoint(state, { x: mount.x, y: Math.sign(mount.y) * 40 }) : undefined;
+	return mount?.weapon ? worldPoint(state, { x: mount.x, y: Math.sign(mount.y) * 40, z: DECK_ALTITUDE }) : undefined;
 };
 const damageSubsystem = function (state: State, local: Point, damage: number) {
 	const id = subsystemAt(state, local);
@@ -424,12 +425,12 @@ const advanceCarrierHangar = function (state: State, carrier: Enemy, flight: Fli
 	const bay = CARRIER_BAYS[hangar.launched % CARRIER_BAYS.length];
 	if (!bay) return;
 	const c = Math.cos(flight.angle); const s = Math.sin(flight.angle); const scale = craftScale('carrier');
-	const position = { x: carrier.x + scale * (c * bay.x - s * bay.y), y: carrier.y + scale * (s * bay.x + c * bay.y) };
+	const position = { z: carrier.z ?? 0, x: carrier.x + scale * (c * bay.x - s * bay.y), y: carrier.y + scale * (s * bay.x + c * bay.y) };
 	const exit = { x: position.x + c * CARRIER_LAUNCH.speed * CARRIER_LAUNCH.clearanceTime, y: position.y + s * CARRIER_LAUNCH.speed * CARRIER_LAUNCH.clearanceTime };
 	const field = state.systems.interdiction.field;
 	if (field && circleHit(position, exit, field.world, enemyClearance({ kind: 'raider' }))) return;
 	state.enemies.push({ ...position, id: state.nextId++, kind: 'raider', hp: ENEMIES.raider.hp, maxHp: ENEMIES.raider.hp, cooldown: 0.8,
-		launchedBy: carrier.id, launchRemaining: CARRIER_LAUNCH.clearanceTime, flight: { ...flight, speed: CARRIER_LAUNCH.speed, course: 'intercept' } });
+		launchedBy: carrier.id, launchRemaining: CARRIER_LAUNCH.clearanceTime, flight: { ...flight, vz: 0, pitch: 0, speed: CARRIER_LAUNCH.speed, course: 'intercept' } });
 	hangar.remaining--; hangar.launched++; hangar.cooldown += CARRIER_LAUNCH.interval;
 };
 export const durationFor = function (state: State): number { return state.scenario?.duration ?? ROUTE_SECONDS; };
@@ -447,16 +448,20 @@ export const contactWarning = function (state: State): string {
 	return `${contactDirection(localPoint(state, contact))} · ${count} ${contact.kind} · in range`;
 };
 const effect = function (state: State, point: Point, radius: number, color: string, sourceShot?: Shot) {
-	state.effects.push({ x: point.x, y: point.y, radius, life: 0.45, maxLife: 0.45, color, ...(sourceShot ? { sourceShot: { ...sourceShot } } : {}) });
+	state.effects.push({ x: point.x, y: point.y, ...(point.z === undefined ? {} : { z: point.z }), radius, life: 0.45, maxLife: 0.45, color, ...(sourceShot ? { sourceShot: { ...sourceShot } } : {}) });
 };
 const fire = function (state: State, from: Point, to: Point, damage: number, speed: number, side: Shot['side'], weapon: Shot['weapon'], target: number | undefined, sourceVelocity: Point) {
 	const angle = Math.atan2(to.y - from.y, to.x - from.x);
-	state.shots.push({ id: state.nextId++, x: from.x, y: from.y, vx: Math.cos(angle) * speed + sourceVelocity.x, vy: Math.sin(angle) * speed + sourceVelocity.y, origin: { ...from }, sourceVelocity: { ...sourceVelocity }, damage, side, weapon, target, life: 4 });
+	const dz = (to.z ?? 0) - (from.z ?? 0);
+	const planar = Math.hypot(to.x - from.x, to.y - from.y);
+	const magnitude = Math.hypot(planar, dz);
+	const horizontalSpeed = magnitude > 0 ? speed * planar / magnitude : speed;
+	state.shots.push({ id: state.nextId++, x: from.x, y: from.y, z: from.z ?? 0, vz: (magnitude > 0 ? speed * dz / magnitude : 0) + (sourceVelocity.z ?? 0), vx: Math.cos(angle) * horizontalSpeed + sourceVelocity.x, vy: Math.sin(angle) * horizontalSpeed + sourceVelocity.y, origin: { ...from }, sourceVelocity: { ...sourceVelocity }, damage, side, weapon, target, life: 4 });
 };
 const interceptTime = function (from: Point, to: Point, velocity: Point, speed: number): number {
-	const dx = to.x - from.x; const dy = to.y - from.y;
-	const a = velocity.x * velocity.x + velocity.y * velocity.y - speed * speed;
-	const b = 2 * (dx * velocity.x + dy * velocity.y); const c = dx * dx + dy * dy;
+	const dx = to.x - from.x; const dy = to.y - from.y; const dz = (to.z ?? 0) - (from.z ?? 0);
+	const a = velocity.x * velocity.x + velocity.y * velocity.y + (velocity.z ?? 0) ** 2 - speed * speed;
+	const b = 2 * (dx * velocity.x + dy * velocity.y + dz * (velocity.z ?? 0)); const c = dx * dx + dy * dy + dz * dz;
 	if (Math.abs(a) < 1e-8) return b < 0 ? Math.min(4, -c / b) : 0;
 	const discriminant = b * b - 4 * a * c;
 	if (discriminant < 0) return 0;
@@ -465,11 +470,11 @@ const interceptTime = function (from: Point, to: Point, velocity: Point, speed: 
 };
 const aimAhead = function (from: Point, target: Point, velocity: Point, speed: number): Point {
 	const time = interceptTime(from, target, velocity, speed);
-	return { x: target.x + velocity.x * time, y: target.y + velocity.y * time };
+	return { x: target.x + velocity.x * time, y: target.y + velocity.y * time, z: (target.z ?? 0) + (velocity.z ?? 0) * time };
 };
 const hostileSolution = function (enemy: Enemy, target: Point, velocity: Point, speed: number): { muzzle: Point; aim: Point; mount?: undefined; height?: undefined; angle?: undefined } | CraftAim | undefined {
 	const source = flightVelocity(enemy.flight);
-	const predict = function (from: Point) { return aimAhead(from, target, { x: velocity.x - source.x, y: velocity.y - source.y }, speed); };
+	const predict = function (from: Point) { return aimAhead(from, target, { x: velocity.x - source.x, y: velocity.y - source.y, z: (velocity.z ?? 0) - (source.z ?? 0) }, speed); };
 	if (!hasCraftTurrets(enemy.kind)) return { muzzle: enemy, aim: predict(enemy) };
 	return craftTurretSolution(enemy.kind, enemy, enemy.flight?.angle ?? 0, predict);
 };
@@ -484,26 +489,26 @@ const targetFor = function (state: State, from: Point, range: number): Enemy | u
 };
 const damageEnemy = function (enemy: Enemy, damage: number, weapon: Shot['weapon']) { enemy.hp -= damage * (weapon === 'rail' ? 1 : ENEMIES[enemy.kind].armor); };
 const impactFeedback = function (state: State, point: Point, hull: number, armor = 0, shield = 0, deck = false) {
-	state.effects.push({ x: point.x, y: point.y, radius: 18, life: 0.3, maxLife: 0.3, color: '#ffb87b', feedback: { kind: 'impact', shield, armor, hull, deck } });
+	state.effects.push({ x: point.x, y: point.y, ...(point.z === undefined ? {} : { z: point.z }), radius: 18, life: 0.3, maxLife: 0.3, color: '#ffb87b', feedback: { kind: 'impact', shield, armor, hull, deck } });
 };
 const enemyFeedback = function (state: State, enemy: Enemy, damage: number, weapon: Shot['weapon']) {
 	const hull = damage * (weapon === 'rail' ? 1 : ENEMIES[enemy.kind].armor);
 	impactFeedback(state, enemy, hull, damage - hull);
 };
 const segmentDistance = function (point: Point, a: Point, b: Point): number {
-	const dx = b.x - a.x; const dy = b.y - a.y; const length = dx * dx + dy * dy;
-	const t = length > 0 ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / length)) : 0;
-	return distance(point, { x: a.x + dx * t, y: a.y + dy * t });
+	const dx = b.x - a.x; const dy = b.y - a.y; const dz = (b.z ?? 0) - (a.z ?? 0); const length = dx * dx + dy * dy + dz * dz;
+	const t = length > 0 ? Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy + ((point.z ?? 0) - (a.z ?? 0)) * dz) / length)) : 0;
+	return distance(point, { x: a.x + dx * t, y: a.y + dy * t, z: (a.z ?? 0) + dz * t });
 };
 const movingContact = function (point: Point, previous: Point, from: Point, to: Point, radius: number): boolean {
-	return segmentDistance({ x: 0, y: 0 }, { x: from.x - previous.x, y: from.y - previous.y }, { x: to.x - point.x, y: to.y - point.y }) < radius;
+	return segmentDistance({ x: 0, y: 0 }, { x: from.x - previous.x, y: from.y - previous.y, z: (from.z ?? 0) - (previous.z ?? 0) }, { x: to.x - point.x, y: to.y - point.y, z: (to.z ?? 0) - (point.z ?? 0) }) < radius;
 };
 const hullContact = function (state: State, previous: Point, from: Point, to: Point): (Point & { local: Point }) | undefined {
 	const c = Math.cos(state.ark.angle); const s = Math.sin(state.ark.angle);
 	const start = { x: c * (from.x - previous.x) + s * (from.y - previous.y), y: -s * (from.x - previous.x) + c * (from.y - previous.y) };
 	const end = localPoint(state, to);
 	let first = 0; let last = 1;
-	for (const [a, b, half] of [[start.x, end.x, 145], [start.y, end.y, 40]] as const) {
+	for (const [a, b, half] of [[start.x, end.x, 145], [start.y, end.y, 40], [from.z === undefined ? 0 : from.z - DECK_ALTITUDE, to.z === undefined ? 0 : to.z - DECK_ALTITUDE, 24]] as const) {
 		const delta = b - a;
 		if (Math.abs(delta) < 1e-10) { if (Math.abs(a) > half) return undefined; continue; }
 		const t1 = (-half - a) / delta; const t2 = (half - a) / delta;
@@ -519,8 +524,8 @@ export const step = function (state: State, dt: number) {
 	if (deadline !== undefined && state.time >= deadline) { state.status = 'lost'; state.resultReason = state.hull <= 0 ? 'hull' : 'deadline'; state.shots = []; return; }
 	dt = Math.min(dt, 0.05, deadline === undefined ? Infinity : Math.max(0, deadline - state.time)); state.time += dt;
 	const previousArk = { x: state.ark.x, y: state.ark.y };
-	const previousEnemies = new Map(state.enemies.map(function (enemy) { return [enemy.id, { x: enemy.x, y: enemy.y }] as const; }));
-	const previousEscorts = new Map(state.escorts.map(function (escort) { return [escort.id, { x: escort.x, y: escort.y }] as const; }));
+	const previousEnemies = new Map(state.enemies.map(function (enemy) { return [enemy.id, { x: enemy.x, y: enemy.y, z: enemy.z ?? 0 }] as const; }));
+	const previousEscorts = new Map(state.escorts.map(function (escort) { return [escort.id, { x: escort.x, y: escort.y, z: escort.z ?? 0 }] as const; }));
 	state.pulseCooldown = Math.max(0, state.pulseCooldown - dt); state.aegisRemaining = Math.max(0, state.aegisRemaining - dt); state.repairCooldown = Math.max(0, state.repairCooldown - dt); state.messageTime = Math.max(0, state.messageTime - dt);
 	const distanceBefore = state.systems.distanceTraveled;
 	state.systems.sensors.repairCooldown = Math.max(0, state.systems.sensors.repairCooldown - dt);
@@ -552,7 +557,7 @@ export const step = function (state: State, dt: number) {
 		if (!target) continue;
 		// Track the firing solution even while reloading; barrels must finish turning before firing.
 		const targetVelocity = flightVelocity(target.flight);
-		const aim = mount.weapon === 'beam' ? target : aimAhead(origin, target, { x: targetVelocity.x - carrierVelocity.x, y: targetVelocity.y - carrierVelocity.y }, config.speed);
+		const aim = mount.weapon === 'beam' ? target : aimAhead(origin, target, { x: targetVelocity.x - carrierVelocity.x, y: targetVelocity.y - carrierVelocity.y, z: targetVelocity.z ?? 0 }, config.speed);
 		const desired = Math.atan2(aim.y - origin.y, aim.x - origin.x) - state.ark.angle;
 		const error = Math.atan2(Math.sin(desired - mount.aim), Math.cos(desired - mount.aim));
 		const travel = config.rotationSpeed * dt;
@@ -561,7 +566,7 @@ export const step = function (state: State, dt: number) {
 		if (mount.weapon === 'beam') {
 			const damage = config.damage * dt * weaponRate * (1 + (mount.level - 1) * 0.55) * (1 + (mount.level - 1) * 0.12);
 			damageEnemy(target, damage, 'beam');
-			state.shots.push({ id: state.nextId++, x: target.x, y: target.y, beamFrom: origin, vx: 0, vy: 0, damage: 0, side: 'player', weapon: 'beam', target: target.id, life: 4 });
+			state.shots.push({ id: state.nextId++, x: target.x, y: target.y, z: target.z ?? 0, beamFrom: origin, vx: 0, vy: 0, damage: 0, side: 'player', weapon: 'beam', target: target.id, life: 4 });
 			if (mount.cooldown <= 0) { enemyFeedback(state, target, damage, 'beam'); mount.cooldown = config.reload; }
 			continue;
 		}
@@ -585,12 +590,13 @@ export const step = function (state: State, dt: number) {
 		const desired = engaging ? fighterCourse(escort, target, 65, 65, config.speed, escort.id % 2 ? -1 : 1, flightVelocity(target.flight), state.escorts)
 			: arriveCourse(escort, trafficWaypoint(state, escort, destination, escort.kind), carrierVelocity);
 		escort.flight ??= { angle: escort.angle, speed: state.ark.speed, side: i % 2 ? -1 : 1, course: 'intercept', run: 1 };
+		desired.z = (altitudeCourse(escort.id, state.time, escort.kind === 'guardian', engaging ? target : destination, wing?.phase === 'returning' || wing?.phase === 'launching') - (escort.z ?? 0)) * 0.8;
 		const hull = neighbors.find(function (hull) { return hull.id === escort.id; });
 		fly(escort, escort.flight, hull ? avoidTraffic(hull, desired, neighbors, config.speed) : desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt);
 		escort.angle = escort.flight.angle;
 		if (target && distance(escort, target) <= config.range) {
 			const velocity = flightVelocity(target.flight); const sourceVelocity = flightVelocity(escort.flight);
-			const predict = function (from: Point) { return aimAhead(from, target, { x: velocity.x - sourceVelocity.x, y: velocity.y - sourceVelocity.y }, 550); };
+			const predict = function (from: Point) { return aimAhead(from, target, { x: velocity.x - sourceVelocity.x, y: velocity.y - sourceVelocity.y, z: (velocity.z ?? 0) - (sourceVelocity.z ?? 0) }, 550); };
 			const solution = escort.kind === 'guardian' ? craftTurretSolution('guardian', escort, escort.angle, predict) : { muzzle: escort, aim: predict(escort) };
 			if (solution) {
 				if ('mount' in solution) escort.turretAim = solution;
@@ -615,7 +621,7 @@ export const step = function (state: State, dt: number) {
 		}
 		const escort = nearest(enemy, state.escorts.filter(function (craft) { return craft.hp > 0; }), 180);
 		const relative = localPoint(state, enemy);
-		const arkTarget = worldPoint(state, { x: Math.max(-110, Math.min(110, relative.x)), y: Math.max(-30, Math.min(30, relative.y)) });
+		const arkTarget = worldPoint(state, { x: Math.max(-110, Math.min(110, relative.x)), y: Math.max(-30, Math.min(30, relative.y)), z: DECK_ALTITUDE });
 		const destination = escort ?? arkTarget;
 		enemy.flight ??= createFlight(relative, { x: state.ark.x - enemy.x, y: state.ark.y - enemy.y }, config.speed, enemy.id);
 		const flight = enemy.flight;
@@ -627,6 +633,7 @@ export const step = function (state: State, dt: number) {
 			: approaching ? arriveCourse(enemy, destination, carrierVelocity, 0.5)
 			: isCapital(enemy) ? capitalCourse(state, enemy, flight, config.range, config.speed)
 			: fighterCourse(enemy, escort ?? state.ark, escort ? 60 : enemy.kind === 'bomber' ? 265 : 195, escort ? 60 : enemy.kind === 'bomber' ? 225 : 105, config.speed, enemy.id % 2 ? -1 : 1, escort ? flightVelocity(escort.flight) : carrierVelocity, state.enemies);
+		desired.z = (altitudeCourse(enemy.id, state.time, isCapital(enemy), escort ?? (isCapital(enemy) ? state.ark : { ...state.ark, z: -45 })) - (enemy.z ?? 0)) * 0.8;
 		const hull = neighbors.find(function (hull) { return hull.id === enemy.id; });
 		fly(enemy, flight, hull ? avoidTraffic(hull, desired, neighbors, flightSpeed) : desired, flightSpeed, isCapital(enemy) ? 0.7 : 3, dt);
 		if (enemy.kind === 'carrier') { advanceCarrierHangar(state, enemy, flight, dt); continue; }
@@ -665,12 +672,12 @@ export const step = function (state: State, dt: number) {
 	let arkHit = false;
 	for (const shot of state.shots) {
 		if (shot.weapon === 'beam') continue;
-		const before = { x: shot.x, y: shot.y }; shot.life -= dt;
+		const before: Point = { x: shot.x, y: shot.y, ...(shot.z === undefined ? {} : { z: shot.z }) }; shot.life -= dt;
 		if (shot.weapon === 'missile') {
 			const target = state.enemies.find(function (e) { return e.id === shot.target && e.hp > 0 && canAcquire(state, e); });
-			if (target) { const angle = Math.atan2(target.y - shot.y, target.x - shot.x); shot.vx = Math.cos(angle) * 300 + (shot.sourceVelocity?.x ?? 0); shot.vy = Math.sin(angle) * 300 + (shot.sourceVelocity?.y ?? 0); }
+			if (target) { const d = Math.max(0.001, distance(target, shot)); shot.vx = (target.x - shot.x) / d * 300 + (shot.sourceVelocity?.x ?? 0); shot.vy = (target.y - shot.y) / d * 300 + (shot.sourceVelocity?.y ?? 0); shot.vz = ((target.z ?? 0) - (shot.z ?? 0)) / d * 300 + (shot.sourceVelocity?.z ?? 0); }
 		}
-		shot.x += shot.vx * dt; shot.y += shot.vy * dt;
+		shot.x += shot.vx * dt; shot.y += shot.vy * dt; if (shot.z !== undefined) shot.z += (shot.vz ?? 0) * dt;
 		if (shot.side === 'player') {
 			const hit = state.enemies.find(function (enemy) { return enemy.hp > 0 && movingContact(enemy, previousEnemies.get(enemy.id) ?? enemy, before, shot, enemyRadius(enemy.kind)); });
 			if (!hit) continue;
@@ -681,6 +688,11 @@ export const step = function (state: State, dt: number) {
 			const center = state.systems.interdiction.field?.world;
 			const blocked = center ? circleHit(before, shot, center, INTERDICTION_CONFIG.radius) : undefined;
 			if (blocked) {
+				if (shot.z !== undefined) {
+					const travel = Math.hypot(shot.x - before.x, shot.y - before.y);
+					const fraction = travel > 0 ? Math.hypot(blocked.x - before.x, blocked.y - before.y) / travel : 1;
+					blocked.z = (before.z ?? shot.z) + (shot.z - (before.z ?? shot.z)) * fraction;
+				}
 				effect(state, blocked, 20, '#d7bf89', shot); shot.life = 0; state.systems.interdiction.blockedShots++; continue;
 			}
 			const hit = state.escorts.find(function (escort) { return escort.hp > 0 && movingContact(escort, previousEscorts.get(escort.id) ?? escort, before, shot, (escort.kind === 'guardian' ? 20 : 12) * craftScale(escort.kind)); });
@@ -699,8 +711,8 @@ export const step = function (state: State, dt: number) {
 	}
 	advanceSystems(state.systems, dt, arkHit);
 	advanceRepairs(state, dt);
-	for (const enemy of state.enemies) if (enemy.hp <= 0) { state.salvage += ENEMIES[enemy.kind].reward; state.kills += 1; state.effects.push({ x: enemy.x, y: enemy.y, radius: enemy.kind === 'flagship' ? 95 : enemy.kind === 'armored' ? 38 : 24, life: 0.65, maxLife: 0.65, color: '#ffb87b', feedback: { kind: 'destruction' } }); }
-	for (const escort of state.escorts) if (escort.hp <= 0) { state.escortLosses++; state.effects.push({ x: escort.x, y: escort.y, radius: 22, life: 0.65, maxLife: 0.65, color: '#81cfe7', feedback: { kind: 'destruction' } }); }
+	for (const enemy of state.enemies) if (enemy.hp <= 0) { state.salvage += ENEMIES[enemy.kind].reward; state.kills += 1; state.effects.push({ x: enemy.x, y: enemy.y, z: enemy.z ?? 0, radius: enemy.kind === 'flagship' ? 95 : enemy.kind === 'armored' ? 38 : 24, life: 0.65, maxLife: 0.65, color: '#ffb87b', feedback: { kind: 'destruction' } }); }
+	for (const escort of state.escorts) if (escort.hp <= 0) { state.escortLosses++; state.effects.push({ x: escort.x, y: escort.y, z: escort.z ?? 0, radius: 22, life: 0.65, maxLife: 0.65, color: '#81cfe7', feedback: { kind: 'destruction' } }); }
 	state.enemies = state.enemies.filter(function (e) { return e.hp > 0; }); state.escorts = state.escorts.filter(function (e) { return e.hp > 0; }); state.shots = state.shots.filter(function (s) { return s.life > 0; });
 	for (const wing of state.wings) wing.craft = wing.craft.filter(function (craft) { return craft.hp > 0; });
 	state.effects = state.effects.filter(function (e) { e.life -= dt; return e.life > 0; });
