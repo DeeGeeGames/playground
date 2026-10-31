@@ -24,10 +24,10 @@ const relativePosition = function (point: Point): string {
 
 // Keep controls mounted so simulation updates preserve native keyboard focus.
 export const createInterdictionPanel = function (host: HTMLElement, getState: () => State, available: () => boolean, placement: Placement, signal: AbortSignal): () => void {
+	host.tabIndex = -1;
 	const heading = document.createElement('div'); heading.className = 'interdiction-heading';
-	const title = document.createElement('h2'); title.id = 'interdiction-title'; title.textContent = 'INTERDICTION';
 	const status = document.createElement('span'); status.id = 'interdiction-status';
-	heading.append(title, status); host.append(heading); host.setAttribute('aria-labelledby', title.id);
+	heading.append(status); host.append(heading);
 	const specification = document.createElement('p'); specification.className = 'interdiction-specification';
 	specification.textContent = `${INTERDICTION_CONFIG.cost} salvage · ${INTERDICTION_CONFIG.maxRange} m placement range · ${INTERDICTION_CONFIG.radius} m radius`;
 	const lifetime = document.createElement('p'); lifetime.className = 'interdiction-specification';
@@ -39,8 +39,7 @@ export const createInterdictionPanel = function (host: HTMLElement, getState: ()
 	toggle.addEventListener('click', function () {
 		const state = getState();
 		if (holdReason(state, available())) return;
-		if (placement.get()) placement.cancel();
-		else if (!interdictionReason(state)) placement.aim(worldPoint(state, { x: 300, y: 0 }));
+		if (!placement.get() && !interdictionReason(state)) placement.aim(worldPoint(state, { x: 300, y: 0 }));
 		update();
 	}, { signal });
 	host.append(toggle);
@@ -71,11 +70,12 @@ export const createInterdictionPanel = function (host: HTMLElement, getState: ()
 		const state = getState(); const point = placement.get();
 		if (point && !holdReason(state, available()) && !interdictionReason(state, point)) placement.confirm();
 		update();
+		if (!placement.get()) host.focus({ preventScroll: true });
 	}, { signal });
 	const cancel = document.createElement('button'); cancel.type = 'button'; cancel.id = 'interdiction-cancel'; cancel.textContent = 'Cancel';
 	cancel.addEventListener('click', function () {
-		if (!holdReason(getState(), available())) placement.cancel();
-		update();
+		if (holdReason(getState(), available())) return;
+		placement.cancel(); update(); toggle.focus({ preventScroll: true });
 	}, { signal });
 	actions.append(confirm, cancel);
 	const instructions = document.createElement('p'); instructions.className = 'interdiction-instructions'; instructions.id = 'interdiction-instructions';
@@ -90,8 +90,8 @@ export const createInterdictionPanel = function (host: HTMLElement, getState: ()
 		const field = interdiction.field; const relative = fieldRelative(state);
 		text(status, field ? `Active ${Math.ceil(field.remaining)}s` : interdiction.cooldown > 0 ? `Cooldown ${Math.ceil(interdiction.cooldown)}s` : 'Ready');
 		text(fieldPosition, field && relative ? `Field: ${relativePosition(relative)}` : 'No active field.');
-		text(toggle, active ? 'Cancel preview (I)' : 'Preview field (I)');
-		toggle.setAttribute('aria-pressed', String(active)); toggle.disabled = active ? !!hold : !!startReason;
+		text(toggle, 'Preview field (I)');
+		toggle.hidden = active; toggle.disabled = !!startReason;
 		for (const control of presetButtons) control.disabled = !!startReason;
 		preview.hidden = !active; actions.hidden = !active;
 		text(preview, point ? `Preview: ${relativePosition(localPoint(state, point))}` : '');

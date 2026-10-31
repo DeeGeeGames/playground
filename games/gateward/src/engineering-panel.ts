@@ -6,11 +6,6 @@ const CHANNEL_NAMES: Record<PowerChannel, string> = { engines: 'Engines', weapon
 const PRESET_NAMES: Record<keyof typeof POWER_PRESETS, string> = { balanced: 'Balanced', engines: 'Engine priority', weapons: 'Weapons priority', shields: 'Shield priority' };
 const text = function (node: HTMLElement, value: string) { if (node.textContent !== value) node.textContent = value; };
 const selectedChannel = function (control: HTMLSelectElement) { return POWER_CHANNELS.find(function (channel) { return channel === control.value; }); };
-const travelTime = function (seconds: number) {
-	if (!Number.isFinite(seconds)) return 'Stalled';
-	const rounded = Math.ceil(Math.max(0, seconds));
-	return `${Math.floor(rounded / 60)}:${String(rounded % 60).padStart(2, '0')}`;
-};
 const heldReason = function (state: State, available: boolean) {
 	if (state.status === 'won' || state.status === 'lost') return 'Voyage ended. Power changes are closed.';
 	if (!state.focused) return 'Command link unfocused. Return to the game to change power.';
@@ -21,9 +16,8 @@ const heldReason = function (state: State, available: boolean) {
 // Build controls once so native keyboard focus survives simulation updates.
 export const createEngineeringPanel = function (host: HTMLElement, getState: () => State, available: () => boolean, signal: AbortSignal): () => void {
 	const heading = document.createElement('div'); heading.className = 'engineering-heading';
-	const title = document.createElement('h2'); title.id = 'engineering-title'; title.textContent = 'REACTOR';
 	const budget = document.createElement('span'); budget.id = 'engineering-budget';
-	heading.append(title, budget); host.append(heading); host.setAttribute('aria-labelledby', title.id);
+	heading.append(budget); host.append(heading);
 	const outputs = document.createElement('dl'); outputs.className = 'engineering-outputs';
 	const rows = POWER_CHANNELS.map(function (channel) {
 		const row = document.createElement('div'); row.dataset['powerChannel'] = channel;
@@ -32,10 +26,6 @@ export const createEngineeringPanel = function (host: HTMLElement, getState: () 
 		row.append(name, value); outputs.append(row); return { channel, value };
 	});
 	host.append(outputs);
-	const travel = document.createElement('p'); travel.className = 'engineering-travel'; travel.id = 'engineering-travel';
-	const eta = document.createElement('span'); eta.id = 'engineering-eta';
-	const distance = document.createElement('span'); distance.id = 'engineering-distance';
-	travel.append(eta, distance); host.append(travel);
 	const presets = document.createElement('div'); presets.className = 'engineering-presets'; presets.setAttribute('role', 'group'); presets.setAttribute('aria-label', 'Reactor presets');
 	const presetButtons = Object.entries(POWER_PRESETS).map(function ([key, allocation]) {
 		const name = key === 'balanced' || key === 'engines' || key === 'weapons' || key === 'shields' ? PRESET_NAMES[key] : 'Preset';
@@ -79,8 +69,6 @@ export const createEngineeringPanel = function (host: HTMLElement, getState: () 
 			const effect = channel === 'engines' ? `${output.speed.toFixed(0)} m/s${journey.speed === 0 ? ' set' : ''}` : channel === 'weapons' ? `${output.weaponRate.toFixed(2)}× cadence` : `+${output.shieldRecharge.toFixed(0)} HP/s`;
 			text(value, `${allocation[channel]} units · ${effect}`);
 		}
-		text(eta, `Travel ETA ${travelTime(journey.eta)} · excludes combat`);
-		text(distance, `${Math.floor(journey.distance).toLocaleString()} m traveled · ${Math.ceil(journey.remaining).toLocaleString()} m left`);
 		for (const { control, allocation: preset } of presetButtons) {
 			control.disabled = !!hold;
 			control.setAttribute('aria-pressed', String(POWER_CHANNELS.every(function (channel) { return allocation[channel] === preset[channel]; })));

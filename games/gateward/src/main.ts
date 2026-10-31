@@ -3,12 +3,12 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, setAllocation, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, setRally, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
+import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, setRally, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
 import { worldPoint } from './space';
 import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
 import { createEngineeringPanel } from './engineering-panel';
-import { POWER_PRESETS, powerOutputs } from './systems';
+import { powerOutputs } from './systems';
 import { contactDescription, inspectorName, presetFor, type Inspector } from './play-screen';
 import { contactIntel, SENSOR_CONFIG, sensorRanges } from './sensors';
 import { createInterdictionPanel } from './interdiction-panel';
@@ -56,15 +56,15 @@ const shutdown = await mountGame('game', async function (container) {
 	const openInspector = function (view: Inspector) {
 		if (!available()) return;
 		if (!inspector) inspectorReturn = document.activeElement instanceof HTMLElement ? document.activeElement : button('open-systems');
-		inspector = view; element('inspector').hidden = false;
+		inspector = view; element('inspector').hidden = false; container.dataset['inspectorOpen'] = 'true';
 		for (const section of container.querySelectorAll<HTMLElement>('[data-inspector-content]')) section.hidden = section.dataset['inspectorContent'] !== view;
 		for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) control.setAttribute('aria-pressed', String(control.dataset['inspector'] === view));
 		label(element('inspector-title'), view === 'mounts' ? 'Weapon mounts' : view === 'contact' ? 'Contact' : view === 'field' ? 'Interdiction field' : view === 'reactor' ? 'Reactor allocation' : view === 'escorts' ? 'Escort bay' : 'Sensor array');
-		button('open-systems').setAttribute('aria-expanded', 'true'); button('open-selection').setAttribute('aria-expanded', 'true');
+		button('open-systems').setAttribute('aria-expanded', 'true'); button('open-reactor').setAttribute('aria-expanded', String(view === 'reactor')); button('field-entry').setAttribute('aria-expanded', String(view === 'field'));
 	};
 	const closeInspector = function () {
-		inspector = undefined; element('inspector').hidden = true;
-		button('open-systems').setAttribute('aria-expanded', 'false'); button('open-selection').setAttribute('aria-expanded', 'false');
+		inspector = undefined; element('inspector').hidden = true; container.dataset['inspectorOpen'] = 'false';
+		button('open-systems').setAttribute('aria-expanded', 'false'); button('open-reactor').setAttribute('aria-expanded', 'false'); button('field-entry').setAttribute('aria-expanded', 'false');
 		const target = inspectorReturn?.isConnected && !inspectorReturn.closest('[hidden]') ? inspectorReturn : button('open-systems');
 		target.focus({ preventScroll: true });
 	};
@@ -148,22 +148,14 @@ const shutdown = await mountGame('game', async function (container) {
 	const engineeringPanel = createEngineeringPanel(element('engineering'), function () { return state; }, available, abort.signal);
 	const interdictionPanel = createInterdictionPanel(element('interdiction-panel'), function () { return state; }, available, { get: function () { return placement; }, aim: aimPlacement, cancel: cancelPlacement, confirm: confirmPlacement }, abort.signal);
 	button('close-inspector').addEventListener('click', closeInspector, options);
-	button('open-systems').addEventListener('click', function () { openInspector('reactor'); }, options);
-	button('open-selection').addEventListener('click', function () { openInspector(inspectedContact === undefined ? 'mounts' : 'contact'); }, options);
+	button('open-systems').addEventListener('click', function () { if (inspector) closeInspector(); else openInspector('mounts'); }, options);
+	button('open-reactor').addEventListener('click', function () { openInspector('reactor'); }, options);
 	for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) control.addEventListener('click', function () {
 		const view = inspectorName(control.dataset['inspector']); if (view) openInspector(view);
 	}, options);
 	button('field-entry').addEventListener('click', function () {
-		if (placement) openInspector('field'); else aimPlacement(worldPoint(state, { x: 300, y: 0 }));
+		if (placement || interdictionReason(state)) openInspector('field'); else aimPlacement(worldPoint(state, { x: 300, y: 0 }));
 	}, options);
-	const shortcutButtons = Object.entries(POWER_PRESETS).map(function ([name, allocation]) {
-		const control = document.createElement('button'); control.type = 'button'; control.dataset['reactorPreset'] = name;
-		control.textContent = `${name[0]?.toUpperCase()}${name.slice(1)}`;
-		control.setAttribute('aria-label', `${name}: engines ${allocation.engines}, weapons ${allocation.weapons}, shields ${allocation.shields}`);
-		control.setAttribute('aria-describedby', 'reactor-current reactor-reason');
-		control.addEventListener('click', function () { if (available()) setAllocation(state, allocation); }, options);
-		element('reactor-shortcuts').append(control); return { control, name };
-	});
 	ui.pause.addEventListener('click', function () { setPause(!paused); }, options);
 	button('help').addEventListener('click', function () { const help = element('systems-help'); if (help instanceof HTMLDetailsElement) { help.open = !help.open; help.scrollIntoView({ block: 'nearest' }); } }, options);
 	button('resume').addEventListener('click', function () { setPause(false); }, options);
@@ -248,9 +240,11 @@ const shutdown = await mountGame('game', async function (container) {
 		const sensorFeed = container.querySelector<HTMLElement>('.sector');
 		if (cluster && sensorFeed) {
 			const height = `${Math.ceil(cluster.getBoundingClientRect().height)}px`;
-			const top = `${Math.ceil(sensorFeed.getBoundingClientRect().bottom - container.getBoundingClientRect().top) + 6}px`;
+			const top = `${Math.ceil(Math.max(...[sensorFeed, element('trial-status'), element('travel-eta')].filter(function (node) { return !node.hidden; }).map(function (node) { return node.getBoundingClientRect().bottom; })) - container.getBoundingClientRect().top) + 8}px`;
 			if (container.style.getPropertyValue('--command-height') !== height) container.style.setProperty('--command-height', height);
 			if (container.style.getPropertyValue('--sheet-top') !== top) container.style.setProperty('--sheet-top', top);
+			const sideTop = `${Math.ceil(Math.max(sensorFeed.getBoundingClientRect().bottom, ui.pause.getBoundingClientRect().bottom) - container.getBoundingClientRect().top) + 8}px`;
+			if (container.style.getPropertyValue('--side-top') !== sideTop) container.style.setProperty('--side-top', sideTop);
 		}
 		if (container.dataset['mode'] !== mode) container.dataset['mode'] = mode;
 		escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
@@ -258,17 +252,20 @@ const shutdown = await mountGame('game', async function (container) {
 		for (const child of container.children) if (child instanceof HTMLElement) child.inert = !!modal && child !== modal;
 		const active = available();
 		const allocation = state.systems.allocation; const preset = presetFor(allocation);
-		label(element('reactor-current'), `${preset ?? 'Custom'} · ${allocation.engines}E / ${allocation.weapons}W / ${allocation.shields}S`);
-		label(element('reactor-reason'), active ? '' : 'Commands held');
-		for (const { control, name } of shortcutButtons) { control.disabled = !active; control.setAttribute('aria-pressed', String(preset === name)); }
-		label(element('contact-info'), contactDescription(state, inspectedContact));
-		label(button('open-selection'), inspectedContact === undefined ? `Mount ${selected + 1}` : 'Selected contact');
-		button('open-systems').disabled = !active; button('open-selection').disabled = !active;
+		label(element('reactor-current'), `Power · ${preset ?? 'Custom'}`);
+		label(element('reactor-split'), `${allocation.engines}E / ${allocation.weapons}W / ${allocation.shields}S`);
+		label(element('contact-info'), contactDescription(state, inspectedContact ?? state.priority));
+		button('open-systems').disabled = !active; button('open-reactor').disabled = !active;
 		const field = state.systems.interdiction.field;
 		const fieldReason = interdictionReason(state);
-		button('field-entry').disabled = !active || !!fieldReason && !placement;
-		label(button('field-entry'), placement ? 'Aim field · 90' : field ? `Field active ${Math.ceil(field.remaining)}s` : fieldReason ? `Field · ${fieldReason}` : 'Field ready · 90');
+		button('field-entry').disabled = !active;
+		label(element('field-state'), placement ? 'Aiming · 90' : field ? `Active ${Math.ceil(field.remaining)}s` : state.systems.interdiction.cooldown > 0 ? `${Math.ceil(state.systems.interdiction.cooldown)}s` : state.status === 'fitting' ? 'Depart first' : '90 salvage');
 		button('field-entry').title = fieldReason || 'Preview field (I), then aim and confirm';
+		for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) {
+			const view = control.dataset['inspector'];
+			if (view === 'field') control.hidden = inspector !== 'field';
+			if (view === 'contact') control.hidden = inspectedContact === undefined && state.priority === undefined && inspector !== 'contact';
+		}
 		const systems = state.systems; const energyShield = systems.shield;
 		const sensors = systems.sensors; const ranges = sensorRanges(state);
 		const sensorMeter = element('sensor-meter');
@@ -336,10 +333,12 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.depart.hidden = state.status !== 'fitting'; ui.depart.disabled = !active || (!state.mounts.some(function (m) { return !!m.weapon; }) && craftCount(state) === 0);
 		ui.depart.title = ui.depart.disabled ? 'Build a turret or deploy an escort before departure.' : 'Begin the voyage';
 		ui.pulse.disabled = !active || state.status !== 'running' || state.pulseCooldown > 0;
-		label(ui.pulseState, state.pulseCooldown > 0 ? `${Math.ceil(state.pulseCooldown)}s` : 'READY');
+		label(ui.pulseState, state.status === 'fitting' ? 'Depart first' : state.pulseCooldown > 0 ? `${Math.ceil(state.pulseCooldown)}s` : 'Ready');
 		label(ui.pulseInfo, !active ? 'Commands held' : state.status !== 'running' ? 'Depart first' : state.aegisRemaining > 0 ? `Aegis · ${Math.ceil(state.aegisRemaining)}s hull protection` : state.pulseCooldown > 0 ? `Cooldown · ${Math.ceil(state.pulseCooldown)}s` : 'Clear rounds · 5s hull protection');
 		ui.repair.disabled = !active || state.salvage < 80 || state.hull >= MAX_HULL || state.repairCooldown > 0;
 		label(ui.repairInfo, !active ? 'Commands held' : state.hull >= MAX_HULL ? 'Hull at full integrity' : state.salvage < 80 ? 'Needs 80 salvage' : state.repairCooldown > 0 ? `Crews working · ${Math.ceil(state.repairCooldown)}s` : '+240 hull · 15s cooldown');
+		label(element('repair-state'), state.hull >= MAX_HULL ? 'Hull full' : state.repairCooldown > 0 ? `${Math.ceil(state.repairCooldown)}s` : '80 salvage');
+		ui.pulse.title = `Aegis (Q): ${ui.pulseInfo.textContent}`; ui.repair.title = `Repair (E): ${ui.repairInfo.textContent}`;
 		ui.rally.hidden = state.experimental; label(element('escort-help'), state.experimental ? 'Buy ready wings, then scramble a sector. Guardians hold their own sector. Reserve craft count toward nine slots.' : 'Escorts engage near their shared rally point.'); ui.rally.disabled = !active; ui.rally.classList.toggle('active', rallyMode); ui.rally.setAttribute('aria-pressed', String(rallyMode));
 		label(ui.rally, rallyMode ? 'Click space to place rally point' : '⌖ Set escort rally point');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
