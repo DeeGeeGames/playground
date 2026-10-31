@@ -17,6 +17,26 @@
 .radar-ring { fill:none; stroke:#395360; stroke-width:1; }
 .radar-short-boundary { fill:none; stroke:var(--mint); stroke-opacity:.6; stroke-dasharray:3 6; }
 .radar-axis { stroke:#395360; stroke-dasharray:3 7; }
+.radar-ring,.radar-axis,.radar-short-boundary,.radar-scope svg text,.radar-ally { pointer-events:none; }
+.radar-sector { fill:transparent; cursor:pointer; }
+.radar-sector:hover { fill:#94dfc90b; }
+.radar-sector.selected { fill:#94dfc918; }
+.radar-sector:focus-visible { outline:none; stroke:var(--mint); stroke-width:2; }
+.radar-sector-boundaries { fill:none; stroke:#91aebc; stroke-width:1; stroke-dasharray:5 5; pointer-events:none; }
+.radar-scope svg .radar-sector-caption { fill:#deeaef; font:10px monospace; letter-spacing:.4px; }
+.radar-scope svg .radar-sector-priority { fill:var(--mint); font:9px monospace; }
+.radar-panel-switch { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:16px; }
+.radar-panel-switch button { min-width:0; font-size:12px; }
+.radar-coverage-panel h3 { margin:0 0 8px; }
+.radar-coverage-rows { display:grid; gap:7px; }
+.radar-coverage-row { display:grid; grid-template-columns:minmax(0,1fr) 92px; gap:5px; }
+.radar-coverage-row button { text-align:left; padding:7px 8px; }
+.radar-coverage-row strong { display:block; font-size:12px; font-weight:500; }
+.radar-coverage-row small { display:block; font:10px monospace; margin-top:4px; }
+.radar-coverage-row select { min-width:0; padding:6px; font-size:12px; }
+.radar-balanced { width:100%; margin-top:10px; }
+.radar-coverage-status { border-left:2px solid var(--mint); background:#94dfc90a; padding:10px; font:11px/1.7 monospace; }
+.radar-contact-panel>button { width:100%; margin:14px 0 0; }
 .radar-no-coverage { stroke:#edbc7e; opacity:.1; pointer-events:none; }
 .radar-coverage { fill:#73c3e915; stroke:var(--cyan); stroke-dasharray:3 5; pointer-events:none; }
 .radar-ally { fill:var(--mint); }

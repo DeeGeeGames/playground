@@ -334,7 +334,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				}
 				range.position.set(mount.x, TURRET_HEIGHT, mount.y);
 			}
-			rally.visible = !state.experimental && (state.escorts.length > 0 || rallyMode); rally.position.set(state.rally.x, 1, state.rally.y);
+			rally.visible = !state.coverage.enabled && !state.experimental && (state.escorts.length > 0 || rallyMode); rally.position.set(state.rally.x, 1, state.rally.y);
 			if (rally.material instanceof MeshBasicMaterial) rally.material.color.set(rallyMode ? '#d5ed9b' : '#9edbf0');
 			const target = state.enemies.find(function (enemy) { return enemy.id === state.priority && canAcquire(state, enemy); }); priority.visible = !!target;
 			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT, target.y); priority.scale.setScalar(contactIntel(state, target) === 'classified' && target.kind === 'flagship' ? 70 : 42); }
