@@ -1,3 +1,4 @@
+import { COMBAT_EFFECT_LIMIT, createCombatVisual } from './combat-feedback';
 import { bomberCue, placeBomberCue } from './bomber-cue';
 import { updateCraftTurrets } from './craft-3d';
 import { ACESFilmicToneMapping, AdditiveBlending, BufferAttribute, BufferGeometry, Color, ConeGeometry, DirectionalLight, DoubleSide, Group, HemisphereLight, IcosahedronGeometry, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshStandardMaterial, MOUSE, Object3D, PCFSoftShadowMap, Points, PointsMaterial, Raycaster, RingGeometry, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
@@ -8,7 +9,7 @@ import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, offsetView, pic
 import { beaconFor, CRUISE_SPEED, journeyFor } from './journey';
 import { createState, coverageFor, ESCORTS, interdictionReason, type Enemy, type Point, type State } from './simulation';
 import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
-import { createTrajectory, effectHeight, projectileHeight, type Trajectory } from './projectiles-3d';
+import { createTrajectory, projectileHeight, type Trajectory } from './projectiles-3d';
 import { shieldAppearance } from './shield-view';
 import { canAcquire, contactIntel } from './sensors';
 import { INTERDICTION_CONFIG } from './interdiction';
@@ -213,7 +214,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	shotGeometry.setAttribute('position', new BufferAttribute(shotPositions, 3));
 	shotGeometry.setAttribute('color', new BufferAttribute(shotColors, 3));
 	shotGeometry.setDrawRange(0, 0);
-	const effects: Mesh[] = [];
+	const effects: ReturnType<typeof createCombatVisual>[] = [];
 	const color = new Color();
 	let dpr = 0;
 	const resize = function () {
@@ -302,7 +303,13 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			resize(); if (view.width <= 0 || view.height <= 0) return;
 			if (offsetView(view, screenOffsetY)) labelsDirty = true;
 			followArk(state); updateRoute(state); controls.enabled = controlsEnabled; controls.update();
-			for (const [index, turret] of turrets.entries()) { const mount = state.mounts[index]; if (mount) turret.update(mount, selected === index); }
+			for (const [index, turret] of turrets.entries()) {
+				const mount = state.mounts[index]; if (!mount) continue;
+				const origin = mountWorld(state, mount);
+				const beam = state.status === 'running' && state.shots.some(function (shot) { return shot.beamFrom?.x === origin.x && shot.beamFrom.y === origin.y; });
+				const firing = state.status === 'running' ? state.effects.reduce<State['effects'][number] | undefined>(function (latest, effect) { return effect.feedback?.kind === 'muzzle' && effect.feedback.mount === index && effect.feedback.weapon === mount.weapon ? effect : latest; }, undefined) : undefined;
+				turret.update(mount, selected === index, { strength: beam ? 0.65 : firing ? firing.life / firing.maxLife : 0, beam }, reducedMotion);
+			}
 			const journey = journeyFor(state); const drift = reducedMotion ? 0 : journey.distance;
 			const fieldPosition = state.systems.interdiction.field?.world; field.visible = !!fieldPosition; buoy.visible = !!fieldPosition;
 			if (fieldPosition) { field.position.set(fieldPosition.x, FLIGHT_HEIGHT, fieldPosition.y); buoy.position.set(fieldPosition.x, FLIGHT_HEIGHT + 8, fieldPosition.y); }
@@ -350,8 +357,10 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				color.set(shot.side === 'enemy' ? shot.sensorDamage ? '#f7c76e' : '#ff8d7f' : shot.weapon === 'beam' ? '#ff86c8' : shot.weapon === 'rail' ? '#dbbeff' : shot.weapon === 'missile' ? '#f5ce8a' : '#99ece1'); shotColors.set([color.r, color.g, color.b, color.r, color.g, color.b], index * 6);
 			}
 			if (shotCapacity > 0) { shotGeometry.getAttribute('position').needsUpdate = true; shotGeometry.getAttribute('color').needsUpdate = true; } shotGeometry.setDrawRange(0, state.shots.length * 2);
-			while (effects.length < state.effects.length) { const effect = circle('#ffffff', 1, 1); scene.add(effect); effects.push(effect); }
-			for (const [index, model] of effects.entries()) { const effect = state.effects[index]; model.visible = !!effect; if (effect) { model.position.set(effect.x, effectHeight(effect, state), effect.y); model.scale.setScalar(effect.radius * (1 - effect.life / effect.maxLife * 0.7)); if (model.material instanceof MeshBasicMaterial) { model.material.transparent = true; model.material.color.set(effect.color); model.material.opacity = effect.life / effect.maxLife; } } }
+			const combatVisible = state.status === 'running';
+			const activeEffects = combatVisible ? state.effects.filter(function (effect) { return effect.feedback?.kind !== 'muzzle'; }).slice(-COMBAT_EFFECT_LIMIT) : [];
+			while (effects.length < activeEffects.length) { const visual = createCombatVisual(); scene.add(visual.root); effects.push(visual); }
+			for (const [index, visual] of effects.entries()) { const effect = activeEffects[index]; visual.root.visible = !!effect; if (effect) visual.update(effect, state, reducedMotion); }
 			gate.visible = journey.remaining <= 1100; gate.position.set(state.routeOrigin.x + state.systems.routeLength, 25, state.routeOrigin.y);
 			for (const [index, beacon] of beacons.entries()) { const at = beaconFor(index, state); beacon.position.set(at.x, 0, at.y); beacon.visible = Math.abs(at.x - state.ark.x) <= 1100; }
 			for (const { points, parallax, origins } of stars) { points.position.set(state.ark.x, 0, state.ark.y); const position = points.geometry.getAttribute('position'); for (let i = 0; i < position.count; i++) position.setX(i, (((origins[i * 3] ?? 0) - drift * parallax + 1500) % 3000 + 3000) % 3000 - 1500); position.needsUpdate = true; }
