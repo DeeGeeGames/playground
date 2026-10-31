@@ -10,9 +10,9 @@ const escort = function (kind: EscortKind): Group {
 	return createEscort({ id: 2, kind, x: 0, y: 0, hp: 100, cooldown: 0, angle: 0 });
 };
 const fixtures = [
-	{ name: 'interceptor', create: function () { return escort('interceptor'); }, length: 36, beam: 14 },
+	{ name: 'interceptor', create: function () { return escort('interceptor'); }, length: 30, beam: 20 },
 	{ name: 'guardian', create: function () { return escort('guardian'); }, length: 58, beam: 21 },
-	{ name: 'raider', create: function () { return hostile('raider'); }, length: 42, beam: 17 },
+	{ name: 'raider', create: function () { return hostile('raider'); }, length: 35, beam: 24 },
 	{ name: 'bomber', create: function () { return hostile('bomber'); }, length: 53, beam: 30 },
 	{ name: 'armored', create: function () { return hostile('armored'); }, length: 70, beam: 31 },
 	{ name: 'flagship', create: function () { return hostile('flagship'); }, length: 115, beam: 76 },
@@ -55,14 +55,14 @@ test.each(fixtures)('$name keeps its tactical scale, closed hull and independent
 });
 
 test('interceptor and bomber drives remain visible past their swept stern armor', function () {
-	for (const { model, height, across, offset } of [
-		{ model: escort('interceptor'), height: -0.2, across: 2.4, offset: 0.5 },
-		{ model: hostile('bomber'), height: -0.5, across: 10, offset: 0.7 },
+	for (const { model, height, across, offset, beamScale } of [
+		{ model: escort('interceptor'), height: -0.2, across: 2.4, offset: 0.5, beamScale: 1 },
+		{ model: hostile('bomber'), height: -0.5, across: 10, offset: 0.7, beamScale: 0.7 },
 	]) {
 		try {
 			model.updateMatrixWorld(true);
 			for (const side of [-1, 1]) {
-				const ray = new Raycaster(new Vector3(-200, height, side * (across + offset) * 0.7), new Vector3(1, 0, 0));
+				const ray = new Raycaster(new Vector3(-200, height, side * (across + offset) * beamScale), new Vector3(1, 0, 0));
 				expect(ray.intersectObject(model, true)[0]?.object.name).toBe('drive');
 			}
 		} finally { disposeObject(model); }
