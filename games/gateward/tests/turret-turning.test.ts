@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { build, createState, step, WEAPONS, type Weapon } from '../src/simulation';
 
 const fixture = function (weapon: Weapon) {
-	const state = createState(); build(state, 0, weapon);
+	// These fixtures isolate turning, including targets across the fore/aft seam.
+	const state = createState({ coverageDegrees: 360 }); build(state, 0, weapon);
 	state.status = 'running'; state.nextWave = Infinity;
 	const mount = state.mounts[0]; if (!mount) throw new Error('Missing mount');
 	const enemy = { id: 999, kind: 'armored' as const, x: mount.x + 150, y: mount.y, hp: 10000, maxHp: 10000, cooldown: 999 };

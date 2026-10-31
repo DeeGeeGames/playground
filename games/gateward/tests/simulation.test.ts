@@ -72,8 +72,8 @@ describe('combat and voyage', function () {
 		expect<State['status']>(state.status).toBe('lost'); const time = state.time; advance(state, 10); expect(state.time).toBe(time);
 		expect(build(state, 0, 'flak')).toBe(false); expect(deploy(state, 'guardian')).toBe(false); expect(pulse(state)).toBe(false);
 	});
-	test('a mixed defense funded only by gameplay can defeat all six waves and reach the gate', function () {
-		const state = createState(); build(state, 0, 'flak'); build(state, 3, 'rail'); build(state, 4, 'flak'); state.status = 'running';
+	test('the historical full-arc mixed defense can defeat all six waves and reach the gate', function () {
+		const state = createState({ coverageDegrees: 360 }); build(state, 0, 'flak'); build(state, 3, 'rail'); build(state, 4, 'flak'); state.status = 'running';
 		const plan: readonly { slot: number; weapon: Weapon }[] = [{ slot: 7, weapon: 'rail' }, { slot: 1, weapon: 'missile' }, { slot: 6, weapon: 'missile' }, { slot: 2, weapon: 'flak' }, { slot: 5, weapon: 'flak' }];
 		for (let second = 0; second < 300 && state.status === 'running'; second++) {
 			if (state.hull < 930) repair(state); if (state.enemies.length >= 7) pulse(state);

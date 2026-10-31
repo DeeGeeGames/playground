@@ -9,7 +9,7 @@ import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
 import { createEngineeringPanel } from './engineering-panel';
 import { powerOutputs } from './systems';
-import { contactDescription, inspectorName, presetFor, type Inspector } from './play-screen';
+import { contactDescription, inspectorName, presetFor, priorityCoverage, type Inspector } from './play-screen';
 import { contactIntel, SENSOR_CONFIG, sensorRanges } from './sensors';
 import { createInterdictionPanel } from './interdiction-panel';
 import { systemsResultMessage, systemsSummary } from './trial-summary';
@@ -254,7 +254,7 @@ const shutdown = await mountGame('game', async function (container) {
 		const allocation = state.systems.allocation; const preset = presetFor(allocation);
 		label(element('reactor-current'), `Power · ${preset ?? 'Custom'}`);
 		label(element('reactor-split'), `${allocation.engines}E / ${allocation.weapons}W / ${allocation.shields}S`);
-		label(element('contact-info'), contactDescription(state, inspectedContact ?? state.priority));
+		label(element('contact-info'), `${contactDescription(state, inspectedContact ?? state.priority)} ${priorityCoverage(state, selected)}`.trim());
 		button('open-systems').disabled = !active; button('open-reactor').disabled = !active;
 		const field = state.systems.interdiction.field;
 		const fieldReason = interdictionReason(state);
@@ -311,6 +311,7 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.mountTitle, `MOUNT 0${selected + 1} / ${selected < 4 ? 'PORT' : 'STARBOARD'} ${position}`);
 		label(ui.mountInfo, mount.weapon ? `${WEAPONS[mount.weapon].name} · Level ${mount.level} / 3 · ${Math.round(WEAPONS[mount.weapon].range * (1 + (mount.level - 1) * 0.12))}m range · ${Math.round(WEAPONS[mount.weapon].rotationSpeed * 180 / Math.PI)}°/s turn` : 'Empty hardpoint');
 		label(ui.mountInfo, ui.mountInfo.textContent + (state.coverageDegrees < 360 ? ` · ${state.coverageDegrees}° outward coverage` : ' · full firing arc'));
+		label(ui.mountInfo, `${ui.mountInfo.textContent} ${priorityCoverage(state, selected)}`.trim());
 		ui.build.hidden = !!mount.weapon; ui.upgradeOptions.hidden = !mount.weapon;
 		label(ui.upgrade, mount.level >= 3 ? 'FULLY UPGRADED' : `UPGRADE TO LV ${mount.level + 1} · ${upgradeCost(mount)}`);
 		ui.upgrade.disabled = !active || mount.level >= 3 || state.salvage < upgradeCost(mount);
@@ -342,7 +343,8 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.rally.hidden = state.experimental; label(element('escort-help'), state.experimental ? 'Buy ready wings, then scramble a sector. Guardians hold their own sector. Reserve craft count toward nine slots.' : 'Escorts engage near their shared rally point.'); ui.rally.disabled = !active; ui.rally.classList.toggle('active', rallyMode); ui.rally.setAttribute('aria-pressed', String(rallyMode));
 		label(ui.rally, rallyMode ? 'Click space to place rally point' : '⌖ Set escort rally point');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
-		label(ui.hint, placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.experimental ? 'Select a mount for coverage · Click hostile for turret priority · Order escorts in bay' : rallyMode ? 'RALLY MODE · Click or tap a location for all escorts' : state.priority !== undefined ? 'PRIORITY LOCK · Weapons focus the marked hostile when in range' : 'Click mount to build · Click empty space to rally · Click hostile to focus');
+		label(element('coverage-setting'), `${mode === 'voyage' ? 'Full Voyage' : mode === 'drill' ? 'Escort Drill' : 'Systems Trial'} · ${state.coverageDegrees}° ${state.coverageDegrees < 360 ? 'outward coverage' : 'full coverage'}`);
+		label(ui.hint, placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.experimental ? 'Select a mount for coverage · Click hostile for turret priority · Order escorts in bay' : rallyMode ? 'RALLY MODE · Click or tap a location for all escorts' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Click empty space to rally · Click hostile to focus');
 		label(ui.message, state.messageTime > 0 ? state.message : ''); label(ui.speed, `${speed}×`); ui.speed.disabled = briefing || !contextAvailable || !state.focused || state.status === 'won' || state.status === 'lost';
 		label(ui.pause, paused ? 'Resume' : 'Menu'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
 	};
