@@ -14,6 +14,7 @@ import { shieldAppearance } from './shield-view';
 import { canAcquire, contactIntel } from './sensors';
 import { INTERDICTION_CONFIG } from './interdiction';
 import { mountWorld, worldPoint } from './space';
+import { drawTacticalRing } from './tactical-ring';
 
 type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'hull' };
 export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined }
@@ -249,6 +250,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	};
 	const drawLabels = function (state: State, selected: number) {
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, view.width, view.height);
+		drawTacticalRing(ctx, state, view);
 		for (const [value, point] of [['PORT', { x: 0, y: -380 }], ['STARBOARD', { x: 0, y: 380 }], ['BOW →', { x: 420, y: 0 }], ['← ASTERN', { x: -420, y: 0 }]] as const) text(value, toScreen(worldPoint(state, point), view), '#63818f', view.width < 650 ? 8 : 10);
 		for (const [index, mount] of state.mounts.entries()) {
 			if (!mountVisibility[index]) continue;
@@ -274,10 +276,6 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				ctx.fillStyle = '#142332'; ctx.fillRect(at.x - width / 2, at.y, width, 3);
 				ctx.fillStyle = '#e78b82'; ctx.fillRect(at.x - width / 2, at.y, width * Math.max(0, enemy.hp / enemy.maxHp), 3);
 			}
-			const marker = edgeIndicator(enemy, view); if (!marker) continue;
-			ctx.save(); ctx.translate(marker.point.x, marker.point.y); ctx.rotate(marker.angle);
-			ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-6, -5); ctx.lineTo(-6, 5); ctx.closePath(); ctx.fillStyle = '#f59682'; ctx.fill(); ctx.restore();
-			if (intel === 'detected') text('?', { x: marker.point.x, y: marker.point.y - 10 }, '#d7bf89', 11);
 		}
 		for (const escort of state.escorts) if (escort.sector) text(`G${escort.id} · ${escort.sector}`, toScreen(escort, view, FLIGHT_HEIGHT + 42), '#a6d4d9', 9);
 		for (const escort of state.escorts) if (escort.hp < ESCORTS[escort.kind].hp) { const at = toScreen(escort, view, FLIGHT_HEIGHT + 29); ctx.fillStyle = '#89d5de'; ctx.fillRect(at.x - 13, at.y, 26 * Math.max(0, escort.hp / ESCORTS[escort.kind].hp), 3); }
