@@ -94,7 +94,7 @@ describe('reproducible equipped trial strategies', function () {
 		const first = runTrialStrategy('weapons-then-balanced');
 		expect(first).toEqual(runTrialStrategy('weapons-then-balanced'));
 		expect(first.summary?.reason).toBe('arrival'); expect(first.summary?.powerChanges).toBe(2);
-		expect(first.summary?.elapsed).toBeCloseTo(145, 1); expect(first.summary?.kills).toBe(30);
+		expect(first.summary?.elapsed).toBeCloseTo(145, 1); expect(first.summary?.kills).toBe(33);
 		expect(first.summary?.contacts).toBe(5);
 	});
 	for (const preset of ['balanced', 'engines', 'weapons', 'shields'] as const) test(`${preset} uses identical fitting and orders and repeats its complete outcome`, function () {
@@ -104,7 +104,7 @@ describe('reproducible equipped trial strategies', function () {
 		expect(first.summary?.contacts).toBe(5);
 		// A weapons-heavy run can eliminate every attacker before shields take damage.
 		if (preset !== 'weapons') expect(first.summary?.shieldAbsorbed).toBeGreaterThan(0);
-		else expect(first.summary?.kills).toBe(30);
+		else expect(first.summary?.kills).toBe(33);
 		expect(first.summary?.powerChanges).toBe(preset === 'balanced' ? 0 : 1);
 	});
 	test('same balanced fitting plus one approach-phase field redirects real contacts and repeats the full outcome', function () {

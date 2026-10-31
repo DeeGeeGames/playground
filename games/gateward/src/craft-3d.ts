@@ -1,3 +1,4 @@
+import { craftScale } from './ship-config';
 import { CRAFT_MOUNTS, hasCraftTurrets, type CraftAim, type TurretCraft } from './craft-turrets';
 import { BoxGeometry, BufferGeometry, Color, Float32BufferAttribute, Group, Mesh, MeshStandardMaterial } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -23,7 +24,7 @@ const palette = function (hostile?: EnemyKind): Palette {
 	// recognition marks, leaving the same steel, dark seams and warm glazing.
 	const plates: Record<EnemyKind, Point3> = {
 		raider: [0.27, 0.16, 0.145], bomber: [0.29, 0.225, 0.14],
-		armored: [0.235, 0.19, 0.25], flagship: [0.24, 0.155, 0.16],
+		carrier: [0.24, 0.155, 0.16], armored: [0.235, 0.19, 0.25], flagship: [0.24, 0.155, 0.16],
 	};
 	return {
 		core: metal([0.055, 0.068, 0.081]),
@@ -188,10 +189,23 @@ export const createEscort = function (escort: Escort): Group {
 		vents(parts, 10, 6.8, 0, 3, 1.3);
 	}
 	const root = finish(`Escort_${escort.kind}_${escort.id}`, parts, palette(), escort.kind === 'guardian');
-	return escort.kind === 'guardian' ? addCraftTurrets(root, 'guardian') : root;
+	if (escort.kind === 'guardian') addCraftTurrets(root, 'guardian');
+	root.scale.setScalar(craftScale(escort.kind));
+	return root;
 };
 
-export const createEnemy = function (enemy: Enemy): Group {
+export const createEnemy = function (enemy: Enemy, carrierTemplate?: Group): Group {
+	if (enemy.kind === 'carrier') {
+		if (!carrierTemplate) throw new Error('Enemy carrier model unavailable');
+		const root = carrierTemplate.clone(true); root.visible = true;
+		root.name = `Enemy_carrier_${enemy.id}`; root.scale.setScalar(craftScale(enemy.kind));
+		root.traverse(function (object) {
+			if (!(object instanceof Mesh)) return;
+			object.geometry = object.geometry.clone();
+			object.material = Array.isArray(object.material) ? object.material.map(function (material) { return material.clone(); }) : object.material.clone();
+		});
+		return root;
+	}
 	const parts: Parts = new Map();
 	if (enemy.kind === 'raider') {
 		body(parts, 'core', [[-12, 4, 1.5, -2.5], [-6, 7, 2.5, -2.5], [13, 3, 1.2, -1.5], [18, 0.8, 0, -1]]);
@@ -275,5 +289,7 @@ export const createEnemy = function (enemy: Enemy): Group {
 		for (const x of [3, 21, 38]) vents(parts, x, 13.2, 0, 4, 2.2);
 	}
 	const root = finish(`Hostile_${enemy.kind}_${enemy.id}`, parts, palette(enemy.kind), enemy.kind === 'bomber' || enemy.kind === 'armored');
-	return hasCraftTurrets(enemy.kind) ? addCraftTurrets(root, enemy.kind) : root;
+	if (hasCraftTurrets(enemy.kind)) addCraftTurrets(root, enemy.kind);
+	root.scale.setScalar(craftScale(enemy.kind));
+	return root;
 };

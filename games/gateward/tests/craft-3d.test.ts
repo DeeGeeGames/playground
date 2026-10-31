@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { Box3, Group, Material, Mesh, Raycaster, Vector3 } from 'three';
 import { createEnemy, createEscort, disposeObject } from '../src/actors-3d';
+import { craftScale } from '../src/ship-config';
 import type { EnemyKind, EscortKind } from '../src/simulation';
 
 const hostile = function (kind: EnemyKind): Group {
@@ -24,8 +25,10 @@ test.each(fixtures)('$name keeps its tactical scale, closed hull and independent
 	try {
 		model.updateMatrixWorld(true);
 		const size = new Box3().setFromObject(model).getSize(new Vector3());
-		expect(size.x).toBeLessThan(fixture.length);
-		expect(size.z).toBeLessThan(fixture.beam);
+		const scale = craftScale(fixture.name);
+		expect(model.scale.toArray()).toEqual([scale, scale, scale]);
+		expect(size.x).toBeLessThan(fixture.length * craftScale(fixture.name));
+		expect(size.z).toBeLessThan(fixture.beam * craftScale(fixture.name));
 		// Outside rays must hit solid hull surfaces from above, below, bow, stern
 		// and either side. Reversed loft/cap winding would break orbit picking.
 		for (const direction of [new Vector3(1, 0, 0), new Vector3(-1, 0, 0), new Vector3(0, 1, 0), new Vector3(0, -1, 0), new Vector3(0, 0, 1), new Vector3(0, 0, -1)]) {
@@ -62,7 +65,7 @@ test('interceptor and bomber drives remain visible past their swept stern armor'
 		try {
 			model.updateMatrixWorld(true);
 			for (const side of [-1, 1]) {
-				const ray = new Raycaster(new Vector3(-200, height, side * (across + offset) * beamScale), new Vector3(1, 0, 0));
+				const ray = new Raycaster(new Vector3(-200, height * model.scale.y, side * (across + offset) * beamScale * model.scale.z), new Vector3(1, 0, 0));
 				expect(ray.intersectObject(model, true)[0]?.object.name).toBe('drive');
 			}
 		} finally { disposeObject(model); }

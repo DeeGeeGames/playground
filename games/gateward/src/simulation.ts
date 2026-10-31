@@ -1,3 +1,4 @@
+import { CARRIER_BAYS, CARRIER_LAUNCH, craftScale, enemyRadius } from './ship-config';
 import { craftTurretSolution, hasCraftTurrets, type CraftAim } from './craft-turrets';
 import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fieldBlocks, INTERDICTION_CONFIG, navigateField, type Detour } from './interdiction';
 import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
@@ -8,7 +9,7 @@ import { arkVelocity, flightVelocity, localPoint, mountWorld, worldPoint } from 
 import { createEscortCoverage, coveragePlan, coverageStation, pointSector, type CoveragePriority, type EscortCoverage } from './escort-coverage';
 export type Point = { x: number; y: number };
 export type Weapon = 'flak' | 'rail' | 'missile' | 'beam';
-export type EnemyKind = 'raider' | 'bomber' | 'armored' | 'flagship';
+export type EnemyKind = 'raider' | 'bomber' | 'armored' | 'flagship' | 'carrier';
 export type EscortKind = 'interceptor' | 'guardian';
 export const MAX_HULL = 1200;
 export const ROUTE_SECONDS = 210;
@@ -28,6 +29,7 @@ export const ESCORTS = {
 	guardian: { name: 'Guardian', cost: 105, count: 1, hp: 260, speed: 85, range: 240, damage: 24, reload: 0.9 },
 };
 export const ENEMIES = {
+	carrier: { hp: 600, speed: 38, range: 400, damage: 0, reload: 1, reward: 45, armor: 0.7 },
 	raider: { hp: 45, speed: 50, range: 100, damage: 7, reload: 1.2, reward: 9, armor: 1 },
 	bomber: { hp: 95, speed: 30, range: 290, damage: 34, reload: 3.8, reward: 17, armor: 1 },
 	armored: { hp: 260, speed: 40, range: 185, damage: 22, reload: 2.4, reward: 28, armor: 0.48 },
@@ -36,7 +38,7 @@ export const ENEMIES = {
 export interface Mount extends Point { integrity: number; weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
 export const BOMBER_ATTACK = { windup: 2, releaseCue: 0.35 } as const;
 export type BomberAttack = { phase: 'windup'; remaining: number; target: number | undefined } | { phase: 'released'; remaining: number };
-export interface Enemy extends Point { subsystemTarget?: string; approaching?: boolean; bomberAttack?: BomberAttack; turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
+export interface Enemy extends Point { hangar?: { remaining: number; launched: number; cooldown: number }; launchRemaining?: number; launchedBy?: number; subsystemTarget?: string; approaching?: boolean; bomberAttack?: BomberAttack; turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
 export interface Escort extends Point { turretAim?: CraftAim; flight?: Flight; wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
 export interface Shot extends Point { originHeight?: number; origin?: Point; sourceVelocity?: Point; beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
 export type CombatFeedback =
@@ -44,7 +46,7 @@ export type CombatFeedback =
 	| { kind: 'impact'; shield: number; armor: number; hull: number; deck: boolean }
 	| { kind: 'destruction' };
 export interface Effect extends Point { feedback?: CombatFeedback; sourceShot?: Shot; radius: number; life: number; maxLife: number; color: string }
-export interface Arrival { at: number; kind: EnemyKind; x: number; y: number }
+export interface Arrival { fighters?: number; at: number; kind: EnemyKind; x: number; y: number }
 export const SECTORS = ['port', 'starboard', 'ahead', 'astern'] as const;
 export type Sector = typeof SECTORS[number];
 export const SECTOR_POINTS: Record<Sector, Point> = { port: { x: 0, y: -230 }, starboard: { x: 0, y: 230 }, ahead: { x: 280, y: 0 }, astern: { x: -280, y: 0 } };
@@ -79,7 +81,7 @@ export const mountTarget = function (state: State, mount: Mount): Enemy | undefi
 	const score = function (enemy: Enemy): number {
 		if (weapon === 'missile') return visible.filter(function (other) { return other.id !== enemy.id && distance(enemy, other) < MISSILE_SPLASH_RADIUS; }).length;
 		if (contactIntel(state, enemy) !== 'classified') return 0;
-		return Number(weapon === 'flak' ? enemy.kind === 'raider' : weapon === 'rail' && (enemy.kind === 'armored' || enemy.kind === 'flagship'));
+		return Number(weapon === 'flak' ? enemy.kind === 'raider' : weapon === 'rail' && isCapital(enemy));
 	};
 	const origin = mountWorld(state, mount);
 	return candidates.map(function (enemy) { return { enemy, score: score(enemy), distance: distance(origin, enemy) }; })
@@ -365,18 +367,46 @@ const waveArrivals = function (wave: number, at: number): Arrival[] {
 		return { at: at + i * (wave === 5 ? 0.45 : 0.9), kind, x: Math.cos(arrivalAngle) * (APPROACH.spawnRange + i % 3 * 100), y: Math.sin(arrivalAngle) * (APPROACH.spawnRange + i % 3 * 100) };
 	});
 };
+// Keep each flank's finite fighter complement aboard one arriving carrier.
+export const embarkFighters = function (arrivals: readonly Arrival[]): Arrival[] {
+	const result = arrivals.filter(function (arrival) { return arrival.kind !== 'raider'; });
+	for (const side of [-1, 1]) {
+		const fighters = arrivals.filter(function (arrival) { return arrival.kind === 'raider' && (arrival.y < 0 ? -1 : 1) === side; });
+		const first = fighters[0];
+		if (first) result.push({ ...first, kind: 'carrier', fighters: fighters.length });
+	}
+	return result.sort(function (a, b) { return a.at - b.at; });
+};
 const startWave = function (state: State) {
 	state.wave += 1; state.nextWave = 5 + state.wave * WAVE_INTERVAL; state.cleared = false;
-	state.arrivals.push(...waveArrivals(state.wave, state.time));
+	state.arrivals.push(...embarkFighters(waveArrivals(state.wave, state.time)));
 };
 const startEncounter = function (state: State) {
 	const encounter = state.scenario?.encounters[state.wave]; if (!encounter) return;
 	state.wave++; state.cleared = false; state.nextWave = approachAt(state.scenario?.encounters[state.wave]?.at ?? Infinity);
 	const base = SECTOR_POINTS[encounter.sector]; const angle = Math.atan2(base.y, base.x);
+	const arrivals: Arrival[] = [];
 	for (let i = 0; i < encounter.count; i++) {
 		const bearing = angle + Math.sin(i * 2.4) * 0.35;
-		state.arrivals.push({ at: approachAt(encounter.at) + i * encounter.spacing, kind: encounter.kind, x: Math.cos(bearing) * (APPROACH.spawnRange + i % 3 * 100), y: Math.sin(bearing) * (APPROACH.spawnRange + i % 3 * 100) });
+		arrivals.push({ at: approachAt(encounter.at) + i * encounter.spacing, kind: encounter.kind, x: Math.cos(bearing) * (APPROACH.spawnRange + i % 3 * 100), y: Math.sin(bearing) * (APPROACH.spawnRange + i % 3 * 100) });
 	}
+	state.arrivals.push(...embarkFighters(arrivals));
+};
+const advanceCarrierHangar = function (state: State, carrier: Enemy, flight: Flight, dt: number): void {
+	const hangar = carrier.hangar;
+	if (!hangar || hangar.remaining <= 0 || distance(carrier, state.ark) > CARRIER_LAUNCH.range) return;
+	hangar.cooldown -= dt;
+	if (hangar.cooldown > 0) return;
+	const bay = CARRIER_BAYS[hangar.launched % CARRIER_BAYS.length];
+	if (!bay) return;
+	const c = Math.cos(flight.angle); const s = Math.sin(flight.angle); const scale = craftScale('carrier');
+	const position = { x: carrier.x + scale * (c * bay.x - s * bay.y), y: carrier.y + scale * (s * bay.x + c * bay.y) };
+	const exit = { x: position.x + c * CARRIER_LAUNCH.speed * CARRIER_LAUNCH.clearanceTime, y: position.y + s * CARRIER_LAUNCH.speed * CARRIER_LAUNCH.clearanceTime };
+	const field = state.systems.interdiction.field;
+	if (field && circleHit(position, exit, field.world, enemyClearance({ kind: 'raider' }))) return;
+	state.enemies.push({ ...position, id: state.nextId++, kind: 'raider', hp: ENEMIES.raider.hp, maxHp: ENEMIES.raider.hp, cooldown: 0.8,
+		launchedBy: carrier.id, launchRemaining: CARRIER_LAUNCH.clearanceTime, flight: { ...flight, speed: CARRIER_LAUNCH.speed, course: 'intercept' } });
+	hangar.remaining--; hangar.launched++; hangar.cooldown += CARRIER_LAUNCH.interval;
 };
 export const durationFor = function (state: State): number { return state.scenario?.duration ?? ROUTE_SECONDS; };
 const contactDirection = function (point: Point): string {
@@ -481,7 +511,7 @@ export const step = function (state: State, dt: number) {
 	state.salvage += dt * 1.2;
 	if (state.time >= state.nextWave) { if (state.scenario) startEncounter(state); else if (state.wave < WAVE_COUNT) startWave(state); }
 	for (const arrival of state.arrivals.filter(function (a) { return a.at <= state.time; })) {
-		const config = ENEMIES[arrival.kind]; const position = arrivalOutsideField(state, worldPoint(state, arrival), arrival.kind); state.enemies.push({ id: state.nextId++, approaching: true, kind: arrival.kind, x: position.x, y: position.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8 });
+		const config = ENEMIES[arrival.kind]; const position = arrivalOutsideField(state, worldPoint(state, arrival), arrival.kind); state.enemies.push({ id: state.nextId++, approaching: true, kind: arrival.kind, x: position.x, y: position.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8, ...(arrival.kind === 'carrier' ? { hangar: { remaining: arrival.fighters ?? 8, launched: 0, cooldown: 0 } } : {}) });
 	}
 	state.arrivals = state.arrivals.filter(function (a) { return a.at > state.time; });
 	clearLostPriority(state);
@@ -545,9 +575,18 @@ export const step = function (state: State, dt: number) {
 			}
 		}
 	}
-	for (const enemy of state.enemies) {
+	for (const enemy of [...state.enemies]) {
 		if (enemy.hp <= 0) continue;
 		const config = ENEMIES[enemy.kind]; enemy.cooldown -= dt;
+		if (enemy.launchRemaining !== undefined && enemy.launchRemaining > 0 && enemy.flight) {
+			const next = { x: enemy.x + Math.cos(enemy.flight.angle) * enemy.flight.speed * dt, y: enemy.y + Math.sin(enemy.flight.angle) * enemy.flight.speed * dt };
+			const field = state.systems.interdiction.field;
+			if (!field || !circleHit(enemy, next, field.world, enemyClearance(enemy))) {
+				enemy.launchRemaining = Math.max(0, enemy.launchRemaining - dt);
+				enemy.x = next.x; enemy.y = next.y;
+			}
+			continue;
+		}
 		const escort = nearest(enemy, state.escorts.filter(function (craft) { return craft.hp > 0; }), 180);
 		const relative = localPoint(state, enemy);
 		const arkTarget = worldPoint(state, { x: Math.max(-110, Math.min(110, relative.x)), y: Math.max(-30, Math.min(30, relative.y)) });
@@ -563,6 +602,7 @@ export const step = function (state: State, dt: number) {
 			: isCapital(enemy) ? capitalCourse(state, enemy, flight, config.range, config.speed)
 			: fighterCourse(enemy, escort ?? state.ark, escort ? 60 : enemy.kind === 'bomber' ? 265 : 195, escort ? 60 : enemy.kind === 'bomber' ? 225 : 105, config.speed, enemy.id % 2 ? -1 : 1, escort ? flightVelocity(escort.flight) : carrierVelocity, state.enemies);
 		fly(enemy, flight, desired, flightSpeed, isCapital(enemy) ? 0.7 : 3, dt);
+		if (enemy.kind === 'carrier') { advanceCarrierHangar(state, enemy, flight, dt); continue; }
 		const shotSpeed = enemy.kind === 'bomber' ? 155 : 235;
 		const escortSolution = escort ? hostileSolution(enemy, escort, flightVelocity(escort.flight), shotSpeed) : undefined;
 		const firingEscort = escortSolution ? escort : undefined;
@@ -604,7 +644,7 @@ export const step = function (state: State, dt: number) {
 		}
 		shot.x += shot.vx * dt; shot.y += shot.vy * dt;
 		if (shot.side === 'player') {
-			const hit = state.enemies.find(function (enemy) { return enemy.hp > 0 && movingContact(enemy, previousEnemies.get(enemy.id) ?? enemy, before, shot, enemy.kind === 'flagship' ? 38 : enemy.kind === 'armored' ? 23 : 15); });
+			const hit = state.enemies.find(function (enemy) { return enemy.hp > 0 && movingContact(enemy, previousEnemies.get(enemy.id) ?? enemy, before, shot, enemyRadius(enemy.kind)); });
 			if (!hit) continue;
 			shot.life = 0;
 			if (shot.weapon === 'missile') { for (const enemy of state.enemies) if (distance(hit, enemy) < MISSILE_SPLASH_RADIUS) { enemyFeedback(state, enemy, shot.damage, shot.weapon); damageEnemy(enemy, shot.damage, shot.weapon); } effect(state, hit, MISSILE_SPLASH_RADIUS, '#f9c875'); }
@@ -615,7 +655,7 @@ export const step = function (state: State, dt: number) {
 			if (blocked) {
 				effect(state, blocked, 20, '#d7bf89', shot); shot.life = 0; state.systems.interdiction.blockedShots++; continue;
 			}
-			const hit = state.escorts.find(function (escort) { return escort.hp > 0 && movingContact(escort, previousEscorts.get(escort.id) ?? escort, before, shot, escort.kind === 'guardian' ? 20 : 12); });
+			const hit = state.escorts.find(function (escort) { return escort.hp > 0 && movingContact(escort, previousEscorts.get(escort.id) ?? escort, before, shot, (escort.kind === 'guardian' ? 20 : 12) * craftScale(escort.kind)); });
 			if (hit) { impactFeedback(state, hit, shot.damage); hit.hp -= shot.damage; shot.life = 0; effect(state, hit, 15, '#ff897e'); }
 			else {
 				const impact = hullContact(state, previousArk, before, shot);

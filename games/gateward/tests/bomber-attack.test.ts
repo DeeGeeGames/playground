@@ -60,7 +60,8 @@ describe('bomber response window', function () {
 		const cleared = setup(); expect(untilShot(cleared)).toBe(release); expect(pulse(cleared)).toBe(true); advance(cleared, 2);
 		expect(cleared.systems.sensors.integrity).toBe(100); expect(cleared.hull).toBe(1200);
 		const early = setup(); step(early, 1 / 60); pulse(early); untilShot(early); advance(early, 2);
-		expect(early.systems.sensors.integrity).toBe(66); expect(early.hull).toBeCloseTo(1193.2);
+		// The scaled muzzle and pulse displacement move this impact off the sensor array.
+		expect(early.systems.sensors.integrity).toBe(100); expect(early.hull).toBeCloseTo(1193.2);
 		const late = setup(); untilShot(late); advance(late, 2); pulse(late);
 		expect(late.systems.sensors.integrity).toBe(66); expect(late.hull).toBe(1166);
 	});

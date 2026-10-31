@@ -1,3 +1,4 @@
+import { enemyRadius } from './ship-config';
 import { OrthographicCamera, Plane, Raycaster, Vector2, Vector3 } from 'three';
 import { distance, type Enemy, type Mount, type Point } from './simulation';
 import { TURRET_RISE, TURRET_SCALE } from './ship-config';
@@ -116,7 +117,7 @@ export const pickEnemy = function (point: Point, view: View, enemies: readonly E
 		return {
 			enemy,
 			d: distance(point, toScreen(enemy, view, FLIGHT_HEIGHT)),
-			radius: Math.max(14, (enemy.kind === 'flagship' ? 62 : enemy.kind === 'armored' ? 33 : 27) * view.scale),
+			radius: Math.max(14, (enemyRadius(enemy.kind) * 1.5) * view.scale),
 			cameraDistance: cameraDistance(enemy, view, FLIGHT_HEIGHT),
 		};
 	}).filter(function (candidate) { return candidate.d <= candidate.radius; })

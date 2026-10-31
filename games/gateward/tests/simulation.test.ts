@@ -83,7 +83,7 @@ describe('combat and voyage', function () {
 			for (let i = 0; i < 8; i++) upgrade(state, i);
 			advance(state, 1);
 		}
-		expect<State['status']>(state.status).toBe('won'); expect(state.time).toBeGreaterThanOrEqual(ROUTE_SECONDS); expect(state.wave).toBe(6); expect(state.kills).toBe(86); expect(state.hull).toBeGreaterThan(0); expect(state.enemies).toHaveLength(0);
+		expect<State['status']>(state.status).toBe('won'); expect(state.time).toBeGreaterThanOrEqual(ROUTE_SECONDS); expect(state.wave).toBe(6); expect(state.kills).toBe(96); expect(state.hull).toBeGreaterThan(0); expect(state.enemies).toHaveLength(0);
 	});
 	test('a wave-clear repair cannot revive a hull destroyed during the final exchange', function () {
 		const state = createState(); state.status = 'running'; state.wave = 6; state.time = ROUTE_SECONDS; state.hull = 10; state.systems.shield.charge = 0;
