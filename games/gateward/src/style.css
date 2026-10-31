@@ -63,6 +63,7 @@ meter::-moz-meter-bar { background:#c6d6ae; }
 .trial-status.urgent b,.trial-status.urgent #trial-eta { color:#f1b585; }
 .sector { position:absolute; top:var(--top); left:calc(var(--left) + 348px); max-width:320px; padding:10px 12px; background:#1c2630ed; border-left:2px solid #e9b77b; pointer-events:none; }
 .sector>span { display:block; color:#e9b77b; font:11px monospace; letter-spacing:.5px; }
+.sector small { display:block; margin-top:6px; color:var(--cyan); font:10px monospace; }
 .sector b { font-weight:400; font-size:12px; display:block; margin-top:5px; color:#c6d4dc; }
 .menu-toggle { position:absolute; top:var(--top); right:var(--right); background:var(--panel); }
 button[aria-pressed="true"],button.selected,.primary { background:var(--mint); border-color:#a3e8d6; color:#0c252c; }

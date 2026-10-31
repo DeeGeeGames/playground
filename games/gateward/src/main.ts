@@ -273,6 +273,7 @@ const shutdown = await mountGame('game', async function (container) {
 		label(element('sensor-integrity'), `${Math.ceil(sensors.integrity)} / ${SENSOR_CONFIG.maxIntegrity}`);
 		label(element('sensor-status'), sensors.integrity <= 0 ? 'OFFLINE · nearby defense available' : sensors.integrity < SENSOR_CONFIG.healthyThreshold ? 'IMPAIRED · late and uncertain warnings' : 'HEALTHY · advance warning and acquisition');
 		label(element('sensor-range'), `Detect ${ranges.detection}m · classify ${ranges.classification}m`);
+		label(element('ring-info'), `Bearing ring · ${sensors.integrity <= 0 ? 'local only' : sensors.integrity < SENSOR_CONFIG.healthyThreshold ? 'impaired' : 'detection'} ${ranges.detection}m`);
 		const why = !active ? 'Commands held' : sensors.repairCooldown > 0 ? `Repair cooldown · ${Math.ceil(sensors.repairCooldown)}s` : sensors.integrity >= SENSOR_CONFIG.maxIntegrity ? 'Array at full integrity' : state.salvage < SENSOR_CONFIG.repairCost ? `Needs ${SENSOR_CONFIG.repairCost} salvage` : `Restore array · ${SENSOR_CONFIG.repairCost} salvage`;
 		button('repair-sensors').disabled = !active || sensors.integrity >= SENSOR_CONFIG.maxIntegrity || sensors.repairCooldown > 0 || state.salvage < SENSOR_CONFIG.repairCost;
 		label(element('sensor-repair-info'), why);
