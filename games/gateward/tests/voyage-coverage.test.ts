@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { priorityCoverage } from '../src/play-screen';
 import { build, covered, coverageFor, createState, deploy, setPriority, setRally, step, upgrade } from '../src/simulation';
-import { worldPoint } from '../src/space';
+import { mountWorld, worldPoint } from '../src/space';
 import { runFlankComparison } from '../scripts/coverage-comparison';
 import { runSpendingControl } from '../scripts/combat-pressure';
 
@@ -23,7 +23,7 @@ test('voyage eligibility and priority explanations follow travel, rotation, upgr
 	const arc = coverageFor(state, mount);
 	for (const sign of [-1, 1]) {
 		const angle = arc.center + sign * arc.arc / 2;
-		expect(covered(state, mount, worldPoint(state, { x: mount.x + Math.cos(angle) * arc.range, y: mount.y + Math.sin(angle) * arc.range }))).toBe(true);
+		expect(covered(state, mount, worldPoint(state, { z: mountWorld(state, mount).z ?? 0, x: mount.x + Math.cos(angle) * arc.range, y: mount.y + Math.sin(angle) * arc.range }))).toBe(true);
 		expect(covered(state, mount, worldPoint(state, { x: mount.x + Math.cos(angle + sign * .001) * 100, y: mount.y + Math.sin(angle + sign * .001) * 100 }))).toBe(false);
 	}
 	const enemy = { id: 99, ...worldPoint(state, { x: -96, y: 220 }), hp: 260, maxHp: 260, kind: 'armored' as const, cooldown: 99 };

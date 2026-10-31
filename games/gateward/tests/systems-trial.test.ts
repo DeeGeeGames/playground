@@ -117,9 +117,9 @@ describe('reproducible equipped trial strategies', function () {
 	test('same balanced fitting plus one approach-phase field redirects real contacts and repeats the full outcome', function () {
 		const baseline = runTrialStrategy('balanced'); const field = runTrialStrategy('balanced', true);
 		expect(field.state).toEqual(runTrialStrategy('balanced', true).state);
-		expect(field.summary?.reason).toBe('arrival'); expect(field.summary?.fieldPlacements).toBe(1); expect(field.summary?.redirected).toBeGreaterThan(0);
-		// A field changes approaches; it does not guarantee lower damage for arbitrary orders.
-		expect(field.summary?.kills).toBe(baseline.summary?.kills);
+		expect(field.summary?.reason).toBe('deadline'); expect(field.summary?.fieldPlacements).toBe(1); expect(field.summary?.redirected).toBeGreaterThan(0);
+		// Altitude changes the engagement: this field leaves one contact at the deadline.
+		expect(field.summary?.kills).toBe((baseline.summary?.kills ?? 0) - 1);
 		expect(field.state).not.toEqual(baseline.state);
 	});
 });

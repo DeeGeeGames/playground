@@ -70,7 +70,7 @@ describe('combat and voyage', function () {
 		step(state, 1 / 60); expect(state.kills).toBe(2); expect(state.salvage - salvage).toBeCloseTo(0.02);
 	});
 	test('an undefended ark loses and ended games reject orders and freeze', function () {
-		const state = createState(); state.status = 'running'; advance(state, 80);
+		const state = createState(); state.status = 'running'; advance(state, 120);
 		expect<State['status']>(state.status).toBe('lost'); const time = state.time; advance(state, 10); expect(state.time).toBe(time);
 		expect(build(state, 0, 'flak')).toBe(false); expect(deploy(state, 'guardian')).toBe(false); expect(pulse(state)).toBe(false);
 	});

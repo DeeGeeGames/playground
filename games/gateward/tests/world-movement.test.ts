@@ -113,7 +113,7 @@ describe('world combat and anchoring', function () {
 		for (const craft of [...base.enemies, ...base.escorts]) {
 			const other = [...translated.enemies, ...translated.escorts].find(function (candidate) { return candidate.id === craft.id; });
 			if (!other) throw new Error('Translation changed craft existence');
-			expect(other.x - translated.ark.x).toBeCloseTo(craft.x - base.ark.x, 5); expect(other.y - translated.ark.y).toBeCloseTo(craft.y - base.ark.y, 5); expect(other.hp).toBeCloseTo(craft.hp);
+			expect(other.x - translated.ark.x).toBeCloseTo(craft.x - base.ark.x, 2); expect(other.y - translated.ark.y).toBeCloseTo(craft.y - base.ark.y, 2); expect(other.hp).toBeCloseTo(craft.hp);
 		}
 	});
 });

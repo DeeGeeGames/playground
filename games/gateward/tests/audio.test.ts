@@ -35,7 +35,7 @@ test('point-blank railgun fire is audible even when its projectile hits in the s
 	const read = createSoundObserver(); const state = createState();
 	build(state, 0, 'rail'); state.status = 'running';
 	state.systems.allocation = { engines: 0, weapons: 4, shields: 6 };
-	state.enemies.push({ id: state.nextId++, kind: 'armored', x: -96, y: -53, hp: 260, maxHp: 260, cooldown: 10 });
+	state.enemies.push({ id: state.nextId++, kind: 'armored', x: -96, y: -53, z: -100.8, hp: 260, maxHp: 260, cooldown: 10 });
 	read(state); step(state, 1 / 60);
 	expect(state.shots).toHaveLength(0);
 	expect(read(state)).toEqual(['rail', 'impact']);

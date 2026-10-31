@@ -31,7 +31,7 @@ for (const engines of [0, 4, 10]) test(`real approach with ${engines} engine pow
 	const { state, enemy } = startApproach(engines);
 	let detection: number | undefined; let shortEntry: number | undefined; let classified: number | undefined;
 	for (let frame = 0; frame < 4800 && classified === undefined; frame++) {
-		const before = { x: enemy.x, y: enemy.y };
+		const before = { x: enemy.x, y: enemy.y, z: enemy.z ?? 0 };
 		step(state, 1 / 60);
 		expect(distance(before, enemy)).toBeLessThanOrEqual(APPROACH.cruiseSpeed / 60 + 1e-8);
 		const intel = contactIntel(state, enemy);
@@ -62,7 +62,7 @@ test('long-range priority cannot extend a weapon range or firing arc', function 
 
 test('an approach remains world anchored and pause freezes both motion and scheduled arrivals', function () {
 	const { state, enemy } = startApproach(4);
-	const before = { x: enemy.x, y: enemy.y };
+	const before = { x: enemy.x, y: enemy.y, z: enemy.z ?? 0 };
 	state.ark.x += 1000; step(state, 1 / 60);
 	expect(distance(before, enemy)).toBeLessThanOrEqual(APPROACH.cruiseSpeed / 60 + 1e-8);
 	state.paused = true;
