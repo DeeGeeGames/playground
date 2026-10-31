@@ -1,4 +1,4 @@
-import { powerOutputs } from './systems';
+import { effectiveOutputs } from './systems';
 import { ROUTE_SECONDS, type State } from './simulation';
 
 export const ROUTE_LENGTH = 2520;
@@ -23,7 +23,7 @@ export const journeyFor = function (state: State) {
 	const systems = state.systems;
 	const distance = systems.distanceTraveled;
 	const remaining = Math.max(0, systems.routeLength - distance);
-	const configuredSpeed = powerOutputs(systems.allocation).speed;
+	const configuredSpeed = effectiveOutputs(systems).speed;
 	const moving = state.status === 'running' && !state.paused && state.focused && remaining > 0;
 	return {
 		distance, remaining,

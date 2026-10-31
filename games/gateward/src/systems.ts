@@ -31,7 +31,11 @@ export const SHIELD_CONFIG = {
 	rechargeDelay: 3,
 } as const;
 
+export const conditionMultiplier = function (integrity: number): number { return integrity <= 0 ? 0 : integrity < 50 ? 0.5 : 1; };
+
 export interface SystemsState {
+	engines: { integrity: number };
+	generator: { integrity: number };
 	interdiction: { field: InterdictionField | undefined; cooldown: number; placements: number; redirected: number; blockedShots: number };
 	sensors: { integrity: number; repairCooldown: number; impairments: number; repairs: number };
 	allocation: Allocation;
@@ -45,6 +49,7 @@ export interface SystemsState {
 
 export const createSystems = function (routeLength: number): SystemsState {
 	return {
+		engines: { integrity: 100 }, generator: { integrity: 100 },
 		interdiction: { field: undefined, cooldown: 0, placements: 0, redirected: 0, blockedShots: 0 },
 		sensors: { integrity: SENSOR_CONFIG.maxIntegrity, repairCooldown: 0, impairments: 0, repairs: 0 },
 		allocation: { ...POWER_PRESETS.balanced }, distanceTraveled: 0, routeLength, powerChanges: 0,
@@ -69,5 +74,10 @@ export const advanceSystems = function (systems: SystemsState, dt: number, arkHi
 	if (arkHit) return;
 	const rechargeTime = Math.max(0, dt - shield.rechargeDelay);
 	shield.rechargeDelay = Math.max(0, shield.rechargeDelay - dt);
-	shield.charge = Math.min(shield.capacity, shield.charge + powerOutputs(systems.allocation).shieldRecharge * rechargeTime);
+	shield.charge = Math.min(shield.capacity, shield.charge + effectiveOutputs(systems).shieldRecharge * rechargeTime);
+};
+
+export const effectiveOutputs = function (systems: SystemsState) {
+	const output = powerOutputs(systems.allocation);
+	return { ...output, speed: output.speed * conditionMultiplier(systems.engines.integrity), shieldRecharge: output.shieldRecharge * conditionMultiplier(systems.generator.integrity) };
 };

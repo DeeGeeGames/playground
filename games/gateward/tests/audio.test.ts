@@ -11,7 +11,7 @@ test('audio observes real orders once and resets across voyages', function () {
 	pulse(state); expect(read(state)).toEqual(['pulse']);
 	pulse(state); expect(read(state)).toEqual([]);
 	state.hull -= 100; expect(read(state)).toEqual(['damage']);
-	repair(state); expect(read(state)).toEqual(['repair']);
+	repair(state); expect(read(state)).toEqual([]); // Assignment does not replay an instant-repair cue.
 	state.status = 'lost'; expect(read(state)).toEqual(['lost']);
 	expect(read(createState())).toEqual([]);
 });

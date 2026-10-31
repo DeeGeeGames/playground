@@ -4,12 +4,12 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, repair, repairSensors, setPriority, setRally, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
+import { build, contactWarning, craftCount, createState, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, REPAIR_CREWS, repair, repairSensors, setPriority, setRally, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
 import { worldPoint } from './space';
 import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
 import { createEngineeringPanel } from './engineering-panel';
-import { powerOutputs } from './systems';
+import { effectiveOutputs, conditionMultiplier } from './systems';
 import { contactDescription, inspectorName, presetFor, priorityCoverage, type Inspector } from './play-screen';
 import { contactIntel, SENSOR_CONFIG, sensorRanges } from './sensors';
 import { createInterdictionPanel } from './interdiction-panel';
@@ -293,16 +293,18 @@ const shutdown = await mountGame('game', async function (container) {
 		label(element('sensor-status'), sensors.integrity <= 0 ? 'OFFLINE · nearby defense available' : sensors.integrity < SENSOR_CONFIG.healthyThreshold ? 'IMPAIRED · late and uncertain warnings' : 'HEALTHY · advance warning and acquisition');
 		label(element('sensor-range'), `Detect ${ranges.detection}m · classify ${ranges.classification}m`);
 		label(element('ring-info'), `Bearing ring · ${sensors.integrity <= 0 ? 'local only' : sensors.integrity < SENSOR_CONFIG.healthyThreshold ? 'impaired' : 'detection'} ${ranges.detection}m`);
-		const why = !active ? 'Commands held' : sensors.repairCooldown > 0 ? `Repair cooldown · ${Math.ceil(sensors.repairCooldown)}s` : sensors.integrity >= SENSOR_CONFIG.maxIntegrity ? 'Array at full integrity' : state.salvage < SENSOR_CONFIG.repairCost ? `Needs ${SENSOR_CONFIG.repairCost} salvage` : `Restore array · ${SENSOR_CONFIG.repairCost} salvage`;
-		button('repair-sensors').disabled = !active || sensors.integrity >= SENSOR_CONFIG.maxIntegrity || sensors.repairCooldown > 0 || state.salvage < SENSOR_CONFIG.repairCost;
+		const usedCrews = Object.values(state.repairs).reduce(function (sum, crews) { return sum + crews; }, 0);
+		const sensorCrews = state.repairs['sensors'] ?? 0;
+		const why = !active ? 'Commands held' : sensorCrews > 0 ? `${sensorCrews} crews working · S releases crews` : sensors.integrity >= SENSOR_CONFIG.maxIntegrity ? 'Array at full integrity' : 'S assigns one free crew · split crews in Reactor';
+		button('repair-sensors').disabled = !active || (sensorCrews === 0 && (sensors.integrity >= SENSOR_CONFIG.maxIntegrity || usedCrews >= REPAIR_CREWS));
 		label(element('sensor-repair-info'), why);
 
 		const chargeMeter = element('shield-meter');
 		if (chargeMeter instanceof HTMLMeterElement) { chargeMeter.max = energyShield.capacity; chargeMeter.value = energyShield.charge; }
 		label(element('shield-charge'), `${Math.ceil(energyShield.charge)} / ${energyShield.capacity}`);
 		const held = briefing || paused || !state.focused || state.status !== 'running';
-		const recharge = powerOutputs(systems.allocation).shieldRecharge;
-		label(element('shield-status'), `${energyShield.charge === 0 ? 'DEPLETED · ' : ''}${held ? 'Recharge held' : energyShield.charge >= energyShield.capacity ? 'Fully charged' : energyShield.rechargeDelay > 0 ? `Recharge in ${Math.ceil(energyShield.rechargeDelay)}s` : recharge > 0 ? `Recharging · +${recharge} / s` : 'Recharge stopped · no shield power'}`);
+		const recharge = effectiveOutputs(systems).shieldRecharge;
+		label(element('shield-status'), `${energyShield.charge === 0 ? 'DEPLETED · ' : ''}${held ? 'Recharge held' : energyShield.charge >= energyShield.capacity ? 'Fully charged' : energyShield.rechargeDelay > 0 ? `Recharge in ${Math.ceil(energyShield.rechargeDelay)}s` : recharge > 0 ? `Recharging · +${recharge} / s` : 'Recharge stopped · generator offline or no power'}`);
 		label(element('purchase-reason'), !active ? 'Commands held' : craftCount(state) >= 9 ? 'Bay full: nine craft slots' : state.salvage < 85 ? 'Insufficient salvage' : state.experimental ? 'Buy wing 85 · ready in bay / Guardian 105' : 'Deploy escorts'); const mount = state.mounts[selected]; if (!mount) return;
 		label(ui.hull, `${Math.ceil(state.hull)} / ${MAX_HULL}`); meter.value = state.hull;
 		const journey = journeyFor(state);
@@ -323,13 +325,14 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.waveInfo, contactWarning(state));
 		for (const [i, control] of mountButtons.entries()) {
 			const m = state.mounts[i]; if (!m) continue;
-			label(control, `${i + 1} ${m.weapon ? m.weapon === 'flak' ? 'F' : m.weapon === 'rail' ? 'R' : m.weapon === 'beam' ? 'B' : 'M' : '·'}${m.level > 1 ? ` ${'⁺'.repeat(m.level - 1)}` : ''}`);
+			label(control, `${i + 1} ${m.weapon ? m.weapon === 'flak' ? 'F' : m.weapon === 'rail' ? 'R' : m.weapon === 'beam' ? 'B' : 'M' : '·'}${m.level > 1 ? ` ${'⁺'.repeat(m.level - 1)}` : ''}${m.weapon && m.integrity < 50 ? m.integrity <= 0 ? ' OFF' : ' IMP' : ''}`);
 			control.classList.toggle('selected', selected === i); control.classList.toggle('fitted', !!m.weapon); control.setAttribute('aria-pressed', String(selected === i)); control.disabled = !active;
-			control.setAttribute('aria-label', `Mount ${i + 1}, ${m.weapon ? `${WEAPONS[m.weapon].name} level ${m.level}` : 'empty'}`);
+			control.setAttribute('aria-label', `Mount ${i + 1}, ${m.weapon ? `${WEAPONS[m.weapon].name} level ${m.level}, integrity ${Math.ceil(m.integrity)} percent, ${m.integrity <= 0 ? 'offline' : m.integrity < 50 ? 'impaired' : 'functional'}` : 'empty'}`);
 		}
 		const position = ['AFT', 'MID AFT', 'MID BOW', 'BOW'][selected % 4] ?? '';
 		label(ui.mountTitle, `MOUNT 0${selected + 1} / ${selected < 4 ? 'PORT' : 'STARBOARD'} ${position}`);
 		label(ui.mountInfo, mount.weapon ? `${WEAPONS[mount.weapon].name} · Level ${mount.level} / 3 · ${Math.round(WEAPONS[mount.weapon].range * (1 + (mount.level - 1) * 0.12))}m range · ${Math.round(WEAPONS[mount.weapon].rotationSpeed * 180 / Math.PI)}°/s turn` : 'Empty hardpoint');
+		label(ui.mountInfo, `${ui.mountInfo.textContent} · ${Math.ceil(mount.integrity)}% ${mount.integrity <= 0 ? 'OFFLINE' : mount.integrity < 50 ? 'IMPAIRED' : 'FUNCTIONAL'} · ${conditionMultiplier(mount.integrity) * 100}% condition cadence${mount.weapon ? ` · ${(effectiveOutputs(systems).weaponRate * conditionMultiplier(mount.integrity) * (1 + (mount.level - 1) * 0.12) / WEAPONS[mount.weapon].reload).toFixed(2)} shots/s` : ''}`);
 		label(ui.mountInfo, ui.mountInfo.textContent + (state.coverageDegrees < 360 ? ` · ${state.coverageDegrees}° outward coverage` : ' · full firing arc'));
 		label(ui.mountInfo, `${ui.mountInfo.textContent} ${priorityCoverage(state, selected)}`.trim());
 		ui.build.hidden = !!mount.weapon; ui.upgradeOptions.hidden = !mount.weapon;
@@ -356,9 +359,10 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.pulse.disabled = !active || state.status !== 'running' || state.pulseCooldown > 0;
 		label(ui.pulseState, state.status === 'fitting' ? 'Depart first' : state.pulseCooldown > 0 ? `${Math.ceil(state.pulseCooldown)}s` : 'Ready');
 		label(ui.pulseInfo, !active ? 'Commands held' : state.status !== 'running' ? 'Depart first' : state.aegisRemaining > 0 ? `Aegis · ${Math.ceil(state.aegisRemaining)}s hull protection` : state.pulseCooldown > 0 ? `Cooldown · ${Math.ceil(state.pulseCooldown)}s` : 'Clear rounds · 5s hull protection');
-		ui.repair.disabled = !active || state.salvage < 80 || state.hull >= MAX_HULL || state.repairCooldown > 0;
-		label(ui.repairInfo, !active ? 'Commands held' : state.hull >= MAX_HULL ? 'Hull at full integrity' : state.salvage < 80 ? 'Needs 80 salvage' : state.repairCooldown > 0 ? `Crews working · ${Math.ceil(state.repairCooldown)}s` : '+240 hull · 15s cooldown');
-		label(element('repair-state'), state.hull >= MAX_HULL ? 'Hull full' : state.repairCooldown > 0 ? `${Math.ceil(state.repairCooldown)}s` : '80 salvage');
+		const hullCrews = state.repairs['hull'] ?? 0;
+		ui.repair.disabled = !active || (hullCrews === 0 && (state.hull >= MAX_HULL || usedCrews >= REPAIR_CREWS));
+		label(ui.repairInfo, !active ? 'Commands held' : hullCrews > 0 ? `${hullCrews} hull crews · E releases crews` : state.hull >= MAX_HULL ? 'Hull at full integrity' : 'Assign one free crew · split crews in Reactor');
+		label(element('repair-state'), hullCrews > 0 ? `${hullCrews} crews` : `${REPAIR_CREWS - usedCrews} crews free`);
 		ui.pulse.title = `Aegis (Q): ${ui.pulseInfo.textContent}`; ui.repair.title = `Repair (E): ${ui.repairInfo.textContent}`;
 		ui.rally.hidden = state.experimental; label(element('escort-help'), state.experimental ? 'Buy ready wings, then scramble a sector. Guardians hold their own sector. Reserve craft count toward nine slots.' : 'Escorts engage near their shared rally point.'); ui.rally.disabled = !active; ui.rally.classList.toggle('active', rallyMode); ui.rally.setAttribute('aria-pressed', String(rallyMode));
 		label(ui.rally, rallyMode ? 'Click space to place rally point' : '⌖ Set escort rally point');

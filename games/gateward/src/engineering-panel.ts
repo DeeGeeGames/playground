@@ -1,6 +1,6 @@
 import { journeyFor } from './journey';
-import { setAllocation, transferPower, type State } from './simulation';
-import { POWER_CHANNELS, POWER_PRESETS, REACTOR_UNITS, powerOutputs, type PowerChannel } from './systems';
+import { assignRepair, repairTargets, REPAIR_CREWS, setAllocation, transferPower, WEAPONS, type State } from './simulation';
+import { POWER_CHANNELS, POWER_PRESETS, REACTOR_UNITS, effectiveOutputs, conditionMultiplier, type PowerChannel } from './systems';
 
 const CHANNEL_NAMES: Record<PowerChannel, string> = { engines: 'Engines', weapons: 'Weapons', shields: 'Shields' };
 const PRESET_NAMES: Record<keyof typeof POWER_PRESETS, string> = { balanced: 'Balanced', engines: 'Engine priority', weapons: 'Weapons priority', shields: 'Shield priority' };
@@ -60,10 +60,36 @@ export const createEngineeringPanel = function (host: HTMLElement, getState: () 
 	}, { signal });
 	transfer.append(transferButton); host.append(transfer);
 	const reason = document.createElement('p'); reason.className = 'engineering-reason'; reason.id = 'engineering-reason'; reason.setAttribute('role', 'status'); host.append(reason);
+	const crewBudget = document.createElement('p'); crewBudget.className = 'engineering-reason'; crewBudget.id = 'repair-budget'; host.append(crewBudget);
+	const repairRows = ['hull', 'engines', 'sensors', 'generator', ...Array.from({ length: 8 }, function (_, index) { return `mount:${index}`; })].map(function (id) {
+		const row = document.createElement('div'); row.className = 'repair-row'; row.dataset['repairTarget'] = id;
+		const detail = document.createElement('span'); const controls = document.createElement('div');
+		const buttons = [-1, 1].map(function (delta) {
+			const button = document.createElement('button'); button.type = 'button'; button.textContent = delta < 0 ? '−' : '+';
+			button.setAttribute('aria-label', `${delta < 0 ? 'Remove' : 'Assign'} crew ${id}`);
+			button.addEventListener('click', function () { if (available()) assignRepair(getState(), id, (getState().repairs[id] ?? 0) + delta); update(); }, { signal });
+			controls.append(button); return { button, delta };
+		});
+		row.append(detail, controls); host.append(row); return { id, row, detail, buttons };
+	});
 	const update = function () {
 		const state = getState(); const systems = state.systems;
-		const allocation = systems.allocation; const output = powerOutputs(allocation); const journey = journeyFor(state);
+		const allocation = systems.allocation; const output = effectiveOutputs(systems); const journey = journeyFor(state);
 		const hold = heldReason(state, available());
+		const targets = repairTargets(state); const used = Object.values(state.repairs).reduce(function (sum, crews) { return sum + crews; }, 0);
+		text(crewBudget, `Repair crews: ${REPAIR_CREWS - used} / ${REPAIR_CREWS} free · no salvage cost. ± splits crews. Each crew: hull +12/s, equipment +4/s. Integrity below 50: impaired; zero: offline.`);
+		for (const { id, row, detail, buttons } of repairRows) {
+			const target = targets.find(function (item) { return item.id === id; }); row.hidden = !target;
+			if (!target) continue;
+			const crews = state.repairs[id] ?? 0;
+			const condition = id === 'hull' ? 'hull' : target.integrity <= 0 ? 'offline' : target.integrity < 50 ? 'impaired' : 'functional';
+			const mount = id.startsWith('mount:') ? state.mounts[Number(id.slice(6))] : undefined;
+			const cadence = mount?.weapon ? ` · ${(output.weaponRate * conditionMultiplier(target.integrity) * (1 + (mount.level - 1) * 0.12) / WEAPONS[mount.weapon].reload).toFixed(2)} shots/s` : '';
+			const rate = crews * (id === 'hull' ? 12 : 4);
+			const progress = rate > 0 ? ` · +${rate}/s · ${Math.ceil((target.maximum - target.integrity) / rate)}s to full` : '';
+			text(detail, `${id === 'generator' ? 'Shield generator' : target.name}: ${Math.ceil(target.integrity)}/${target.maximum} · ${condition}${cadence} · ${crews} crews${progress}`);
+			for (const { button, delta } of buttons) button.disabled = !!hold || (delta < 0 ? crews === 0 : used >= REPAIR_CREWS || target.integrity >= target.maximum);
+		}
 		text(budget, `${allocation.engines + allocation.weapons + allocation.shields} / ${REACTOR_UNITS} units`);
 		for (const { channel, value } of rows) {
 			const effect = channel === 'engines' ? `${output.speed.toFixed(0)} m/s${journey.speed === 0 ? ' set' : ''}` : channel === 'weapons' ? `${output.weaponRate.toFixed(2)}× cadence` : `+${output.shieldRecharge.toFixed(0)} HP/s`;

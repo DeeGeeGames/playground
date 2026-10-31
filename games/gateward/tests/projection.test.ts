@@ -107,7 +107,7 @@ test('every empty or equipped mount remains selectable after orbit and zoom', fu
 });
 
 test('mount hit regions scale with camera zoom and retain a minimum screen radius', function () {
-	const mount: Mount = { x: 0, y: 0, weapon: undefined, level: 0, cooldown: 0, aim: 0 };
+	const mount: Mount = { integrity: 100, x: 0, y: 0, weapon: undefined, level: 0, cooldown: 0, aim: 0 };
 	const view = viewFor(320, 440);
 	view.camera.zoom = 0.5;
 	view.camera.updateProjectionMatrix();

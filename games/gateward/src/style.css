@@ -263,3 +263,8 @@ h1 em { font-style:normal; color:var(--mint); }
 #game[data-radar-open="true"] .layout, #game[data-radar-open="true"] .survival-hud, #game[data-radar-open="true"] .command-console, #game[data-radar-open="true"]>.route, #game[data-radar-open="true"]>.trial-status, #game[data-radar-open="true"]>.menu-toggle { visibility:hidden; }
 .selection-row { grid-template-columns:1fr 1fr 1.6fr; }
 #game[data-fitting="true"] .selection-row { grid-template-columns:1fr 1fr 1.6fr 1fr; }
+
+.repair-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 0; border-top:1px solid #294444; font:11px/1.5 monospace; }
+.repair-row[hidden] { display:none; }
+.repair-row>div { display:flex; flex-shrink:0; gap:4px; }
+.repair-row button { width:44px; padding:5px; }

@@ -21,10 +21,12 @@ describe('fitting and economy', function () {
 		expect(deploy(state, 'interceptor')).toBe(false); expect(state.escorts).toHaveLength(7);
 		expect(deploy(state, 'guardian')).toBe(true); expect(deploy(state, 'guardian')).toBe(true); expect(deploy(state, 'guardian')).toBe(false);
 	});
-	test('repairs respect missing hull, budget, cap, and cooldown', function () {
+	test('repair commands assign reusable crews without instant restoration or salvage cost', function () {
 		const state = createState(); expect(repair(state)).toBe(false); state.hull = 1100;
-		expect(repair(state)).toBe(true); expect(state.hull).toBe(MAX_HULL); expect(state.salvage).toBe(220);
-		state.hull = 500; expect(repair(state)).toBe(false); state.status = 'running'; advance(state, 15.1); expect(repair(state)).toBe(true);
+		expect(repair(state)).toBe(true); expect(state.hull).toBe(1100); expect(state.salvage).toBe(300);
+		expect(state.repairs['hull']).toBe(1); expect(repair(state)).toBe(true); expect(state.repairs['hull']).toBeUndefined();
+		state.status = 'running'; state.nextWave = Infinity; repair(state); advance(state, 10);
+		expect(state.hull).toBe(MAX_HULL); expect(state.repairs['hull']).toBeUndefined();
 	});
 });
 
