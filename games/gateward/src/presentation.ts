@@ -1,3 +1,4 @@
+import { updateCraftTurrets } from './craft-3d';
 import { ACESFilmicToneMapping, AdditiveBlending, BufferAttribute, BufferGeometry, Color, ConeGeometry, DirectionalLight, DoubleSide, Group, HemisphereLight, IcosahedronGeometry, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshStandardMaterial, MOUSE, Object3D, PCFSoftShadowMap, Points, PointsMaterial, Raycaster, RingGeometry, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -316,10 +317,10 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT, target.y); priority.scale.setScalar(target.kind === 'flagship' ? 70 : 42); }
 			const liveEnemies = new Set(state.enemies.map(function (enemy) { return enemy.id; }));
 			for (const [id, model] of enemyModels) if (!liveEnemies.has(id)) { scene.remove(model); targets.delete(model); disposeObject(model); enemyModels.delete(id); }
-			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); }
+			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } updateCraftTurrets(model, enemy.turretAim); model.position.set(enemy.x, FLIGHT_HEIGHT, enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); }
 			const liveEscorts = new Set(state.escorts.map(function (escort) { return escort.id; }));
 			for (const [id, model] of escortModels) if (!liveEscorts.has(id)) { scene.remove(model); disposeObject(model); escortModels.delete(id); }
-			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } model.position.set(escort.x, FLIGHT_HEIGHT, escort.y); model.rotation.y = -escort.angle; }
+			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } updateCraftTurrets(model, escort.turretAim); model.position.set(escort.x, FLIGHT_HEIGHT, escort.y); model.rotation.y = -escort.angle; }
 			if (state.shots.length > shotCapacity) { shotGeometry.dispose(); shotCapacity = state.shots.length * 2; shotPositions = new Float32Array(shotCapacity * 6); shotColors = new Float32Array(shotCapacity * 6); shotGeometry.setAttribute('position', new BufferAttribute(shotPositions, 3)); shotGeometry.setAttribute('color', new BufferAttribute(shotColors, 3)); }
 			const liveShots = new Set(state.shots.map(function (shot) { return shot.id; }));
 			for (const id of trajectories.keys()) if (!liveShots.has(id)) trajectories.delete(id);

@@ -88,7 +88,7 @@ describe('field geometry and hostile fire', function () {
 		for (let frame = 0; frame < 900; frame++) {
 			const id = state.nextId; step(state, 1 / 60);
 			for (const shot of state.shots.filter(function (shot) { return shot.id >= id && shot.side === 'enemy'; })) {
-				fired = true; expect(fieldBlocks(state, enemy, { x: shot.x + shot.vx, y: shot.y + shot.vy })).toBe(false);
+				fired = true; expect(fieldBlocks(state, shot.origin ?? enemy, { x: shot.x + shot.vx, y: shot.y + shot.vy })).toBe(false);
 			}
 		}
 		expect(fired).toBe(true); expect(enemy.detour).toBeUndefined();
