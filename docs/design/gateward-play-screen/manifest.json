@@ -1,0 +1,97 @@
+[
+  {
+    "file": "README.md",
+    "bytes": 3421,
+    "sha256": "d2ac54c3dac98f4c6f2e20b5519184e5af3165cb13896852127732421b607f41"
+  },
+  {
+    "file": "desktop-combat.png",
+    "bytes": 551504,
+    "sha256": "d32c186a0d041df1720f08337807d7707f2f311376ea4feb24847a3804fbf1ba"
+  },
+  {
+    "file": "desktop-fitting.png",
+    "bytes": 557993,
+    "sha256": "feab6d24e1e9c3918ca8953ac6eeb076598a5a2df8109cf6a42e34b50f88ffdc"
+  },
+  {
+    "file": "desktop-inspector.png",
+    "bytes": 563238,
+    "sha256": "bc917b60d7bdd85a40b6ea19f644d56eb61534ca09d43e2da3f19301923f42e2"
+  },
+  {
+    "file": "desktop.html",
+    "bytes": 23299,
+    "sha256": "39c635812bce78cd929d35e6c6dd31f9b27e1e232ae0c4a190e0a409509eb956"
+  },
+  {
+    "file": "exploration-desktop-b.html",
+    "bytes": 20800,
+    "sha256": "2cbd76b7156b52fe6fc7c710c28cc68b2fa428e274737cdea424ccfd28397a06"
+  },
+  {
+    "file": "exploration-mobile-b.html",
+    "bytes": 27322,
+    "sha256": "9e44391703619b5cf44c7aa554003d55cd0420072639bb1354407d6ddb9edf24"
+  },
+  {
+    "file": "exploration-mobile-c.html",
+    "bytes": 28215,
+    "sha256": "e90c08193c4d9f24ff384b797edfea765a207079dafc4d0372bb99bbc3647721"
+  },
+  {
+    "file": "landscape-combat.png",
+    "bytes": 158542,
+    "sha256": "9535499b99a6a483b54cfd33578892229f3c080b3afac3a2dd383080cf6b3ac7"
+  },
+  {
+    "file": "landscape-fitting.png",
+    "bytes": 166402,
+    "sha256": "249238148d9c06770609a8f835d4b11b935d88a0cc75af888d4d86a5e7e1f316"
+  },
+  {
+    "file": "landscape-inspector.png",
+    "bytes": 169172,
+    "sha256": "4217bac18b2e899c5a7974ba7e0dbe6b74f94ecaed94c97679fd63542e8b6da5"
+  },
+  {
+    "file": "landscape.html",
+    "bytes": 23303,
+    "sha256": "0187eaf626c1d2013dcc06e59a5a335a679b6191db04ca0783dd56669b51ca25"
+  },
+  {
+    "file": "portrait-combat.png",
+    "bytes": 134626,
+    "sha256": "860949d1e0f6720b7271717f57c4ee8d860954299d98c53f34d5dba71072ecd5"
+  },
+  {
+    "file": "portrait-fitting.png",
+    "bytes": 138595,
+    "sha256": "9becd0b81bcfdcca41675b025f8dd78d52f0daac786f694a6b0528f2fc011d3e"
+  },
+  {
+    "file": "portrait-inspector.png",
+    "bytes": 145318,
+    "sha256": "2e6f118cc7c6333c98ca3761bb07fef30d2a5bc290d406308aee30e0fbbdb6c4"
+  },
+  {
+    "file": "portrait.html",
+    "bytes": 23295,
+    "sha256": "251752e9c078c784c1eff5f54322d747d03da88acb076fe92c3fcb88b0224950"
+  },
+  {
+    "file": "preview-checks.json",
+    "bytes": 658,
+    "sha256": "03fef55696c162a774c468e534de6c01ab82c033da7249734434b73200078eec"
+  },
+  {
+    "file": "scene-reference.svg",
+    "bytes": 4450,
+    "sha256": "8d7324783dd99061920faabb7104f15eb201dc9e012cb3313b0a26ff67afe7bb"
+  },
+  {
+    "file": "source-bundle.zip",
+    "bytes": 46808,
+    "sha256": "9bef672a6a02cc503f4d08db08e5c2e4f9fd85a2126075167ea49a2caf1f0ce1"
+  }
+]

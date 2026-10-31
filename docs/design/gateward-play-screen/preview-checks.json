@@ -1,0 +1,44 @@
+[
+  {
+    "name": "desktop",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "minimumTarget": 44,
+    "states": [
+      "inspector",
+      "combat",
+      "fitting"
+    ],
+    "pageErrors": []
+  },
+  {
+    "name": "portrait",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "minimumTarget": 44,
+    "states": [
+      "inspector",
+      "combat",
+      "fitting"
+    ],
+    "pageErrors": []
+  },
+  {
+    "name": "landscape",
+    "viewport": {
+      "width": 844,
+      "height": 390
+    },
+    "minimumTarget": 44,
+    "states": [
+      "inspector",
+      "combat",
+      "fitting"
+    ],
+    "pageErrors": []
+  }
+]
