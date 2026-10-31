@@ -30,7 +30,9 @@ export const ENEMIES = {
 	flagship: { hp: 2400, speed: 36, range: 370, damage: 55, reload: 2.8, reward: 180, armor: 0.7 },
 };
 export interface Mount extends Point { weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
-export interface Enemy extends Point { turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
+export const BOMBER_ATTACK = { windup: 2, releaseCue: 0.35 } as const;
+export type BomberAttack = { phase: 'windup'; remaining: number; target: number | undefined } | { phase: 'released'; remaining: number };
+export interface Enemy extends Point { bomberAttack?: BomberAttack; turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
 export interface Escort extends Point { turretAim?: CraftAim; flight?: Flight; wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
 export interface Shot extends Point { originHeight?: number; origin?: Point; sourceVelocity?: Point; beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
 export interface Effect extends Point { sourceShot?: Shot; radius: number; life: number; maxLife: number; color: string }
@@ -450,8 +452,27 @@ export const step = function (state: State, dt: number) {
 		const firingTarget = firingEscort ?? arkTarget;
 		const solution = escortSolution ?? hostileSolution(enemy, arkTarget, carrierVelocity, shotSpeed);
 		if (solution && solution.mount !== undefined) enemy.turretAim = solution;
-		if (enemy.cooldown <= 0 && solution && distance(enemy, firingTarget) <= config.range && !fieldBlocks(state, solution.muzzle, solution.aim)) {
+		const canFire = solution && distance(enemy, firingTarget) <= config.range && !fieldBlocks(state, solution.muzzle, solution.aim);
+		if (enemy.kind === 'bomber') {
+			const attack = enemy.bomberAttack;
+			if (attack?.phase === 'released') {
+				attack.remaining -= dt;
+				if (attack.remaining <= 0) delete enemy.bomberAttack;
+			}
+			if (attack?.phase === 'windup') {
+				// Track the current target, but never transfer an almost-ready shot to another.
+				// Losing range, firing line or the selected escort cancels this preparation.
+				if (!canFire || attack.target !== firingEscort?.id) { delete enemy.bomberAttack; continue; }
+				attack.remaining = Math.max(0, attack.remaining - dt);
+				if (attack.remaining > 1e-9) continue;
+			} else {
+				if (enemy.cooldown <= 0 && canFire) enemy.bomberAttack = { phase: 'windup', remaining: BOMBER_ATTACK.windup, target: firingEscort?.id };
+				continue;
+			}
+		}
+		if (enemy.cooldown <= 0 && canFire && solution) {
 			fire(state, solution.muzzle, solution.aim, config.damage, shotSpeed, 'enemy', 'hostile', firingEscort?.id, flightVelocity(flight), enemy.kind === 'bomber' ? SENSOR_CONFIG.damagePerBomberHit : undefined); enemy.cooldown = config.reload;
+			if (enemy.kind === 'bomber') enemy.bomberAttack = { phase: 'released', remaining: BOMBER_ATTACK.releaseCue };
 			const shot = state.shots.at(-1); if (shot && solution.height !== undefined) shot.originHeight = solution.height;
 		}
 	}
