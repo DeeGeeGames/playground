@@ -498,3 +498,30 @@ not owner acceptance of feel):
 Both 120° runs lost all hull and sensors; both wider-coverage runs retained full
 hull and sensors. These results isolate acquisition; no budget or combat tuning
 was changed.
+
+### Rack carrier asset (concept C)
+
+`public/models/gateward-carrier.glb` is an asset-only enemy carrier, with an
+editable source at `assets/gateward-carrier.blend`. It is not registered in the
+combat simulation. Four external hangar pods attach to a narrow command spine;
+rear pods sit farther outboard so all four forward launch corridors remain clear.
+The carrier has no main battery. Its proposed offensive role is recurring fighter
+launches; timing, capacity and combat balance remain gameplay work.
+
+The model faces +X, uses Y up in glTF, and has a centered identity-transform root.
+`Launch_01` through `Launch_04` mark the four exits; each launches along +X.
+Clear bay apertures are 18 units wide by 12 high. The model is approximately
+163 units long, sized around future half-scale fighters. This does not rescale
+existing ships: the intended fleet change remains fighters ×0.5, other ships
+×1.5, with the player's master ship unchanged. No collision proxy is shipped;
+launch anchors are attachment points, not a physics implementation.
+
+Rebuild with the existing ark builder alongside this script:
+
+```sh
+blender --background --factory-startup --python games/gateward/tools/build-carrier.py -- /tmp/gateward-carrier
+```
+
+Copy the generated GLB and blend into their respective directories. Preview
+lighting and cameras are stored in the blend but excluded from the GLB. Meshes
+are batched by material, use no textures, and need no runtime compression decoder.
