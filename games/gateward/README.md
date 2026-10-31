@@ -38,11 +38,13 @@ hostiles to win; losing the ark's hull ends the run.
   commands use the same actions. Physical touch devices are separate acceptance.
 
 The canvas fills the viewport without browser fullscreen. Survival, route, threat,
-reactor presets and emergency commands remain visible. Ship systems opens one
-contextual inspector for mounts, reactor transfers, escorts, sensors, field and
-sensor-gated contact information. Selecting a mount or hostile opens its inspector;
-closing it preserves selection and priority. The inspector is a bottom sheet on
-narrow tall viewports and a right overlay on wide or short viewports. Detailed
+current reactor allocation and emergency commands remain visible in one compact
+command console. Systems opens mounts; the current power button opens reactor
+presets and transfers. The inspector expands above the same bar on desktop and
+portrait screens, with a side layout on short landscape screens. Selecting a
+mount or hostile opens its details; closing preserves selection and priority.
+Mounts, Reactor, Escorts and Sensors remain available as tabs. Field placement
+and selected Contact details appear contextually. Detailed
 content scrolls internally. Menu pauses orders and contains sound, fullscreen,
 reset view, simulation speed, help, restart and mode controls. In expanded fallback
 mode, use the menu's Exit fullscreen button; Escape retains game navigation.
