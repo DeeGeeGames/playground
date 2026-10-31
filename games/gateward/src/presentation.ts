@@ -255,6 +255,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			text(String(index + 1), { x: point.x, y: point.y - 10 }, selected === index ? '#e1f3c1' : '#b4c8d4', view.width < 650 ? 10 : 11);
 		}
 		const cuePositions: Point[] = [];
+		const cues: { text: string; progress: number; color: string; point: Point; anchor: Point }[] = [];
 		for (const enemy of state.enemies) {
 			const intel = contactIntel(state, enemy);
 			if (intel === 'unseen') continue;
@@ -265,12 +266,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			const cueAt = cue && !edgeIndicator(enemy, view) ? placeBomberCue(anchor, view.width, view.height, cuePositions) : undefined;
 			if (cue && cueAt) {
 				cuePositions.push(cueAt);
-				ctx.strokeStyle = cue.color; ctx.lineWidth = 1;
-				ctx.beginPath(); ctx.moveTo(anchor.x, anchor.y + 10); ctx.lineTo(cueAt.x, cueAt.y + 10); ctx.stroke();
-				ctx.fillStyle = '#101b29'; ctx.fillRect(cueAt.x - 73, cueAt.y - 12, 146, 23);
-				text(cue.text, cueAt, cue.color, 11);
-				ctx.fillStyle = '#344453'; ctx.fillRect(cueAt.x - 65, cueAt.y + 5, 130, 3);
-				ctx.fillStyle = cue.color; ctx.fillRect(cueAt.x - 65, cueAt.y + 5, 130 * cue.progress, 3);
+				cues.push({ ...cue, point: cueAt, anchor });
 			}
 			if (intel === 'classified' && (enemy.hp < enemy.maxHp || enemy.kind === 'flagship')) {
 				const at = toScreen(enemy, view, FLIGHT_HEIGHT + (enemy.kind === 'flagship' ? 74 : 29)); const width = enemy.kind === 'flagship' ? 75 : 26;
@@ -288,6 +284,16 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		if (position && activeField) text(`INTERDICTION · ${Math.ceil(activeField.remaining)}s`, toScreen(position, view, FLIGHT_HEIGHT + 30), '#d7bf89', 10);
 		for (let i = 0; i <= 6; i++) { const point = beaconFor(i, state); if (Math.abs(point.x - state.ark.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: point.y + 180 }, view, -5), '#6e939f', 9); }
 		if (journeyFor(state).remaining <= 1100) text('KEPLER GATE', toScreen({ x: state.routeOrigin.x + state.systems.routeLength, y: state.routeOrigin.y }, view, 220), '#83dfcb');
+		// Attack cues sit above decorative navigation and other contact labels.
+		for (const cue of cues) {
+			const cueAt = cue.point; const anchor = cue.anchor;
+			ctx.strokeStyle = cue.color; ctx.lineWidth = 1;
+			ctx.beginPath(); ctx.moveTo(anchor.x, anchor.y + 10); ctx.lineTo(cueAt.x, cueAt.y + 10); ctx.stroke();
+			ctx.fillStyle = '#101b29'; ctx.fillRect(cueAt.x - 73, cueAt.y - 12, 146, 23);
+			text(cue.text, cueAt, cue.color, 11);
+			ctx.fillStyle = '#344453'; ctx.fillRect(cueAt.x - 65, cueAt.y + 5, 130, 3);
+			ctx.fillStyle = cue.color; ctx.fillRect(cueAt.x - 65, cueAt.y + 5, 130 * cue.progress, 3);
+		}
 	};
 
 	return {
