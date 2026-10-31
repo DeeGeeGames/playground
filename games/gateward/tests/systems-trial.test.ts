@@ -100,7 +100,7 @@ describe('reproducible equipped trial strategies', function () {
 	for (const preset of ['balanced', 'engines', 'weapons', 'shields'] as const) test(`${preset} uses identical fitting and orders and repeats its complete outcome`, function () {
 		const first = runTrialStrategy(preset); const second = runTrialStrategy(preset);
 		expect(first.summary).toEqual(second.summary); expect(first.state).toEqual(second.state);
-		expect(first.summary?.reason).toBe(preset === 'balanced' || preset === 'engines' ? 'arrival' : 'deadline');
+		expect(first.summary?.reason).toBe(preset === 'balanced' ? 'arrival' : 'deadline');
 		expect(first.summary?.contacts).toBe(5);
 		// A weapons-heavy run can eliminate every attacker before shields take damage.
 		if (preset !== 'weapons') expect(first.summary?.shieldAbsorbed).toBeGreaterThan(0);

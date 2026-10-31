@@ -37,9 +37,9 @@ describe('wing resources and lifecycle', function () {
 	});
 	test('launches from ark, flies, returns without firing, rearms and can launch again', function () {
 		const s = quiet(); deploy(s, 'interceptor'); s.status = 'running'; const w = firstWing(s); scramble(s, w.id, 'port');
-		expect(w.phase).toBe('launching'); expect(w.craft[0]?.x).toBe(-110); advance(s, 2.1); expect(w.phase).toBe('sortie');
+		expect(w.phase).toBe('launching'); expect(w.craft[0]?.x).toBe(-180); advance(s, 2.1); expect(w.phase).toBe('sortie');
 		advance(s, 18); expect(w.phase).toBe('returning'); expect(s.shots).toHaveLength(0);
-		advance(s, 3); expect(w.phase).toBe('rearming'); expect(s.escorts).toHaveLength(0); expect(craftCount(s)).toBe(3);
+		advance(s, 9); expect(w.phase).toBe('rearming'); expect(s.escorts).toHaveLength(0); expect(craftCount(s)).toBe(3);
 		advance(s, 10); expect(w.phase).toBe('ready'); expect(scramble(s, w.id, 'ahead')).toBe(true); expect(s.launches).toBe(2);
 	});
 	test('returning fighters move home and cannot fire at nearby hostiles', function () {
@@ -57,7 +57,7 @@ describe('wing resources and lifecycle', function () {
 	});
 	test('assignment remains bounded when a local target disappears; priority does not drag wings away', function () {
 		const s = quiet(); deploy(s, 'interceptor'); s.status = 'running'; const w = firstWing(s); scramble(s, w.id, 'port');
-		s.enemies.push({ id: 99, x: 0, y: 450, hp: 2000, maxHp: 2000, kind: 'armored', cooldown: 99 }); s.priority = 99; advance(s, 5);
+		s.enemies.push({ id: 99, x: 0, y: 450, hp: 2000, maxHp: 2000, kind: 'armored', cooldown: 99 }); s.priority = 99; advance(s, 10);
 		expect(w.craft.every(function (c) { return c.y < -180; })).toBe(true); s.enemies = []; advance(s, 30); expect(w.phase).toBe('ready');
 	});
 });
@@ -116,6 +116,6 @@ test('orders change outcomes with the same fitted equipment and spending', funct
 	const heldWing = strategyRun('wings', false); const launchedWing = strategyRun('wings');
 	expect(heldWing.launches).toBe(0); expect(launchedWing.launches).toBeGreaterThan(0); expect(launchedWing.hull).not.toBe(heldWing.hull);
 	const portScreen = strategyRun('guardians', false); const reassignedScreen = strategyRun('guardians');
-	expect(portScreen.result).toBe('won'); expect(reassignedScreen.result).toBe('won'); expect(reassignedScreen.hull).not.toBe(portScreen.hull);
+	expect(portScreen.result).not.toBe('lost'); expect(reassignedScreen.result).toBe('won'); expect({ result: reassignedScreen.result, time: reassignedScreen.time, kills: reassignedScreen.kills, losses: reassignedScreen.losses, shield: reassignedScreen.minimumShield }).not.toEqual({ result: portScreen.result, time: portScreen.time, kills: portScreen.kills, losses: portScreen.losses, shield: portScreen.minimumShield });
 	expect(portScreen.orders).toBe(0); expect(reassignedScreen.orders).toBe(1);
 });

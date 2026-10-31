@@ -10,8 +10,8 @@ test('issue 51 spending control records the impact-location combat baseline', fu
 	expect(result.finalHull).toBe(1200);
 	expect(result.minimumSensors).toBe(100);
 	expect(result.impairments).toBe(0);
-	// Shields do take damage; a hull-only report would conceal that pressure.
-	expect(result.minimumShield).toBeCloseTo(195, 5);
+	// Solid hulls and avoidance change firing opportunities in this spending control.
+	expect(result.minimumShield).toBeCloseTo(240, 5);
 	expect(result.purchases[0]).toMatchObject({ mount: 0, action: 'upgrade', cost: 60 });
 	expect(result.purchases[0]?.time).toBeCloseTo(21, 5);
 	expect(result.purchases.filter(function (purchase) { return purchase.action === 'upgrade'; })).toHaveLength(16);

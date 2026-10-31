@@ -1,3 +1,4 @@
+import { avoidTraffic, resolveTraffic, traffic, trafficWaypoint } from './ship-traffic';
 import { CARRIER_BAYS, CARRIER_LAUNCH, craftScale, enemyRadius } from './ship-config';
 import { craftTurretSolution, hasCraftTurrets, type CraftAim } from './craft-turrets';
 import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fieldBlocks, INTERDICTION_CONFIG, navigateField, type Detour } from './interdiction';
@@ -192,7 +193,7 @@ export const deploy = function (state: State, kind: EscortKind): boolean {
 		const wing: Wing = { id: state.nextId++, phase: 'ready', timer: 0, craft: [], assignment: 'port' };
 		wing.craft = Array.from({ length: 3 }, function () { return makeFighter(state, wing.id); }); state.wings.push(wing); updateEscortCoverage(state); return true;
 	}
-	for (let i = 0; i < config.count; i++) state.escorts.push({ id: state.nextId++, kind, ...(state.experimental && kind === 'guardian' ? { sector: 'port' as const } : {}), ...worldPoint(state, { x: -110, y: (i - 1) * 18 }), hp: config.hp, cooldown: i * 0.1, angle: state.ark.angle });
+	for (let i = 0; i < config.count; i++) state.escorts.push({ id: state.nextId++, kind, ...(state.experimental && kind === 'guardian' ? { sector: 'port' as const } : {}), ...worldPoint(state, { x: -220, y: (i - 1) * 22 }), hp: config.hp, cooldown: i * 0.1, angle: state.ark.angle });
 	updateEscortCoverage(state);
 	return true;
 };
@@ -213,7 +214,7 @@ const launchWing = function (state: State, id: number, sector: Sector): boolean 
 	if (!wing || scrambleReason(state, wing)) return false;
 	wing.assignment = sector; wing.phase = 'launching'; wing.timer = WING_TIMING.launch;
 	for (const [i, craft] of wing.craft.entries()) {
-		Object.assign(craft, worldPoint(state, { x: -110, y: (i - 1) * 18 }));
+		Object.assign(craft, worldPoint(state, { x: -180, y: (i - 1) * 22 }));
 		craft.flight = { angle: state.ark.angle, speed: state.ark.speed, side: i % 2 ? -1 : 1, course: 'intercept', run: 1 }; craft.angle = state.ark.angle;
 		state.escorts.push(craft);
 	}
@@ -276,8 +277,13 @@ const updateWings = function (state: State, dt: number) {
 		wing.timer = Math.max(0, wing.timer - dt);
 		if (wing.phase === 'launching' && wing.timer === 0) { wing.phase = 'sortie'; wing.timer = WING_TIMING.sortie; }
 		else if (wing.phase === 'sortie' && (wing.timer === 0 || wing.craft.length === 0)) wing.phase = 'returning';
-		else if (wing.phase === 'returning' && wing.craft.every(function (craft) { return distance(craft, worldPoint(state, { x: -110, y: 0 })) < 8; })) {
-			state.escorts = state.escorts.filter(function (craft) { return craft.wingId !== wing.id; }); wing.phase = 'rearming'; wing.timer = WING_TIMING.rearm;
+		else if (wing.phase === 'returning') {
+			// Recover craft individually so traffic spacing cannot prevent the
+			// entire wing from satisfying one simultaneous docking test.
+			state.escorts = state.escorts.filter(function (craft) {
+				return craft.wingId !== wing.id || distance(craft, worldPoint(state, { x: -210, y: 0 })) >= 45;
+			});
+			if (!state.escorts.some(function (craft) { return craft.wingId === wing.id; })) { wing.phase = 'rearming'; wing.timer = WING_TIMING.rearm; }
 		} else if (wing.phase === 'rearming' && wing.timer === 0) wing.phase = 'ready';
 	}
 };
@@ -563,22 +569,24 @@ export const step = function (state: State, dt: number) {
 	}
 	updateWings(state, dt);
 	updateEscortCoverage(state);
+	const neighbors = traffic(state);
 	for (const [i, escort] of state.escorts.entries()) {
 		if (escort.hp <= 0) continue;
 		const config = ESCORTS[escort.kind]; escort.cooldown -= dt;
 		const wing = state.wings.find(function (w) { return w.id === escort.wingId; });
 		const phaseAllowsFire = !wing || wing.phase === 'sortie';
 		const offset = escort.sector ? SECTOR_POINTS[escort.sector] : wing ? SECTOR_POINTS[wing.assignment] : { x: state.rally.x + Math.cos(i * 2.4) * 45, y: state.rally.y + Math.sin(i * 2.4) * 45 };
-		const formation = state.coverage.enabled ? coverageStation(state, escort.id, escort.sector) : worldPoint(state, offset);
+		const formation = state.coverage.enabled ? coverageStation(state, escort.id, escort.sector) : worldPoint(state, wing ? { x: offset.x + (i % 3 - 1) * 50, y: offset.y } : offset);
 		const target = state.coverage.enabled
 			? !phaseAllowsFire || !escort.sector ? undefined : nearest(escort, state.enemies.filter(function (enemy) { return enemy.hp > 0 && pointSector(state, enemy) === escort.sector && distance(enemy, formation) <= 300; }), 300)
 			: !phaseAllowsFire ? undefined : wing || escort.sector ? nearest(escort, state.enemies.filter(function (enemy) { return enemy.hp > 0 && distance(enemy, formation) <= 180; }), 300) : targetFor(state, escort, 300);
 		const engaging = escort.kind === 'interceptor' && target && distance(target, formation) < 320;
-		const destination = wing?.phase === 'returning' ? worldPoint(state, { x: -110, y: 0 }) : formation;
+		const destination = wing?.phase === 'returning' ? worldPoint(state, { x: -210, y: 0 }) : formation;
 		const desired = engaging ? fighterCourse(escort, target, 65, 65, config.speed, escort.id % 2 ? -1 : 1, flightVelocity(target.flight), state.escorts)
-			: arriveCourse(escort, destination, carrierVelocity);
+			: arriveCourse(escort, trafficWaypoint(state, escort, destination, escort.kind), carrierVelocity);
 		escort.flight ??= { angle: escort.angle, speed: state.ark.speed, side: i % 2 ? -1 : 1, course: 'intercept', run: 1 };
-		fly(escort, escort.flight, desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt);
+		const hull = neighbors.find(function (hull) { return hull.id === escort.id; });
+		fly(escort, escort.flight, hull ? avoidTraffic(hull, desired, neighbors, config.speed) : desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt);
 		escort.angle = escort.flight.angle;
 		if (target && distance(escort, target) <= config.range) {
 			const velocity = flightVelocity(target.flight); const sourceVelocity = flightVelocity(escort.flight);
@@ -619,7 +627,8 @@ export const step = function (state: State, dt: number) {
 			: approaching ? arriveCourse(enemy, destination, carrierVelocity, 0.5)
 			: isCapital(enemy) ? capitalCourse(state, enemy, flight, config.range, config.speed)
 			: fighterCourse(enemy, escort ?? state.ark, escort ? 60 : enemy.kind === 'bomber' ? 265 : 195, escort ? 60 : enemy.kind === 'bomber' ? 225 : 105, config.speed, enemy.id % 2 ? -1 : 1, escort ? flightVelocity(escort.flight) : carrierVelocity, state.enemies);
-		fly(enemy, flight, desired, flightSpeed, isCapital(enemy) ? 0.7 : 3, dt);
+		const hull = neighbors.find(function (hull) { return hull.id === enemy.id; });
+		fly(enemy, flight, hull ? avoidTraffic(hull, desired, neighbors, flightSpeed) : desired, flightSpeed, isCapital(enemy) ? 0.7 : 3, dt);
 		if (enemy.kind === 'carrier') { advanceCarrierHangar(state, enemy, flight, dt); continue; }
 		const shotSpeed = enemy.kind === 'bomber' ? 155 : 235;
 		const escortSolution = escort ? hostileSolution(enemy, escort, flightVelocity(escort.flight), shotSpeed) : undefined;
@@ -652,6 +661,7 @@ export const step = function (state: State, dt: number) {
 			const shot = state.shots.at(-1); if (shot && solution.height !== undefined) shot.originHeight = solution.height;
 		}
 	}
+	resolveTraffic(state);
 	let arkHit = false;
 	for (const shot of state.shots) {
 		if (shot.weapon === 'beam') continue;

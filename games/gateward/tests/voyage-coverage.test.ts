@@ -66,8 +66,8 @@ test('the spending policy exposes tighter-arc hull and subsystem pressure at equ
 	expect(control.status).toBe('won'); expect(control.kills).toBe(96);
 	expect(voyage.status).toBe('won'); expect(voyage.kills).toBe(96);
 	expect(voyage.time).toBeCloseTo(control.time, 5);
-	expect(voyage.minimumHull).toBeCloseTo(990.9333333333332, 5); expect(voyage.minimumSensors).toBe(100);
-	expect(voyage.minimumShield).toBe(0); expect(voyage.impairments).toBe(0);
+	expect(voyage.minimumHull).toBeCloseTo(685.9999999999894, 5); expect(voyage.minimumSensors).toBeCloseTo(18.53333333333329, 5);
+	expect(voyage.minimumShield).toBe(0); expect(voyage.impairments).toBe(1);
 	const spent = function (result: typeof control) { return result.purchases.reduce(function (sum, purchase) { return sum + purchase.cost; }, 0); };
 	// Identical purchase policy and spend; tighter arcs now survive with localized damage.
 	expect(spent(voyage)).toBe(spent(control));

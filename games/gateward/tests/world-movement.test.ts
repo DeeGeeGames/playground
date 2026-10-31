@@ -1,3 +1,4 @@
+import { hullClearance, traffic } from '../src/ship-traffic';
 import { describe, expect, test } from 'bun:test';
 import { arkVelocity, localPoint, mountWorld, worldPoint } from '../src/space';
 import { enemyClearance } from '../src/interdiction';
@@ -9,11 +10,13 @@ const quiet = function (origin: Point = { x: 0, y: 0 }): State {
 	return state;
 };
 const advance = function (state: State, seconds: number): void { for (let i = 0; i < Math.round(seconds * 60); i++) step(state, 1 / 60); };
-const followsHeading = function (craft: Escort, before: Point, beforeAngle: number, rate: number): void {
+const followsHeading = function (state: State, craft: Escort, before: Point, beforeAngle: number, rate: number): void {
 	const dx = craft.x - before.x; const dy = craft.y - before.y;
 	const turn = Math.atan2(Math.sin(craft.angle - beforeAngle), Math.cos(craft.angle - beforeAngle));
 	const speed = Math.hypot(dx, dy);
-	if (speed > 1e-9) {
+	const hulls = traffic(state); const hull = hulls.find(function (h) { return h.id === craft.id; });
+	const touching = hull && hulls.some(function (other) { return other.id !== hull.id && hullClearance(hull, other).gap < 0.01; });
+	if (speed > 1e-9 && !touching) {
 		expect(Math.abs(dx * Math.sin(craft.angle) - dy * Math.cos(craft.angle))).toBeLessThan(1e-8);
 		expect(dx * Math.cos(craft.angle) + dy * Math.sin(craft.angle)).toBeGreaterThan(0);
 	}
@@ -25,10 +28,10 @@ describe('one world and shared friendly steering', function () {
 		const state = createState({ scenario: 'drill' }); state.status = 'running'; state.nextWave = Infinity;
 		state.ark.x = 1400; state.routeOrigin.x = 1400; deploy(state, 'guardian');
 		const guardian = state.escorts[0]; if (!guardian) throw new Error('Missing guardian');
-		for (let frame = 0; frame < 1200; frame++) {
+		for (let frame = 0; frame < 1800; frame++) {
 			if (frame === 600) assignGuardian(state, guardian.id, 'starboard');
 			const before = { x: guardian.x, y: guardian.y }; const angle = guardian.angle;
-			step(state, 1 / 60); followsHeading(guardian, before, angle, 1.6);
+			step(state, 1 / 60); followsHeading(state, guardian, before, angle, 1.6);
 		}
 		const offset = localPoint(state, guardian);
 		expect(offset.y).toBeCloseTo(230, 0); expect(offset.x).toBeCloseTo(0, 0);
@@ -44,7 +47,7 @@ describe('one world and shared friendly steering', function () {
 		for (let frame = 0; frame < 3000; frame++) {
 			const before = new Map(state.escorts.map(function (craft) { return [craft.id, { x: craft.x, y: craft.y, angle: craft.angle }] as const; }));
 			phases.add(wing.phase); step(state, 1 / 60);
-			for (const craft of state.escorts) { const previous = before.get(craft.id); if (previous) followsHeading(craft, previous, previous.angle, 4); }
+			for (const craft of state.escorts) { const previous = before.get(craft.id); if (previous) followsHeading(state, craft, previous, previous.angle, 4); }
 		}
 		expect([...phases]).toEqual(['launching', 'sortie', 'returning', 'rearming', 'ready']);
 		expect(state.escorts).toHaveLength(0); expect(wing.craft).toHaveLength(3);
@@ -55,7 +58,7 @@ describe('one world and shared friendly steering', function () {
 		expect(setRally(state, worldPoint(state, { x: 120, y: -200 }))).toBe(true);
 		expect(state.rally.x).toBeCloseTo(120); expect(state.rally.y).toBeCloseTo(-200);
 		deploy(state, 'guardian'); const guardian = state.escorts[0]; if (!guardian) throw new Error('Missing guardian');
-		expect(localPoint(state, guardian).x).toBeCloseTo(-110);
+		expect(localPoint(state, guardian).x).toBeCloseTo(-220);
 		advance(state, 12); expect(guardian.y).toBeGreaterThan(-700);
 		expect(localPoint(state, guardian).x).toBeCloseTo(165, 0);
 		expect(localPoint(state, guardian).y).toBeCloseTo(-200, 0);

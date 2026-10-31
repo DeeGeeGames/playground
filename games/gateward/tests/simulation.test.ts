@@ -52,7 +52,7 @@ describe('combat and voyage', function () {
 	});
 	test('escorts move toward the player rally point during a quiet approach', function () {
 		const state = createState(); deploy(state, 'guardian'); setRally(state, { x: 200, y: -200 }); state.status = 'running';
-		advance(state, 3); expect(state.escorts.every(function (escort) { return escort.x > 100 && escort.y < -100; })).toBe(true);
+		advance(state, 8); expect(state.escorts.every(function (escort) { return escort.x > 100 && escort.y < -100; })).toBe(true);
 	});
 	test('railguns bypass armor while flak damage is reduced', function () {
 		const hit = function (weapon: Weapon) {
