@@ -158,3 +158,32 @@ describe('small-craft inertia', function () {
 		expect(craft.speed).toBeLessThan(1);
 	});
 });
+
+
+describe('heavy hull response', function () {
+	for (const inertial of [false, true]) test(`builds speed and both rotations gradually, then settles (inertial=${inertial})`, function () {
+		const point = { x: 0, y: 0, z: 0 };
+		const craft: Flight = { angle: 0, speed: 0, side: 1, course: 'intercept', run: 1 };
+		fly(point, craft, { x: 100, y: 0 }, 100, 0.7, 1 / 60, inertial, true);
+		expect(craft.speed).toBeGreaterThan(0);
+		expect(craft.speed).toBeLessThan(1);
+		for (let i = 0; i < 240; i++) fly(point, craft, { x: 100, y: 0 }, 100, 0.7, 1 / 60, inertial, true);
+		expect(craft.speed).toBeCloseTo(100);
+		for (let i = 0; i < 2400; i++) {
+			const yaw = craft.angularVelocity ?? 0; const pitch = craft.pitchVelocity ?? 0;
+			fly(point, craft, { x: 0, y: 100, z: i < 120 ? 30 : 0 }, 100, 0.7, 1 / 60, inertial, true);
+			expect(Math.abs((craft.angularVelocity ?? 0) - yaw)).toBeLessThanOrEqual(0.7 * (inertial ? 0.5 : 0.35) / 60 + 1e-8);
+			expect(Math.abs((craft.pitchVelocity ?? 0) - pitch)).toBeLessThanOrEqual(0.12 / 60 + 1e-8);
+			expect(Math.hypot(craft.speed, craft.vz ?? 0)).toBeLessThanOrEqual(100 + 1e-8);
+			if (i === 0) { expect(craft.angle).toBeLessThan(0.001); expect(Math.abs(craft.pitch ?? 0)).toBeLessThan(0.001); }
+			if (i === 59) expect(craft.pitch).toBeGreaterThan(0.01);
+		}
+		expect(craft.angle).toBeCloseTo(Math.PI / 2, 2);
+		expect(craft.pitch).toBeCloseTo(0, 2);
+		expect(craft.angularVelocity).toBeCloseTo(0, 2);
+		const before = point.y;
+		fly(point, craft, { x: 0, y: 0 }, 100, 0.7, 1 / 60, inertial, true);
+		expect(point.y).toBeGreaterThan(before);
+		expect(craft.speed).toBeGreaterThan(99);
+	});
+});

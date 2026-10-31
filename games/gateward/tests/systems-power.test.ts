@@ -97,7 +97,8 @@ describe('powered cadence and shields', function () {
 			low.enemies.push({ id: low.nextId++, kind: 'armored', x: -100, y: -130, hp: 100000, maxHp: 100000, cooldown: 999 });
 			const high = structuredClone(low);
 			setAllocation(low, { engines: 4, weapons: 0, shields: 6 }); setAllocation(high, { engines: 4, weapons: 6, shields: 0 });
-			advance(low, 60); advance(high, 60);
+			// Allow heavy hulls to finish their slower turn before comparing fire.
+			advance(low, 600); advance(high, 600);
 			expect(low.escorts).toEqual(high.escorts); expect(low.enemies).toEqual(high.enemies); expect(low.shots).toEqual(high.shots); expect(low.nextId).toBeGreaterThan(5);
 		}
 	});

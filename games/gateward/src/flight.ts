@@ -10,6 +10,7 @@ export interface Flight {
 	vx?: number;
 	vy?: number;
 	angularVelocity?: number;
+	pitchVelocity?: number;
 	speed: number;
 	side: -1 | 1;
 	course: 'intercept' | 'broadside';
@@ -22,12 +23,12 @@ export const isCapital = function (enemy: Pick<Enemy, 'kind'>): boolean { return
 
 // Small-craft thrusters redirect momentum over time. Yaw also accelerates and
 // brakes, rather than immediately reaching the commanded turn rate.
-const flyInertial = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number): void {
+const flyInertial = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, heavy: boolean): void {
 	const magnitude = length(desired);
 	const angle = magnitude < 0.01 ? flight.angle : Math.atan2(desired.y, desired.x);
 	const turn = Math.atan2(Math.sin(angle - flight.angle), Math.cos(angle - flight.angle));
-	const angularAcceleration = turnRate * 0.8;
-	const desiredYaw = Math.sign(turn) * Math.min(turnRate * 0.55, Math.abs(turn) * 2, Math.sqrt(2 * angularAcceleration * Math.abs(turn)));
+	const angularAcceleration = turnRate * (heavy ? 0.5 : 0.8);
+	const desiredYaw = Math.sign(turn) * Math.min(turnRate * (heavy ? 0.45 : 0.55), Math.abs(turn) * 2, Math.sqrt(2 * angularAcceleration * Math.abs(turn)));
 	flight.angularVelocity = (flight.angularVelocity ?? 0) + clamp(desiredYaw - (flight.angularVelocity ?? 0), angularAcceleration * dt);
 	const previousAngle = flight.angle;
 	flight.angle += flight.angularVelocity * dt;
@@ -41,7 +42,7 @@ const flyInertial = function (point: Point, flight: Flight, desired: Point, maxS
 	const dy = Math.sin(flight.angle) * speed - vy;
 	const dz = climb - vz;
 	const change = Math.hypot(dx, dy, dz);
-	const thrust = change > 0 ? Math.min(1, maxSpeed * 0.65 * dt / change) : 0;
+	const thrust = change > 0 ? Math.min(1, maxSpeed * (heavy ? 0.45 : 0.65) * dt / change) : 0;
 	flight.vx = vx + dx * thrust; flight.vy = vy + dy * thrust;
 	flight.vz = vz + dz * thrust;
 	const before = point.z ?? 0;
@@ -49,30 +50,45 @@ const flyInertial = function (point: Point, flight: Flight, desired: Point, maxS
 	flight.vz = (point.z - before) / dt;
 	flight.speed = Math.hypot(flight.vx, flight.vy);
 	point.x += flight.vx * dt; point.y += flight.vy * dt;
-	flight.pitch = Math.atan2(flight.vz, Math.max(1, flight.speed));
+	if (heavy) pitchHeavy(flight, dt);
+	else flight.pitch = Math.atan2(flight.vz, Math.max(1, flight.speed));
 };
 
-// Capital ships retain their established heading-following navigation.
-export const fly = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, inertial = false): void {
+// Heavy hulls build and brake rotation before settling on the commanded bearing.
+const heavyRotation = function (error: number, velocity: number, rate: number, acceleration: number, dt: number): number {
+	const desired = Math.sign(error) * Math.min(rate, Math.abs(error) * 2, Math.sqrt(2 * acceleration * Math.abs(error)));
+	return velocity + clamp(desired - velocity, acceleration * dt);
+};
+
+const pitchHeavy = function (flight: Flight, dt: number): void {
+	const pitch = flight.pitch ?? 0;
+	const desiredPitch = Math.atan2(flight.vz ?? 0, Math.max(1, flight.speed));
+	flight.pitchVelocity = heavyRotation(desiredPitch - pitch, flight.pitchVelocity ?? 0, 0.2, 0.12, dt);
+	flight.pitch = pitch + flight.pitchVelocity * dt;
+};
+
+// Capitals keep heading-following courses, with slower thrust and rotational response.
+export const fly = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, inertial = false, heavy = false): void {
 	if (dt <= 0) return;
-	if (inertial) { flyInertial(point, flight, desired, maxSpeed, turnRate, dt); return; }
+	if (inertial) { flyInertial(point, flight, desired, maxSpeed, turnRate, dt, heavy); return; }
 	const angle = length(desired) < 0.01 ? flight.angle : Math.atan2(desired.y, desired.x);
 	const turn = Math.atan2(Math.sin(angle - flight.angle), Math.cos(angle - flight.angle));
 	const climb = clamp(desired.z ?? 0, maxSpeed * 0.3);
 	const planarLimit = Math.sqrt(Math.max(0, maxSpeed * maxSpeed - climb ** 2));
 	const desiredSpeed = Math.min(planarLimit, length(desired)) * Math.max(0, Math.cos(turn));
-	flight.angle += clamp(turn, turnRate * dt);
-	flight.speed = Math.min(planarLimit, flight.speed + clamp(desiredSpeed - flight.speed, maxSpeed * 2 * dt));
+	flight.angularVelocity = heavyRotation(turn, flight.angularVelocity ?? 0, turnRate * 0.65, turnRate * 0.35, dt);
+	flight.angle += flight.angularVelocity * dt;
+	flight.speed = Math.min(planarLimit, flight.speed + clamp(desiredSpeed - flight.speed, maxSpeed * 0.45 * dt));
 
 	const vz = clamp(desired.z ?? 0, maxSpeed * 0.3);
-	flight.vz = (flight.vz ?? 0) + clamp(vz - (flight.vz ?? 0), maxSpeed * dt);
+	flight.vz = (flight.vz ?? 0) + clamp(vz - (flight.vz ?? 0), maxSpeed * 0.2 * dt);
 	const before = point.z ?? 0;
 	point.z = clamp(before + flight.vz * dt, FLIGHT_BAND);
 	flight.vz = (point.z - before) / dt;
 	flight.speed = Math.min(flight.speed, Math.sqrt(Math.max(0, maxSpeed * maxSpeed - flight.vz ** 2)));
 	point.x += Math.cos(flight.angle) * flight.speed * dt;
 	point.y += Math.sin(flight.angle) * flight.speed * dt;
-	flight.pitch = Math.atan2(flight.vz, Math.max(1, flight.speed));
+	pitchHeavy(flight, dt);
 };
 
 export const createFlight = function (point: Point, desired: Point, speed: number, id: number): Flight {
