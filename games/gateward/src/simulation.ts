@@ -31,12 +31,13 @@ export const ESCORTS = {
 	interceptor: { name: 'Interceptor wing', cost: 85, count: 3, hp: 65, speed: tactical(160), range: tactical(155), damage: 10, reload: 0.65 },
 	guardian: { name: 'Guardian', cost: 105, count: 1, hp: 260, speed: tactical(85), range: tactical(240), damage: 24, reload: 0.9 },
 };
+const CAPITAL_SPEED_SCALE = 0.25;
 export const ENEMIES = {
-	carrier: { hp: 600, speed: tactical(38), range: tactical(400), damage: 0, reload: 1, reward: 45, armor: 0.7 },
+	carrier: { hp: 600, speed: tactical(38) * CAPITAL_SPEED_SCALE, range: tactical(400), damage: 0, reload: 1, reward: 45, armor: 0.7 },
 	raider: { hp: 45, speed: tactical(50), range: tactical(100), damage: 7, reload: 1.2, reward: 9, armor: 1 },
 	bomber: { hp: 95, speed: tactical(30), range: tactical(290), damage: 34, reload: 3.8, reward: 17, armor: 1 },
-	armored: { hp: 260, speed: tactical(40), range: tactical(185), damage: 22, reload: 2.4, reward: 28, armor: 0.48 },
-	flagship: { hp: 2400, speed: tactical(36), range: tactical(370), damage: 55, reload: 2.8, reward: 180, armor: 0.7 },
+	armored: { hp: 260, speed: tactical(40) * CAPITAL_SPEED_SCALE, range: tactical(185), damage: 22, reload: 2.4, reward: 28, armor: 0.48 },
+	flagship: { hp: 2400, speed: tactical(36) * CAPITAL_SPEED_SCALE, range: tactical(370), damage: 55, reload: 2.8, reward: 180, armor: 0.7 },
 };
 export interface Mount extends Point { integrity: number; weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
 export const BOMBER_ATTACK = { windup: 2, releaseCue: 0.35 } as const;
@@ -628,7 +629,7 @@ export const step = function (state: State, dt: number) {
 		const flight = enemy.flight;
 		const approaching = enemy.approaching === true && distance(enemy, state.ark) > SENSOR_CONFIG.shortRange;
 		if (!approaching && enemy.approaching) enemy.approaching = false;
-		const flightSpeed = approaching ? APPROACH.cruiseSpeed : config.speed;
+		const flightSpeed = approaching ? APPROACH.cruiseSpeed * (isCapital(enemy) ? CAPITAL_SPEED_SCALE : 1) : config.speed;
 		const waypoint = navigateField(state, enemy, destination, flightSpeed, dt);
 		const desired = waypoint ? arriveCourse(enemy, waypoint, { x: 0, y: 0 }, 2)
 			: approaching ? arriveCourse(enemy, destination, carrierVelocity, 0.5)
@@ -636,7 +637,7 @@ export const step = function (state: State, dt: number) {
 			: fighterCourse(enemy, escort ?? state.ark, tactical(escort ? 60 : enemy.kind === 'bomber' ? 265 : 195), tactical(escort ? 60 : enemy.kind === 'bomber' ? 225 : 105), config.speed, enemy.id % 2 ? -1 : 1, escort ? flightVelocity(escort.flight) : carrierVelocity, state.enemies);
 		desired.z = (altitudeCourse(enemy.id, state.time, isCapital(enemy), escort ?? (isCapital(enemy) ? state.ark : { ...state.ark, z: -45 })) - (enemy.z ?? 0)) * 0.8;
 		const hull = neighbors.find(function (hull) { return hull.id === enemy.id; });
-		fly(enemy, flight, hull ? avoidTraffic(hull, desired, neighbors, flightSpeed) : desired, flightSpeed, isCapital(enemy) ? 0.7 : 3, dt, !isCapital(enemy));
+		fly(enemy, flight, hull ? avoidTraffic(hull, desired, neighbors, flightSpeed) : desired, flightSpeed, isCapital(enemy) ? 0.7 : 3, dt, !isCapital(enemy), false, isCapital(enemy) ? flightSpeed / CAPITAL_SPEED_SCALE : flightSpeed);
 		if (enemy.kind === 'carrier') { advanceCarrierHangar(state, enemy, flight, dt); continue; }
 		const shotSpeed = tactical(enemy.kind === 'bomber' ? 155 : 235);
 		const escortSolution = escort ? hostileSolution(enemy, escort, flightVelocity(escort.flight), shotSpeed) : undefined;

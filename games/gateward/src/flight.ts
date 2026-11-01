@@ -73,7 +73,8 @@ const pitchHeavy = function (flight: Flight, dt: number, accelerationScale = 1):
 };
 
 // Capitals keep heading-following courses, with slower thrust and rotational response.
-export const fly = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, inertial = false, heavy = false): void {
+// Keep the thrust reference separate so speed-cap tuning preserves acceleration.
+export const fly = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, inertial = false, heavy = false, thrustSpeed = maxSpeed): void {
 	if (dt <= 0) return;
 	if (inertial) { flyInertial(point, flight, desired, maxSpeed, turnRate, dt, heavy); return; }
 	const angle = length(desired) < 0.01 ? flight.angle : Math.atan2(desired.y, desired.x);
@@ -83,10 +84,10 @@ export const fly = function (point: Point, flight: Flight, desired: Point, maxSp
 	const desiredSpeed = Math.min(planarLimit, length(desired)) * Math.max(0, Math.cos(turn));
 	flight.angularVelocity = heavyRotation(turn, flight.angularVelocity ?? 0, turnRate * 0.65, turnRate * 0.35 * CAPITAL_ACCELERATION_SCALE, dt, 1);
 	flight.angle += flight.angularVelocity * dt;
-	flight.speed = Math.min(planarLimit, flight.speed + clamp(desiredSpeed - flight.speed, maxSpeed * 0.45 * CAPITAL_ACCELERATION_SCALE * dt));
+	flight.speed = Math.min(planarLimit, flight.speed + clamp(desiredSpeed - flight.speed, thrustSpeed * 0.45 * CAPITAL_ACCELERATION_SCALE * dt));
 
 	const vz = clamp(desired.z ?? 0, maxSpeed * 0.3);
-	flight.vz = (flight.vz ?? 0) + clamp(vz - (flight.vz ?? 0), maxSpeed * 0.2 * CAPITAL_ACCELERATION_SCALE * dt);
+	flight.vz = (flight.vz ?? 0) + clamp(vz - (flight.vz ?? 0), thrustSpeed * 0.2 * CAPITAL_ACCELERATION_SCALE * dt);
 	const before = point.z ?? 0;
 	point.z = clamp(before + flight.vz * dt, FLIGHT_BAND);
 	flight.vz = (point.z - before) / dt;
