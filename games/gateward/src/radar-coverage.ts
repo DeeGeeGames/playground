@@ -3,23 +3,23 @@ import { balanceCoverage, setCoveragePriority, type Sector, type State } from '.
 
 const text = function (node: Element, value: string) { if (node.textContent !== value) node.textContent = value; };
 const labelFor = function (priority: CoveragePriority) { return priority[0]?.toUpperCase() + priority.slice(1); };
-export const createRadarCoverage = function (root: HTMLElement, svg: SVGSVGElement, getState: () => State, available: () => boolean, show: () => void, signal: AbortSignal) {
+export const createRadarCoverage = function (root: HTMLElement, svg: SVGSVGElement | undefined, getState: () => State, available: () => boolean, show: () => void, signal: AbortSignal) {
 	let selected: Sector = 'port';
 	const heading = document.createElement('h3'); heading.textContent = 'Escort coverage';
 	const intro = document.createElement('p'); intro.className = 'radar-explanation'; intro.textContent = 'Set priorities. Escorts choose their own patrol and intercept positions.';
 	const rows = document.createElement('div'); rows.className = 'radar-coverage-rows';
 	const status = document.createElement('p'); status.className = 'radar-coverage-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
-	const override = document.createElement('p'); override.id = 'coverage-override'; override.className = 'radar-explanation';
+	const override = document.createElement('p'); override.id = `${root.id || 'radar'}-coverage-override`; override.className = 'radar-explanation';
 	const balanced = document.createElement('button'); balanced.type = 'button'; balanced.textContent = 'Balanced'; balanced.className = 'radar-balanced';
 	balanced.addEventListener('click', function () { if (available()) balanceCoverage(getState()); update(); }, { signal });
 	root.append(heading, intro, rows, balanced, override, status);
-	const layer = document.createElementNS('http://www.w3.org/2000/svg', 'g'); layer.classList.add('radar-sectors'); svg.prepend(layer);
+	const layer = document.createElementNS('http://www.w3.org/2000/svg', 'g'); layer.classList.add('radar-sectors'); svg?.prepend(layer);
 	const controls = COVERAGE_SECTORS.map(function (sector, index) {
 		const row = document.createElement('div'); row.className = 'radar-coverage-row';
 		const button = document.createElement('button'); button.type = 'button';
 		const name = document.createElement('strong'); name.textContent = SECTOR_NAMES[sector];
 		const count = document.createElement('small'); button.append(name, count);
-		const select = document.createElement('select'); select.id = `coverage-${sector}`; select.setAttribute('aria-label', `${SECTOR_NAMES[sector]} coverage priority`); select.setAttribute('aria-describedby', override.id);
+		const select = document.createElement('select'); select.id = `${svg ? 'coverage' : 'drawer-coverage'}-${sector}`; select.setAttribute('aria-label', `${SECTOR_NAMES[sector]} coverage priority`); select.setAttribute('aria-describedby', override.id);
 		for (const priority of COVERAGE_PRIORITIES) { const option = document.createElement('option'); option.value = priority; option.textContent = labelFor(priority); select.append(option); }
 		select.addEventListener('change', function () { if (available() && isCoveragePriority(select.value)) setCoveragePriority(getState(), sector, select.value); selected = sector; update(); }, { signal });
 		button.addEventListener('click', function () { selected = sector; update(); }, { signal });
@@ -32,7 +32,7 @@ export const createRadarCoverage = function (root: HTMLElement, svg: SVGSVGEleme
 		path.addEventListener('click', choose, { signal }); path.addEventListener('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); choose(); } }, { signal }); layer.append(path);
 		const x = sector === 'port' ? 22 : sector === 'starboard' ? 418 : 220; const y = sector === 'ahead' ? 20 : sector === 'astern' ? 416 : 218;
 		const caption = document.createElementNS('http://www.w3.org/2000/svg', 'text'); caption.setAttribute('x', String(x)); caption.setAttribute('y', String(y)); caption.setAttribute('text-anchor', 'middle'); caption.classList.add('radar-sector-caption'); caption.textContent = sector === 'starboard' ? 'STBD' : SECTOR_NAMES[sector].toUpperCase();
-		const priorityLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text'); priorityLabel.setAttribute('x', String(x)); priorityLabel.setAttribute('y', String(y + 13)); priorityLabel.setAttribute('text-anchor', 'middle'); priorityLabel.classList.add('radar-sector-priority'); svg.append(caption, priorityLabel);
+		const priorityLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text'); priorityLabel.setAttribute('x', String(x)); priorityLabel.setAttribute('y', String(y + 13)); priorityLabel.setAttribute('text-anchor', 'middle'); priorityLabel.classList.add('radar-sector-priority'); svg?.append(caption, priorityLabel);
 		return { sector, button, select, count, path, priorityLabel };
 	});
 	const boundaries = document.createElementNS('http://www.w3.org/2000/svg', 'path'); boundaries.setAttribute('d', 'M92.72 92.72L347.28 347.28M92.72 347.28L347.28 92.72'); boundaries.classList.add('radar-sector-boundaries'); layer.append(boundaries);
