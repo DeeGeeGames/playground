@@ -67,7 +67,7 @@ describe('guardian screens and restrictions', function () {
 	test('independent assignments persist with physical travel and local leash', function () {
 		const s = quiet(); deploy(s, 'guardian'); deploy(s, 'guardian'); const [a, b] = s.escorts; if (!a || !b) throw new Error('Missing guardians');
 		assignGuardian(s, b.id, 'starboard'); s.status = 'running'; advance(s, 7); expect(a.y).toBeLessThan(-220); expect(b.y).toBeGreaterThan(220);
-		assignGuardian(s, a.id, 'ahead'); const before = a.x; advance(s, .1); expect(a.x - before).toBeLessThan(10); advance(s, 8); expect(localPoint(s, a).x).toBeGreaterThan(270); expect(b.sector).toBe('starboard');
+		assignGuardian(s, a.id, 'ahead'); const before = a.x; advance(s, .1); expect(a.x - before).toBeLessThan(10); advance(s, 30); expect(localPoint(s, a).x).toBeGreaterThan(270); expect(b.sector).toBe('starboard');
 		s.enemies.push({ id: 99, ...worldPoint(s, { x: -400, y: 0 }), hp: 9999, maxHp: 9999, kind: 'armored', cooldown: 99 }); s.priority = 99; advance(s, 2); expect(localPoint(s, a).x).toBeGreaterThan(270);
 	});
 	test('screen draws hostile fire and dies without damaging ark; replacement uses economy', function () {

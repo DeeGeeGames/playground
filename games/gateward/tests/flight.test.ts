@@ -3,7 +3,7 @@ import { CRAFT_MOUNTS } from '../src/craft-turrets';
 import { describe, expect, test } from 'bun:test';
 import { broadsideMuzzle, fly, type Flight } from '../src/flight';
 import { flightVelocity, localPoint } from '../src/space';
-import { createState, deploy, scramble, ENEMIES, APPROACH, setAllocation, setRally, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
+import { createState, deploy, scramble, ENEMIES, ESCORTS, APPROACH, setAllocation, setRally, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
 
 const quiet = function (): State {
 	const state = createState(); state.status = 'running'; state.nextWave = Infinity;
@@ -180,6 +180,32 @@ describe('small-craft inertia', function () {
 
 
 describe('heavy hull response', function () {
+	test('Guardian inherits no excess ark speed and stays within its quarter-speed ceiling', function () {
+		const state = quiet(); setAllocation(state, { engines: 10, weapons: 0, shields: 0 });
+		step(state, 1 / 60); deploy(state, 'guardian');
+		const guardian = state.escorts[0]; if (!guardian) throw new Error('Missing Guardian');
+		const arkStart = state.ark.x; const before = localPoint(state, guardian).x;
+		for (let frame = 0; frame < 600; frame++) {
+			step(state, 1 / 60);
+			const velocity = flightVelocity(guardian.flight);
+			expect(Math.hypot(velocity.x, velocity.y, velocity.z ?? 0)).toBeLessThanOrEqual(85 + 1e-8);
+		}
+		expect(localPoint(state, guardian).x).toBeLessThan(before);
+		expect(state.ark.x - arkStart).toBeCloseTo(1200, 5);
+	});
+
+	test('Guardian thrust, braking, yaw and pitch retain one quarter of their former acceleration', function () {
+		const craft: Flight = { angle: 0, speed: 0, side: 1, course: 'intercept', run: 1 };
+		fly({ x: 0, y: 0 }, craft, { x: 100, y: 100, z: 20 }, ESCORTS.guardian.speed, 1.6, 1 / 60, true, true);
+		const velocity = flightVelocity(craft);
+		expect(Math.hypot(velocity.x, velocity.y, velocity.z ?? 0)).toBeCloseTo(340 * 0.45 * 0.25 / 60);
+		expect(craft.angularVelocity).toBeCloseTo(1.6 * 0.5 * 0.25 / 60);
+		expect(craft.pitchVelocity).toBeCloseTo(0.12 * 0.25 / 60);
+		const braking: Flight = { angle: 0, speed: 85, vx: 85, vy: 0, vz: 0, side: 1, course: 'intercept', run: 1 };
+		fly({ x: 0, y: 0 }, braking, { x: 0, y: 0 }, ESCORTS.guardian.speed, 1.6, 1 / 60, true, true);
+		expect(braking.speed).toBeCloseTo(85 - 340 * 0.45 * 0.25 / 60);
+	});
+
 	test('lowering a capital speed ceiling preserves its thrust acceleration', function () {
 		const original: Flight = { angle: 0, speed: 0, side: 1, course: 'intercept', run: 1 };
 		const slower = structuredClone(original);
@@ -227,8 +253,8 @@ describe('heavy hull response', function () {
 		for (let i = 0; i < 2400; i++) {
 			const yaw = craft.angularVelocity ?? 0; const pitch = craft.pitchVelocity ?? 0;
 			fly(point, craft, { x: 0, y: 100, z: i < 120 ? 30 : 0 }, 100, 0.7, 1 / 60, inertial, true);
-			expect(Math.abs((craft.angularVelocity ?? 0) - yaw)).toBeLessThanOrEqual(0.7 * (inertial ? 0.5 : 0.35 * 0.25) / 60 + 1e-8);
-			expect(Math.abs((craft.pitchVelocity ?? 0) - pitch)).toBeLessThanOrEqual(0.12 * (inertial ? 1 : 0.25) / 60 + 1e-8);
+			expect(Math.abs((craft.angularVelocity ?? 0) - yaw)).toBeLessThanOrEqual(0.7 * (inertial ? 0.5 : 0.35) * 0.25 / 60 + 1e-8);
+			expect(Math.abs((craft.pitchVelocity ?? 0) - pitch)).toBeLessThanOrEqual(0.12 * 0.25 / 60 + 1e-8);
 			expect(Math.hypot(craft.speed, craft.vz ?? 0)).toBeLessThanOrEqual(100 + 1e-8);
 			if (i === 0) { expect(craft.angle).toBeLessThan(0.001); expect(Math.abs(craft.pitch ?? 0)).toBeLessThan(0.001); }
 			if (i === 59) expect(craft.pitch).toBeGreaterThan(0.01);

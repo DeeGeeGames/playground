@@ -28,9 +28,11 @@ const followsVelocity = function (state: State, craft: Escort, before: Point, be
 describe('one world and shared friendly steering', function () {
 	test('guardian carries momentum, matches ark course at station, and turns through reassignment', function () {
 		const state = createState({ scenario: 'drill' }); state.status = 'running'; state.nextWave = Infinity;
-		state.ark.x = 1400; state.routeOrigin.x = 1400; deploy(state, 'guardian');
+		state.ark.x = 1400; state.routeOrigin.x = 1400;
+		// Keep the ark moving while the heavier Guardian completes its longer crossing.
+		state.systems.routeLength = 100000; deploy(state, 'guardian');
 		const guardian = state.escorts[0]; if (!guardian) throw new Error('Missing guardian');
-		for (let frame = 0; frame < 1800; frame++) {
+		for (let frame = 0; frame < 9000; frame++) {
 			if (frame === 600) assignGuardian(state, guardian.id, 'starboard');
 			const before = { x: guardian.x, y: guardian.y }; const angle = guardian.angle;
 			step(state, 1 / 60); followsVelocity(state, guardian, before, angle, 1.6);
@@ -62,7 +64,7 @@ describe('one world and shared friendly steering', function () {
 		expect(state.rally.x).toBeCloseTo(120); expect(state.rally.y).toBeCloseTo(-200);
 		deploy(state, 'guardian'); const guardian = state.escorts[0]; if (!guardian) throw new Error('Missing guardian');
 		expect(localPoint(state, guardian).x).toBeCloseTo(-220);
-		advance(state, 12); expect(guardian.y).toBeGreaterThan(-700);
+		advance(state, 110); expect(guardian.y).toBeGreaterThan(-700);
 		expect(localPoint(state, guardian).x).toBeCloseTo(120 + tactical(45) + state.ark.speed / 60, 0);
 		expect(localPoint(state, guardian).y).toBeCloseTo(-200, 0);
 	});
