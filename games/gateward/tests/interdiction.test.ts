@@ -86,7 +86,7 @@ describe('field geometry and hostile fire', function () {
 	});
 	test('a bomber already at firing range maneuvers instead of parking or firing through the field', function () {
 		const state = quiet(); placeInterdiction(state, { x: tactical(265), y: 0 }); const enemy = hostile(state, 'bomber', 400, 30);
-		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 120;
+		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 240;
 		step(state, 0.05); expect(enemy.detour).toBeDefined(); expect(state.shots).toHaveLength(0); expect(enemy.y).not.toBe(tactical(30));
 		let fired = false;
 		for (let frame = 0; frame < 3600; frame++) {
@@ -127,8 +127,8 @@ describe('deterministic approach shaping', function () {
 		const direct = quiet(); const shaped = quiet(); placeInterdiction(shaped, { x: tactical(300), y: 0 });
 		const plainEnemy = hostile(direct, kind); const enemy = hostile(shaped, kind); const hp = enemy.hp;
 		// Keep the obstacle active long enough to test a full detour at the slower fighter speed.
-		const field = shaped.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 120;
-		advance(direct, 60); advance(shaped, 60);
+		const field = shaped.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 240;
+		advance(direct, 120); advance(shaped, 120);
 		expect(Math.hypot(enemy.x - plainEnemy.x, enemy.y - plainEnemy.y)).toBeGreaterThan(60); expect(enemy.detour).toBeUndefined();
 		expect(systemsFor(shaped).interdiction.field).toBeDefined(); expect(systemsFor(shaped).interdiction.redirected).toBe(1); expect(enemy.hp).toBe(hp); expect(shaped.kills).toBe(0);
 	});
@@ -147,7 +147,7 @@ describe('deterministic approach shaping', function () {
 	test('moving escort targets retain the chosen side and release when a clear target returns', function () {
 		const state = quiet(); placeInterdiction(state, { x: tactical(300), y: 0 }); const enemy = hostile(state, 'raider', 450, 0); step(state, 0.05);
 		const side = enemy.detour?.side; expect(side).toBeDefined();
-		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 120;
+		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 240;
 		state.escorts.push({ id: state.nextId++, kind: 'guardian', x: tactical(300), y: tactical(10), hp: 100000, cooldown: 9999, angle: 0 });
 		const escort = state.escorts[0]; if (!escort) throw new Error('Missing escort');
 		for (let frame = 0; frame < 120; frame++) { escort.x = tactical(300); escort.y = frame % 2 ? -tactical(15) : tactical(15); state.rally = { x: tactical(300), y: escort.y }; step(state, 1 / 60); expect(enemy.detour?.side).toBe(side); }
@@ -156,14 +156,15 @@ describe('deterministic approach shaping', function () {
 	test('an escort inside the field cannot cause an infinite orbit and expiry releases the attacker', function () {
 		const state = quiet(); placeInterdiction(state, { x: tactical(300), y: 0 }); const enemy = hostile(state, 'raider', 450, 0);
 		state.escorts.push({ id: state.nextId++, kind: 'guardian', x: tactical(300), y: 0, hp: 100000, cooldown: 9999, angle: 0 });
+		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 60;
 		const escort = state.escorts[0]; if (!escort) throw new Error('Missing escort');
 		state.rally = { x: tactical(255), y: 0 };
-		for (let frame = 0; frame < 1500; frame++) { escort.x = tactical(300); escort.y = 0; step(state, 1 / 60); }
+		for (let frame = 0; frame < 3000; frame++) { escort.x = tactical(300); escort.y = 0; step(state, 1 / 60); }
 		expect(enemy.detour).toBeDefined(); const before = { x: enemy.x, y: enemy.y };
 		for (let frame = 0; frame < 120; frame++) { escort.x = tactical(300); escort.y = 0; step(state, 1 / 60); }
 		// Thrusters settle with sub-decimeter drift rather than snapping to rest.
 		expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeLessThan(0.05); expect(state.shots).toHaveLength(0);
-		advance(state, 3.1); expect(enemy.detour).toBeUndefined(); expect(enemy.x).not.toBe(before.x); expect(systemsFor(state).interdiction.field).toBeUndefined();
+		advance(state, 8.1); expect(enemy.detour).toBeUndefined(); expect(enemy.x).not.toBe(before.x); expect(systemsFor(state).interdiction.field).toBeUndefined();
 	});
 
 });

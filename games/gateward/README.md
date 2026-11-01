@@ -534,18 +534,20 @@ are batched by material, use no textures, and need no runtime compression decode
 ### Small-craft acceleration
 
 Interceptors, raiders and bombers keep world velocity separately
-from hull heading. Their top speeds are now 160, 50, and 30 m/s respectively,
-25% of their former values. Thrusters accelerate or brake at up to 0.65 times
-these speed limits per second, shared across horizontal and vertical steering;
-this also quarters thrust and braking. Yaw acceleration is now 0.2 times the
-configured turn rate per second, one quarter of its former value, while the yaw
-rate ceiling remains 55% of that rate. Enemy approach cruise is 60 m/s and the
-carrier launch burst is 90 m/s, both quartered too.
+from hull heading. Their top speeds are now 80, 25, and 15 m/s respectively,
+12.5% of their original values after a further 50% reduction. Thrusters accelerate
+or brake at up to 0.65 times these speed limits per second, shared across
+horizontal and vertical steering;
+this also reduces thrust and braking to 12.5% of their original values. Yaw
+acceleration is now 0.1 times the configured turn rate per second, one eighth
+of its original value, while the yaw rate ceiling remains 55% of that rate. Enemy approach cruise is 30 m/s and the
+carrier launch burst is 45 m/s, both also one eighth of their original values.
 Ships drift through turns and counter-thrust before settling on a new course;
 weapon lead and traffic prediction use that actual velocity. Capital ships and
 Guardians use the slower handling described below. Small craft advance
-interdiction corners with a short lookahead so slower turning does not strand them at a waypoint. Existing solid
-hull and altitude boundaries still constrain movement.
+interdiction corners with a short lookahead so slower turning does not strand
+them at a waypoint. Existing solid hull and altitude boundaries still constrain
+movement.
 
 These values are an initial handling pass. Simulation and browser checks establish
 navigation behavior; owner playtesting remains the acceptance check for feel.
@@ -575,9 +577,10 @@ balanced travel takes twice as long. Capitals can fall behind it and cannot
 catch up at combat speed. Delayed arrivals, longer clearance after reaching the
 gate, and missed scenario deadlines are accepted consequences. This supports
 the direction of capital ships as slowly repositioning turret platforms. Existing
-strategy snapshots also change: the full-arc spending control still clears all
-contacts with full hull, but minimum shield reserve falls to 30 with the slower
-small craft. Its narrow-arc comparison now loses. Current Systems Trial strategies
+strategy snapshots also change: the full-arc spending control clears all contacts
+in about 632 seconds; hull falls to 1175 before restoration to 1200 at completion,
+shields deplete, and sensors fall to 75 while remaining healthy. Its narrow-arc
+comparison loses at about 364 seconds. Current Systems Trial strategies
 reach the unchanged deadline without kills. These are simulation outcomes, not
 acceptance of balance or feel.
 

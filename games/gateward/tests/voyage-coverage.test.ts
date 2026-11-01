@@ -68,12 +68,12 @@ test('the same spending policy exposes greater narrow-arc pressure during delaye
 	expect(voyage.status).toBe('lost'); expect(voyage.finalHull).toBe(0);
 	expect(voyage.kills).toBeGreaterThan(0); expect(voyage.kills).toBeLessThan(control.kills);
 	// Clearance time depends on which slow capitals enter each firing arc.
-	expect(voyage.time).toBeGreaterThan(420); expect(voyage.time).toBeLessThan(840); expect(control.time).toBeGreaterThan(420);
+	expect(voyage.time).toBeGreaterThan(210); expect(voyage.time).toBeLessThan(840); expect(control.time).toBeGreaterThan(420);
 	// Exact shield minima and hull hits vary with contact-rich trajectories across
-	// runtimes. Require greater shield pressure without prescribing a damage tally.
+	// runtimes. Require greater hull pressure without prescribing a damage tally.
 	expect(voyage.minimumHull).toBe(0);
-	expect(voyage.minimumHull).toBeLessThanOrEqual(control.minimumHull);
-	expect(voyage.minimumShield).toBeLessThan(control.minimumShield);
+	expect(voyage.minimumHull).toBeLessThan(control.minimumHull);
+	expect(voyage.minimumShield).toBeLessThanOrEqual(control.minimumShield);
 	expect(voyage.minimumShield).toBeGreaterThanOrEqual(0);
 	const spent = function (result: typeof control) { return result.purchases.reduce(function (sum, purchase) { return sum + purchase.cost; }, 0); };
 	// Hull loss may halt the same purchase policy before all upgrades are funded.

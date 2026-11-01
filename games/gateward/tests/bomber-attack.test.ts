@@ -14,7 +14,7 @@ const setup = function (scenario?: 'drill' | 'systems') {
 const advance = function (state: State, seconds: number) { for (let i = 0; i < Math.round(seconds * 60); i++) step(state, 1 / 60); };
 const bomber = function (state: State) { const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing bomber'); return enemy; };
 const untilShot = function (state: State) {
-	for (let i = 0; i < 600; i++) { step(state, 1 / 60); if (state.shots.some(function (shot) { return shot.side === 'enemy'; })) return state.time; }
+	for (let i = 0; i < 3600; i++) { step(state, 1 / 60); if (state.shots.some(function (shot) { return shot.side === 'enemy'; })) return state.time; }
 	throw new Error('Bomber did not release');
 };
 
@@ -56,16 +56,17 @@ describe('bomber response window', function () {
 		advance(state, 3); expect(state.enemies).toHaveLength(0); expect(state.shots).toHaveLength(0);
 	});
 	test('same equipment: post-release Aegis clears; active protection mitigates; an early pulse can expire', function () {
-		const ignored = setup(); const release = untilShot(ignored); advance(ignored, 2);
+		const stationary = function () { const state = setup(); state.systems.allocation = { engines: 0, weapons: 10, shields: 0 }; state.systems.shield.charge = 0; return state; };
+		const ignored = stationary(); const release = untilShot(ignored); advance(ignored, 2);
 		expect(ignored.systems.sensors.integrity).toBe(66); expect(ignored.hull).toBe(1166);
-		const cleared = setup(); expect(untilShot(cleared)).toBe(release); expect(pulse(cleared)).toBe(true); advance(cleared, 2);
+		const cleared = stationary(); expect(untilShot(cleared)).toBe(release); expect(pulse(cleared)).toBe(true); advance(cleared, 2);
 		expect(cleared.systems.sensors.integrity).toBe(100); expect(cleared.hull).toBe(1200);
-		const protectedHull = setup(); untilShot(protectedHull); protectedHull.aegisRemaining = 5; advance(protectedHull, 2);
+		const protectedHull = stationary(); untilShot(protectedHull); protectedHull.aegisRemaining = 5; advance(protectedHull, 2);
 		expect(protectedHull.systems.sensors.integrity).toBe(66); expect(protectedHull.hull).toBeCloseTo(1193.2);
-		const early = setup(); step(early, 1 / 60); pulse(early); untilShot(early); advance(early, 2);
+		const early = stationary(); step(early, 1 / 60); pulse(early); untilShot(early); advance(early, 2);
 		// Pushback delays the slower bomber until after the early protection expires.
 		expect(early.systems.sensors.integrity).toBe(66); expect(early.hull).toBe(1166);
-		const late = setup(); untilShot(late); advance(late, 2); pulse(late);
+		const late = stationary(); untilShot(late); advance(late, 2); pulse(late);
 		expect(late.systems.sensors.integrity).toBe(66); expect(late.hull).toBe(1166);
 	});
 	test('eligible field blocks a released round', function () {
