@@ -83,7 +83,10 @@ describe('capital ship courses and batteries', function () {
 		expect(Math.abs(Math.cos(direction))).toBeLessThanOrEqual(Math.sin(50 * Math.PI / 180));
 	});
 	for (const engines of [0, 10]) test(`world speed stays bounded through engine changes and gate arrival (${engines} engines)`, function () {
-		const state = quiet(); const enemy = hostile(state, 'flagship', -300, -400);
+		// Trial combat continues at the gate; Full Voyage now ends on arrival.
+		const state = createState({ scenario: 'drill' }); state.status = 'running'; state.nextWave = Infinity;
+		state.systems.shield.capacity = 100000; state.systems.shield.charge = 100000;
+		const enemy = hostile(state, 'flagship', -300, -400);
 		for (let frame = 0; frame < 3600; frame++) {
 			if (frame === 600) setAllocation(state, { engines, weapons: 10 - engines, shields: 0 });
 			if (frame === 1800) { state.systems.distanceTraveled = state.systems.routeLength; state.ark.x = state.routeOrigin.x + state.systems.routeLength; }
