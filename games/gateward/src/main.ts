@@ -1,3 +1,5 @@
+import { createControllerUI } from './controller-ui';
+import { createRadarCoverage } from './radar-coverage';
 import { tactical } from './combat-scale';
 import { createRadar } from './radar';
 import { createAudio } from './audio';
@@ -53,6 +55,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const pointers = new Map<number, { x: number; y: number; moved: boolean }>();
 	let multiTouch = false;
 	let inspector: Inspector | undefined;
+	let lastInspector: Inspector = 'coverage';
 	let inspectedContact: number | undefined;
 	let radarOpen = false;
 	const radarHost = element('radar');
@@ -69,17 +72,19 @@ const shutdown = await mountGame('game', async function (container) {
 	let inspectorReturn: HTMLElement | undefined;
 	const openInspector = function (view: Inspector) {
 		if (!available()) return;
-		if (!inspector) inspectorReturn = document.activeElement instanceof HTMLElement ? document.activeElement : button('open-systems');
-		inspector = view; element('inspector').hidden = false; container.dataset['inspectorOpen'] = 'true';
+		if (!inspector) inspectorReturn = document.activeElement instanceof HTMLElement ? document.activeElement : element('coverage-tab');
+		pointers.clear(); multiTouch = false; presentation.cancelInteraction();
+		inspector = view; lastInspector = view; element('inspector').hidden = false; container.dataset['inspectorOpen'] = 'true';
 		for (const section of container.querySelectorAll<HTMLElement>('[data-inspector-content]')) section.hidden = section.dataset['inspectorContent'] !== view;
-		for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) control.setAttribute('aria-pressed', String(control.dataset['inspector'] === view));
-		label(element('inspector-title'), view === 'mounts' ? 'Weapon mounts' : view === 'contact' ? 'Contact' : view === 'field' ? 'Interdiction field' : view === 'reactor' ? 'Reactor allocation' : view === 'escorts' ? 'Escort bay' : 'Sensor array');
+		for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) { control.setAttribute('aria-pressed', String(control.dataset['inspector'] === view)); control.setAttribute('aria-expanded', String(control.dataset['inspector'] === view)); control.setAttribute('aria-controls', 'inspector'); }
+		label(element('inspector-title'), view === 'coverage' ? 'Escort coverage' : view === 'mounts' ? 'Weapon mounts' : view === 'contact' ? 'Contact' : view === 'field' ? 'Interdiction field' : view === 'reactor' ? 'Reactor allocation' : view === 'escorts' ? 'Escort bay' : 'Sensor array');
 		button('open-systems').setAttribute('aria-expanded', 'true'); button('open-reactor').setAttribute('aria-expanded', String(view === 'reactor')); button('field-entry').setAttribute('aria-expanded', String(view === 'field'));
 	};
 	const closeInspector = function () {
+		for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) { control.setAttribute('aria-pressed', 'false'); control.setAttribute('aria-expanded', 'false'); }
 		inspector = undefined; element('inspector').hidden = true; container.dataset['inspectorOpen'] = 'false';
 		button('open-systems').setAttribute('aria-expanded', 'false'); button('open-reactor').setAttribute('aria-expanded', 'false'); button('field-entry').setAttribute('aria-expanded', 'false');
-		const target = inspectorReturn?.isConnected && !inspectorReturn.closest('[hidden]') ? inspectorReturn : button('open-systems');
+		const target = inspectorReturn?.isConnected && !inspectorReturn.closest('[hidden]') ? inspectorReturn : element('coverage-tab');
 		target.focus({ preventScroll: true });
 	};
 	const available = function () { return contextAvailable && state.focused && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'); };
@@ -161,14 +166,15 @@ const shutdown = await mountGame('game', async function (container) {
 	}, options);
 	const radar = createRadar(radarHost, function () { return state; }, available, { close: function () { setRadar(false); }, pause: function () { setPause(true); }, repair: function () { order(function () { return repairSensors(state); }); }, selectedMount: function () { return selected; } }, abort.signal);
 	button('open-radar').addEventListener('click', function () { setRadar(!radarOpen); }, options);
+	const drawerCoverage = createRadarCoverage(element('drawer-coverage'), undefined, function () { return state; }, available, function () {}, abort.signal);
 	const escortPanel = createEscortPanel(element('escort-orders'), function () { return state; }, available, abort.signal);
 	const engineeringPanel = createEngineeringPanel(element('engineering'), function () { return state; }, available, abort.signal);
 	const interdictionPanel = createInterdictionPanel(element('interdiction-panel'), function () { return state; }, available, { get: function () { return placement; }, aim: aimPlacement, cancel: cancelPlacement, confirm: confirmPlacement }, abort.signal);
 	button('close-inspector').addEventListener('click', closeInspector, options);
-	button('open-systems').addEventListener('click', function () { if (inspector) closeInspector(); else openInspector('mounts'); }, options);
+	button('open-systems').addEventListener('click', function () { if (inspector) closeInspector(); else openInspector(lastInspector); }, options);
 	button('open-reactor').addEventListener('click', function () { openInspector('reactor'); }, options);
 	for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) control.addEventListener('click', function () {
-		const view = inspectorName(control.dataset['inspector']); if (view) openInspector(view);
+		const view = inspectorName(control.dataset['inspector']); if (view) { if (inspector === view) closeInspector(); else { openInspector(view); element('close-inspector').focus({ preventScroll: true }); } }
 	}, options);
 	button('field-entry').addEventListener('click', function () {
 		if (placement || interdictionReason(state)) openInspector('field'); else aimPlacement(worldPoint(state, { x: tactical(300), y: 0 }));
@@ -178,7 +184,7 @@ const shutdown = await mountGame('game', async function (container) {
 	button('resume').addEventListener('click', function () { setPause(false); }, options);
 	button('restart').addEventListener('click', restart, options); button('restart-pause').addEventListener('click', restart, options);
 	ui.speed.addEventListener('click', function () { if (!briefing && contextAvailable && state.focused && (state.status === 'fitting' || state.status === 'running')) speed = speed === 1 ? 2 : 1; }, options);
-	ui.coverage.addEventListener('click', function () { setRadar(true); }, options);
+	ui.coverage.addEventListener('click', function () { openInspector('coverage'); }, options);
 	ui.clear.addEventListener('click', function () { if (available()) setPriority(state, undefined); }, options);
 	canvas.addEventListener('pointerdown', function (event) {
 		if (event.button !== 0 || radarOpen) return;
@@ -236,6 +242,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'Escape' || event.code === 'Space') { event.preventDefault(); setPause(!paused); return; }
 		if (!available()) return;
 		if (radarOpen && event.code !== 'KeyS' && event.code !== 'KeyQ' && event.code !== 'KeyE') return;
+		if (event.code === 'KeyC') { event.preventDefault(); if (inspector === 'coverage') closeInspector(); else { openInspector('coverage'); element('close-inspector').focus({ preventScroll: true }); } return; }
 		if (event.code === 'KeyI') { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement(worldPoint(state, { x: tactical(300), y: 0 })); return; }
 		if (placement && event.target === canvas) {
 			const adjustment = event.code === 'ArrowUp' ? { x: tactical(20), y: 0 } : event.code === 'ArrowDown' ? { x: -tactical(20), y: 0 } : event.code === 'ArrowLeft' ? { x: 0, y: -tactical(20) } : event.code === 'ArrowRight' ? { x: 0, y: tactical(20) } : undefined;
@@ -266,7 +273,7 @@ const shutdown = await mountGame('game', async function (container) {
 			if (container.style.getPropertyValue('--side-top') !== sideTop) container.style.setProperty('--side-top', sideTop);
 		}
 		if (container.dataset['mode'] !== mode) container.dataset['mode'] = mode;
-		escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
+		drawerCoverage.update(); escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
 		const modal = briefing ? ui.brief : paused ? ui.pausePanel : !ui.result.hidden ? ui.result : radarOpen ? radarHost : undefined;
 		for (const child of container.children) if (child instanceof HTMLElement) child.inert = !!modal && child !== modal;
 		const active = available();
@@ -389,17 +396,28 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.result.scrollTop = 0;
 		button('restart').focus({ preventScroll: true });
 	};
+	const controller = createControllerUI(container, {
+		toggleDrawer: function () { if (!available() || radarOpen) return; if (inspector) closeInspector(); else { openInspector(lastInspector); button('close-inspector').focus(); } },
+		back: function () { if (paused) setPause(false); else if (radarOpen) setRadar(false); else if (placement) cancelPlacement(); else if (inspector) closeInspector(); },
+		nextTab: function (direction) {
+			if (!available() || radarOpen) return;
+			const tabs = [...container.querySelectorAll<HTMLButtonElement>('.edge-tabs button')].filter(function (node) { return !node.hidden; });
+			const index = tabs.findIndex(function (node) { return node.dataset['inspector'] === inspector; });
+			const target = tabs[(index + direction + tabs.length) % tabs.length];
+			const view = inspectorName(target?.dataset['inspector']);
+			if (view) { openInspector(view); button('close-inspector').focus(); }
+		},
+		pause: function () { setPause(!paused); },
+	}, abort.signal);
 	const tick = function (now: number) {
 		if (disposed) return;
+		controller.poll();
 		const elapsed = previous ? Math.min(0.1, (now - previous) / 1000) : 0; previous = now;
 		if (available() && state.status === 'running' && !document.hidden) {
 			accumulator += elapsed * speed;
 			while (accumulator >= 1 / 60 && state.status === 'running') { step(state, 1 / 60); syncAudio(); accumulator -= 1 / 60; if (state.status !== 'running') showResult(); }
 		} else accumulator = 0;
-		// Shift the projection above a portrait sheet while retaining the player's orbit and zoom.
-		const panelTop = element('inspector').getBoundingClientRect().top - canvas.getBoundingClientRect().top;
-		const screenOffsetY = inspector && canvas.clientWidth <= 600 && canvas.clientHeight > 500 ? Math.max(0, canvas.clientHeight * 0.52 - panelTop + 50) : 0;
-		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, false, !radarOpen && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, screenOffsetY);
+		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, false, !radarOpen && !briefing && !paused && !inspector && (state.status === 'fitting' || state.status === 'running'), placement, 0);
 		syncAudio(); hud(); radar.update();
 		frame = requestAnimationFrame(tick);
 	};

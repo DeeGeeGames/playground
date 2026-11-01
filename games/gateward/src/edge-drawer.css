@@ -1,0 +1,66 @@
+/* Intent tabs stay on the edge; the drawer never moves the camera. */
+#game { --drawer-top:calc(var(--top) + 64px); --rail-width:64px; }
+.edge-tabs { position:absolute; z-index:3; right:var(--right); top:var(--drawer-top); bottom:calc(var(--bottom) + 76px); width:var(--rail-width); display:flex; flex-direction:column; gap:6px; overflow:auto; scrollbar-width:thin; }
+.edge-tabs button { flex-shrink:0; min-height:48px; padding:6px 3px; font-size:12px; }
+.edge-tabs kbd { display:none; }
+.command-console { position:static; width:auto; background:none; border:0; box-shadow:none; }
+.command-cluster { position:absolute; left:var(--left); bottom:var(--bottom); width:300px; padding:8px; background:var(--panel); border:1px solid var(--line); border-radius:10px; pointer-events:auto; }
+.selection-row,#game[data-fitting="true"] .selection-row { grid-template-columns:1fr 1fr; }
+#open-systems,#open-reactor { display:none; }
+.selection-row:has(#depart[hidden]) { height:0; }
+#open-radar { position:fixed; right:var(--right); bottom:var(--bottom); width:var(--rail-width); min-height:48px; }
+.commands { position:absolute; z-index:2; left:auto; right:calc(var(--right) + var(--rail-width) + 8px); top:var(--drawer-top); bottom:calc(var(--bottom) + 76px); width:min(336px,calc(100% - var(--left) - var(--right) - var(--rail-width) - 8px)); max-height:none; background:var(--panel); border:1px solid #617785; border-radius:12px; box-shadow:0 12px 32px #0006; pointer-events:auto; }
+.inspector-heading { padding:8px 12px; border-bottom:1px solid var(--line); }
+.inspector-heading h2 { font-size:17px; }
+.inspector-content { padding:12px; }
+#drawer-coverage h3 { display:none; }
+#drawer-coverage .radar-explanation { font-size:12px; line-height:1.5; }
+#drawer-coverage .radar-coverage-row { grid-template-columns:minmax(0,1fr) 110px; }
+#drawer-coverage select { min-height:48px; font-size:14px; }
+#drawer-coverage .radar-coverage-row button { min-height:52px; }
+#drawer-coverage .radar-coverage-row strong { font-size:14px; }
+#drawer-coverage .radar-coverage-row small { font-size:11px; }
+#drawer-coverage .radar-balanced { width:100%; margin-top:10px; }
+#drawer-coverage .radar-coverage-status { font:12px/1.5 inherit; }
+#game[data-radar-open="true"] .edge-tabs { visibility:hidden; }
+.field-bottom { left:var(--left); bottom:calc(var(--bottom) + 124px); }
+#game[data-inspector-open="true"] .field-bottom { display:none; }
+@media(max-width:600px) {
+	#game { --drawer-top:calc(var(--top) + 108px); --rail-width:56px; }
+	.commands { bottom:calc(var(--bottom) + 116px); }
+	.command-cluster { width:calc(100% - var(--left) - var(--right) - var(--rail-width) - 8px); }
+	.edge-tabs { bottom:calc(var(--bottom) + 66px); }
+	.survival-hud { width:calc(100% - var(--left) - var(--right) - 72px); }
+	.route { width:calc(100% - var(--left) - var(--right) - 72px); top:calc(var(--top) + 84px); font-size:10px; }
+	.route-track,#travel-eta,#shield-status { display:none; }
+	.sector,#game[data-mode="systems"] .sector { top:calc(var(--top) + 117px); max-width:calc(100% - 100px); }
+	.trial-status { top:calc(var(--top) + 200px); width:calc(100% - 100px); }
+	.inspector-heading { padding:6px 8px; }
+	.inspector-heading h2 { font-size:15px; }
+	.inspector-content { padding:8px; scrollbar-gutter:auto; }
+	#drawer-coverage .radar-coverage-row { grid-template-columns:minmax(0,1fr) 94px; }
+	#drawer-coverage .radar-coverage-row strong { font-size:12px; }
+	#drawer-coverage .radar-coverage-row small { font-size:10px; }
+}
+@media(max-height:500px) and (min-width:601px) {
+	#game { --drawer-top:calc(var(--top) + 52px); }
+	.commands { bottom:var(--bottom); width:280px; }
+	.command-cluster { width:260px; }
+	.edge-tabs { bottom:calc(var(--bottom) + 54px); }
+}
+@media(min-width:1400px) {
+	#game { --rail-width:84px; }
+	.edge-tabs button { font-size:16px; min-height:56px; }
+	.commands { width:390px; }
+	.inspector-content { font-size:16px; }
+	.commands button,.commands select { font-size:15px; }
+}
+@media(max-width:600px) {
+	#game { --drawer-top:calc(var(--top) + 174px); }
+	#game[data-mode="systems"] { --drawer-top:calc(var(--top) + 234px); }
+	#game[data-inspector-open="true"] .sector,#game[data-inspector-open="true"] .trial-status { visibility:visible; }
+	.sector,#game[data-mode="systems"] .sector { top:calc(var(--top) + 108px); padding:5px 8px; }
+	.sector small { display:none; }
+	.trial-status { top:calc(var(--top) + 174px); padding:5px 8px; }
+}
+.edge-tabs button[aria-pressed="true"]:hover { background:#b5efdb; color:#0c252c; }

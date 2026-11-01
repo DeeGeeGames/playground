@@ -54,17 +54,19 @@ hostiles to win; losing the ark's hull ends the run.
   button activation work for the command panel. Focus loss and hidden documents pause the running voyage. Pointer/touch
   commands use the same actions. Physical touch devices are separate acceptance.
 
-The canvas fills the viewport without browser fullscreen. Survival, route, threat,
-current reactor allocation and emergency commands remain visible in one compact
-command console. Systems opens mounts; the current power button opens reactor
-presets and transfers. The inspector expands above the same bar on desktop and
-portrait screens, with a side layout on short landscape screens. Selecting a
-mount or hostile opens its details; closing preserves selection and priority.
-Mounts, Reactor, Escorts and Sensors remain available as tabs. Field placement
-and selected Contact details appear contextually. Detailed
-content scrolls internally. Menu pauses orders and contains sound, fullscreen,
-reset view, simulation speed, help, restart and mode controls. In expanded fallback
-mode, use the menu's Exit fullscreen button; Escape retains game navigation.
+The canvas fills the viewport. Edge tabs open a single right-side drawer:
+Cover exposes escort priorities without entering radar; Power, Fit, Bay and Intel
+open engineering, weapons, escort management and sensors. Emergency actions remain
+at the lower left. Drawers scroll internally on short screens, preserve the
+camera, and leave survival and threat information visible. Cover / C toggles
+coverage; Escape closes the drawer and restores focus. Opening controls does not
+pause combat. Radar / T remains available for spatial contact inspection.
+
+Standard controllers: Y toggles the last drawer, bumpers switch tabs, D-pad up/down
+moves focus, left/right adjusts a select, A activates, B returns, and Start pauses.
+Held buttons are ignored on connection and focus restoration until released.
+Controller support has browser simulation evidence only; physical device and
+couch readability acceptance remain owner checks.
 
 Browser-independent simulation lives in `src/simulation.ts`; Three.js presentation
 and DOM input remain separate. `src/presentation.ts` owns the scene, orthographic
