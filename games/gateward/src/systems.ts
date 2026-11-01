@@ -11,8 +11,9 @@ export const POWER_PRESETS = {
 	weapons: { engines: 2, weapons: 6, shields: 2 },
 	shields: { engines: 2, weapons: 2, shields: 6 },
 } as const;
+export const ARK_SPEED_SCALE = 0.5;
 export const POWER_OUTPUTS = {
-	speedPerUnit: tactical(3),
+	speedPerUnit: tactical(3) * ARK_SPEED_SCALE,
 	weaponRatePerUnit: 0.25,
 	maxWeaponRate: 2.5,
 	shieldRechargePerUnit: 4,

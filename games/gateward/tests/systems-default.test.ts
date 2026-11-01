@@ -17,7 +17,7 @@ for (const mode of modes) test(`${mode.name} supports the complete systems loop 
 	expect(state.systems.allocation).toEqual(POWER_PRESETS.balanced);
 	expect(build(state, 0, 'rail')).toBe(true);
 	expect(setAllocation(state, POWER_PRESETS.engines)).toBe(true);
-	expect(journeyFor(state).eta).toBe(mode.route / tactical(18));
+	expect(journeyFor(state).eta).toBe(mode.route / tactical(9));
 	state.status = 'running'; state.nextWave = Infinity;
 	state.systems.sensors.integrity = 0;
 	expect(repairSensors(state)).toBe(true);
@@ -27,11 +27,11 @@ for (const mode of modes) test(`${mode.name} supports the complete systems loop 
 	state.shots.push({ id: state.nextId++, x: 0, y: 0, vx: 0, vy: 0, damage: 100, side: 'enemy', weapon: 'hostile', target: undefined, life: 1 });
 	step(state, 0.05);
 	expect(state.hull).toBe(1200); expect(state.systems.shield.charge).toBe(140);
-	expect(state.systems.distanceTraveled).toBeCloseTo(tactical(0.9));
+	expect(state.systems.distanceTraveled).toBeCloseTo(tactical(0.45));
 	const summary = systemsSummary(state);
 	expect(summary.powerChanges).toBe(1); expect(summary.sensorRepairs).toBe(0); expect(summary.fieldPlacements).toBe(1); expect(summary.shieldAbsorbed).toBe(100);
 	expect(setAllocation(state, { engines: 0, weapons: 8, shields: 2 })).toBe(true);
-	step(state, 0.05); expect(state.systems.distanceTraveled).toBeCloseTo(tactical(0.9)); expect(journeyFor(state).eta).toBe(Infinity);
+	step(state, 0.05); expect(state.systems.distanceTraveled).toBeCloseTo(tactical(0.45)); expect(journeyFor(state).eta).toBe(Infinity);
 	expect(createState(mode.options)).toEqual(fresh);
 	state.status = 'won';
 	expect(systemsResultMessage(state).includes('deadline')).toBe(mode.name === 'Systems Trial');

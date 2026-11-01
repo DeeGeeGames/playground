@@ -5,7 +5,7 @@ import { craftTurretSolution, hasCraftTurrets, type CraftAim } from './craft-tur
 import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fieldBlocks, INTERDICTION_CONFIG, navigateField, type Detour } from './interdiction';
 import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
 import { ESCORT_DRILL, SYSTEMS_TRIAL, type Scenario } from './scenarios';
-import { conditionMultiplier, effectiveOutputs, absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
+import { ARK_SPEED_SCALE, conditionMultiplier, effectiveOutputs, absorbShieldDamage, advanceSystems, createSystems, POWER_CHANNELS, POWER_PRESETS, powerOutputs, REACTOR_UNITS, type Allocation, type PowerChannel, type SystemsState } from './systems';
 import { altitudeCourse, arriveCourse, capitalCourse, createFlight, fighterCourse, fly, isCapital, type Flight } from './flight';
 import { DECK_ALTITUDE, arkVelocity, flightVelocity, localPoint, mountWorld, worldPoint } from './space';
 import { createEscortCoverage, coveragePlan, coverageStation, pointSector, type CoveragePriority, type EscortCoverage } from './escort-coverage';
@@ -27,7 +27,8 @@ export const WEAPONS = {
 	rail: { name: 'Railgun', cost: 115, range: tactical(440), damage: 95, reload: 2.2, speed: tactical(1100), rotationSpeed: Math.PI / 2, description: 'Pierces armor. Prefers classified armored ships and flagships. Focus overrides.' },
 	missile: { name: 'Missile', cost: 135, range: tactical(355), damage: 52, reload: 1.8, speed: tactical(300), rotationSpeed: Math.PI * 2 / 3, description: `Homing splash. Prefers detected clusters within ${tactical(85)}m. Focus overrides.` },
 };
-const HEAVY_SPEED_SCALE = 0.25;
+const HEAVY_SPEED_SCALE = 0.125;
+const GUARDIAN_THRUST_SPEED_SCALE = 0.5;
 export const ESCORTS = {
 	interceptor: { name: 'Interceptor wing', cost: 85, count: 3, hp: 65, speed: tactical(160), range: tactical(155), damage: 10, reload: 0.65 },
 	guardian: { name: 'Guardian', cost: 105, count: 1, hp: 260, speed: tactical(85) * HEAVY_SPEED_SCALE, range: tactical(240), damage: 24, reload: 0.9 },
@@ -98,7 +99,7 @@ export const createState = function (options: { coverageDegrees?: number; experi
 		coverage: createEscortCoverage(), fightersScrambled: false,
 		repairs: {}, ark: { x: 0, y: 0, angle: 0, speed: 0 }, routeOrigin: { x: 0, y: 0 },
 		resultReason: undefined,
-		systems: createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed),
+		systems: createSystems((scenario?.duration ?? ROUTE_SECONDS) * powerOutputs(POWER_PRESETS.balanced).speed / ARK_SPEED_SCALE),
 		scenario, experimental: scenario !== undefined || (options.experimental ?? false), wings: [], launches: 0, orders: 0, escortLosses: 0, coverageDegrees: options.coverageDegrees ?? (scenario ? 240 : 120), paused: false, focused: true,
 		time: 0, hull: MAX_HULL, salvage: scenario?.salvage ?? 300, wave: 0, nextWave: scenario ? approachAt(scenario.encounters[0]?.at ?? Infinity) : 5, kills: 0, status: 'fitting',
 		mounts: [-1, 1].flatMap(function (side) { return [-96, -32, 32, 96].map(function (x): Mount { return { integrity: 100, x, y: side * 43, weapon: undefined, level: 0, cooldown: 0, aim: side * Math.PI / 2 }; }); }),
@@ -594,7 +595,7 @@ export const step = function (state: State, dt: number) {
 		escort.flight ??= { angle: escort.angle, speed: Math.min(state.ark.speed, config.speed), side: i % 2 ? -1 : 1, course: 'intercept', run: 1 };
 		desired.z = (altitudeCourse(escort.id, state.time, escort.kind === 'guardian', engaging ? target : destination, wing?.phase === 'returning' || wing?.phase === 'launching') - (escort.z ?? 0)) * 0.8;
 		const hull = neighbors.find(function (hull) { return hull.id === escort.id; });
-		fly(escort, escort.flight, hull ? avoidTraffic(hull, desired, neighbors, config.speed) : desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt, true, escort.kind === 'guardian');
+		fly(escort, escort.flight, hull ? avoidTraffic(hull, desired, neighbors, config.speed) : desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt, true, escort.kind === 'guardian', escort.kind === 'guardian' ? config.speed / GUARDIAN_THRUST_SPEED_SCALE : config.speed);
 		escort.angle = escort.flight.angle;
 		if (target && distance(escort, target) <= config.range) {
 			const velocity = flightVelocity(target.flight); const sourceVelocity = flightVelocity(escort.flight);

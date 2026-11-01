@@ -43,13 +43,13 @@ describe('interdiction placement and lifecycle', function () {
 		const snapshot = JSON.stringify(state);
 		expect(placeInterdiction(state, { x: tactical(300), y: 0 })).toBe(false); step(state, 0.05); expect(JSON.stringify(state)).toBe(snapshot);
 	});
-	for (const engines of [0, 1, 4, 10]) test(`${engines * tactical(3)}m/s preserves world anchoring under normal and doubled fixed steps`, function () {
+	for (const engines of [0, 1, 4, 10]) test(`${engines * tactical(1.5)}m/s preserves world anchoring under normal and doubled fixed steps`, function () {
 		const state = quiet(engines); const systems = systemsFor(state); systems.distanceTraveled = 77; state.ark.x = 77;
 		expect(placeInterdiction(state, worldPoint(state, { x: tactical(300), y: 0 }))).toBe(true); hostile(state);
 		const twice = structuredClone(state);
 		advance(state, 5); for (let frame = 0; frame < 150; frame++) { step(twice, 1 / 60); step(twice, 1 / 60); }
 		expect(twice).toEqual(state); expect(systems.interdiction.field?.world).toEqual({ x: 77 + tactical(300), y: 0 });
-		expect(fieldRelative(state)?.x).toBeCloseTo(tactical(300) - engines * tactical(3) * 5);
+		expect(fieldRelative(state)?.x).toBeCloseTo(tactical(300) - engines * tactical(1.5) * 5);
 		state.paused = true; const frozen = JSON.stringify(state); advance(state, 3); expect(JSON.stringify(state)).toBe(frozen);
 	});
 	test('expiry clears all navigation and permits redeployment only after cooldown', function () {
@@ -61,9 +61,11 @@ describe('interdiction placement and lifecycle', function () {
 		expect(placeInterdiction(state, { x: 0, y: tactical(250) })).toBe(false);
 		advance(state, 40); expect(placeInterdiction(state, { x: 0, y: tactical(250) })).toBe(true); expect(systemsFor(state).interdiction.placements).toBe(2);
 	});
-	test('high-power route leaves a side field behind before its lifetime', function () {
+	test('slower high-power ark keeps a side field until its lifetime', function () {
 		const state = quiet(10); placeInterdiction(state, { x: -tactical(50), y: tactical(250) }); advance(state, 20.1);
-		expect(systemsFor(state).interdiction.field).toBeUndefined(); expect(systemsFor(state).interdiction.cooldown).toBeGreaterThan(19);
+		expect(systemsFor(state).interdiction.field).toBeDefined();
+		advance(state, 10); expect(systemsFor(state).interdiction.field).toBeUndefined();
+		expect(systemsFor(state).interdiction.cooldown).toBeGreaterThan(9);
 	});
 	test('new arrivals covered by a field enter farther out on their original bearing', function () {
 		const state = quiet(); placeInterdiction(state, { x: 0, y: tactical(450) }); state.arrivals.push({ at: 0, kind: 'raider', x: 0, y: tactical(520) }); step(state, 0.05);
@@ -127,7 +129,7 @@ describe('deterministic approach shaping', function () {
 		expect(Math.hypot(enemy.x - plainEnemy.x, enemy.y - plainEnemy.y)).toBeGreaterThan(60); expect(enemy.detour).toBeUndefined();
 		expect(systemsFor(shaped).interdiction.field).toBeDefined(); expect(systemsFor(shaped).interdiction.redirected).toBe(1); expect(enemy.hp).toBe(hp); expect(shaped.kills).toBe(0);
 	});
-	for (const kind of ['raider', 'bomber', 'armored', 'flagship'] as const) for (const engines of [0, 1, 4, 10]) test(`${kind} at ${engines * tactical(3)}m/s maintains clearance, stable side and bounded movement`, function () {
+	for (const kind of ['raider', 'bomber', 'armored', 'flagship'] as const) for (const engines of [0, 1, 4, 10]) test(`${kind} at ${engines * tactical(1.5)}m/s maintains clearance, stable side and bounded movement`, function () {
 		const state = quiet(engines); placeInterdiction(state, { x: tactical(300), y: 0 }); const enemy = hostile(state, kind);
 		const speed = ENEMIES[kind].speed; let side: -1 | 1 | undefined;
 		for (let frame = 0; frame < 1800; frame++) {

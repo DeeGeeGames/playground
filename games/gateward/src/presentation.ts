@@ -14,6 +14,7 @@ import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
 import { createTrajectory, projectileHeight, type Trajectory } from './projectiles-3d';
 import { shieldAppearance } from './shield-view';
 import { canAcquire, contactIntel } from './sensors';
+import { enemyVisibility } from './enemy-visibility';
 import { INTERDICTION_CONFIG } from './interdiction';
 import { mountWorld, worldPoint } from './space';
 import { drawTacticalRing } from './tactical-ring';
@@ -327,12 +328,12 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			for (const [id, model] of enemyModels) if (!liveEnemies.has(id)) { scene.remove(model); targets.delete(model); disposeObject(model); enemyModels.delete(id); }
 			for (const [id, marker] of detectedMarkers) if (!liveEnemies.has(id)) { scene.remove(marker); targets.delete(marker); disposeObject(marker); detectedMarkers.delete(id); }
 			for (const enemy of state.enemies) {
-				const detected = contactIntel(state, enemy) === 'detected';
+				const detected = enemyVisibility(state, enemy) === 'marker';
 				let marker = detectedMarkers.get(enemy.id);
 				if (!marker && detected) { marker = new Mesh(new IcosahedronGeometry(11, 0), new MeshBasicMaterial({ color: '#edbc7e', wireframe: true })); detectedMarkers.set(enemy.id, marker); targets.set(marker, { kind: 'enemy', id: enemy.id }); scene.add(marker); }
 				if (marker) { marker.visible = detected; marker.position.set(enemy.x, FLIGHT_HEIGHT + (enemy.z ?? 0), enemy.y); }
 			}
-			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy, enemyCarrier); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.visible = contactIntel(state, enemy) === 'classified'; updateCraftTurrets(model, enemy.turretAim); model.position.set(enemy.x, FLIGHT_HEIGHT + (enemy.z ?? 0), enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); model.rotation.z = enemy.flight?.pitch ?? 0; }
+			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy, enemyCarrier); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.visible = enemyVisibility(state, enemy) === 'model'; updateCraftTurrets(model, enemy.turretAim); model.position.set(enemy.x, FLIGHT_HEIGHT + (enemy.z ?? 0), enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); model.rotation.z = enemy.flight?.pitch ?? 0; }
 			const liveEscorts = new Set(state.escorts.map(function (escort) { return escort.id; }));
 			for (const [id, model] of escortModels) if (!liveEscorts.has(id)) { scene.remove(model); disposeObject(model); escortModels.delete(id); }
 			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } updateCraftTurrets(model, escort.turretAim); model.position.set(escort.x, FLIGHT_HEIGHT + (escort.z ?? 0), escort.y); model.rotation.y = -escort.angle; model.rotation.z = escort.flight?.pitch ?? 0; }

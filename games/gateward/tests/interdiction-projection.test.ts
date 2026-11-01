@@ -30,10 +30,10 @@ test('a fixed world buoy moves aft in the projected view at actual engine speed'
 		const projectedBefore = toScreen(field.world, view, FLIGHT_HEIGHT);
 		for (let frame = 0; frame < 120; frame++) step(state, 1 / 60);
 		const after = fieldRelative(state); if (!after) throw new Error('Missing field');
-		expect(after.x).toBeCloseTo(tactical(300) - engines * tactical(3) * 2); expect(after.y).toBe(0);
+		expect(after.x).toBeCloseTo(tactical(300) - engines * tactical(1.5) * 2); expect(after.y).toBe(0);
 		expect(field.world).toEqual(world); translateView(view, arkBefore, state.ark);
 		const projectedAfter = toScreen(field.world, view, FLIGHT_HEIGHT);
-		const expected = toScreen({ x: tactical(300) - engines * tactical(6), y: 0 }, viewFor(1440, 900), FLIGHT_HEIGHT);
+		const expected = toScreen({ x: tactical(300) - engines * tactical(3), y: 0 }, viewFor(1440, 900), FLIGHT_HEIGHT);
 		expect(projectedAfter.x).toBeCloseTo(expected.x); expect(projectedAfter.y).toBeCloseTo(expected.y);
 		if (engines === 0) expect(projectedAfter).toEqual(projectedBefore);
 		else expect(projectedAfter.x).toBeLessThan(projectedBefore.x);

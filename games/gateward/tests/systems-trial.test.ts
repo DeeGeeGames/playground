@@ -56,7 +56,7 @@ describe('Systems Trial route and results', function () {
 		expect(systemsResultMessage(state)).toContain('contacts remained unresolved');
 	});
 	test('arrival on the strict deadline explains the boundary without blaming cleared combat', function () {
-		const state = clearRoute(); state.time = 154.99; systemsFor(state).distanceTraveled = tactical(1439.9); state.ark.x = state.routeOrigin.x + tactical(1439.9);
+		const state = clearRoute(); state.time = 154.99; systemsFor(state).distanceTraveled = tactical(1439.95); state.ark.x = state.routeOrigin.x + tactical(1439.95);
 		step(state, 0.05); expect(state.status).toBe('lost'); expect(systemsFor(state).distanceTraveled).toBe(tactical(1440));
 		expect(systemsResultMessage(state)).toContain('at the deadline'); expect(systemsResultMessage(state)).not.toContain('weapon');
 	});
@@ -92,12 +92,12 @@ describe('Systems Trial route and results', function () {
 });
 
 describe('reproducible equipped trial strategies', function () {
-	test('one weapons-to-balanced reallocation reaches the gate but unresolved capitals repeat the deadline outcome', function () {
+	test('one weapons-to-balanced reallocation repeats the deadline with distance and capital contacts unresolved', function () {
 		const first = runTrialStrategy('weapons-then-balanced');
 		expect(first).toEqual(runTrialStrategy('weapons-then-balanced'));
 		expect(first.summary.reason).toBe('deadline'); expect(first.summary.powerChanges).toBe(2);
 		expect(first.summary.elapsed).toBe(155);
-		expect(first.summary.distance).toBe(first.summary.routeLength);
+		expect(first.summary.distance).toBeLessThan(first.summary.routeLength);
 		expect([...first.state.enemies, ...first.state.arrivals].some(isCapital)).toBe(true);
 		expect(first.summary?.contacts).toBe(5);
 	});
@@ -105,13 +105,12 @@ describe('reproducible equipped trial strategies', function () {
 		const first = runTrialStrategy(preset); const second = runTrialStrategy(preset);
 		expect(first.summary).toEqual(second.summary); expect(first.state).toEqual(second.state);
 		// Keeping the original encounters leaves slow capitals unresolved at the
-		// unchanged deadline, even when engine power reaches the gate.
+		// unchanged deadline, while slower engines also leave distance outstanding.
 		expect(first.summary.reason).toBe('deadline'); expect(first.summary.elapsed).toBe(155);
 		expect(first.summary.hull).toBeGreaterThan(0);
 		expect(first.summary.kills).toBeGreaterThan(0); expect(first.summary.kills).toBeLessThan(33);
 		expect([...first.state.enemies, ...first.state.arrivals].some(isCapital)).toBe(true);
-		if (preset === 'balanced' || preset === 'engines') expect(first.summary.distance).toBe(first.summary.routeLength);
-		else expect(first.summary.distance).toBeLessThan(first.summary.routeLength);
+		expect(first.summary.distance).toBeLessThan(first.summary.routeLength);
 		expect(first.summary.contacts).toBe(5);
 		// The new Guardian trajectory can leave the engine strategy without shield damage.
 		if (preset === 'shields') expect(first.summary.shieldAbsorbed).toBeGreaterThan(0);
@@ -122,7 +121,7 @@ describe('reproducible equipped trial strategies', function () {
 		expect(field.state).toEqual(runTrialStrategy('balanced', true).state);
 		expect(field.summary.fieldPlacements).toBe(1); expect(field.summary.redirected).toBeGreaterThan(0);
 		// A field changes contact paths without rescuing the unchanged deadline.
-		expect(field.summary.distance).toBe(field.summary.routeLength);
+		expect(field.summary.distance).toBeLessThan(field.summary.routeLength);
 		expect(field.summary.hull).toBeGreaterThan(0);
 		expect(field.summary.contacts).toBe(field.summary.totalContacts);
 		expect(field.summary.reason).toBe('deadline'); expect(field.summary.elapsed).toBe(155);

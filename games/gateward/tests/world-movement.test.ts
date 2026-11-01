@@ -96,7 +96,7 @@ describe('world combat and anchoring', function () {
 		expect(placeInterdiction(state, position)).toBe(true);
 		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field');
 		state.shots.push({ id: state.nextId++, x: 1900, y: 200, vx: 0, vy: 0, damage: 1, side: 'enemy', weapon: 'hostile', target: undefined, life: 4 });
-		advance(state, 2); expect(field.world).toEqual(position); expect(state.ark.x).toBeCloseTo(2000 + tactical(24));
+		advance(state, 2); expect(field.world).toEqual(position); expect(state.ark.x).toBeCloseTo(2000 + tactical(12));
 		expect(state.shots[0]?.x).toBe(1900); expect(state.shots[0]?.y).toBe(200);
 	});
 	test('moving hull contact is swept even when a fast round crosses the entire ark in one tick', function () {

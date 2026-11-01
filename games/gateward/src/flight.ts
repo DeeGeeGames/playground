@@ -23,7 +23,7 @@ export const isCapital = function (enemy: Pick<Enemy, 'kind'>): boolean { return
 
 // Small-craft thrusters redirect momentum over time. Yaw also accelerates and
 // brakes, rather than immediately reaching the commanded turn rate.
-const flyInertial = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, heavy: boolean): void {
+const flyInertial = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, heavy: boolean, thrustSpeed: number): void {
 	const magnitude = length(desired);
 	const angle = magnitude < 0.01 ? flight.angle : Math.atan2(desired.y, desired.x);
 	const turn = Math.atan2(Math.sin(angle - flight.angle), Math.cos(angle - flight.angle));
@@ -42,7 +42,7 @@ const flyInertial = function (point: Point, flight: Flight, desired: Point, maxS
 	const dy = Math.sin(flight.angle) * speed - vy;
 	const dz = climb - vz;
 	const change = Math.hypot(dx, dy, dz);
-	const thrust = change > 0 ? Math.min(1, maxSpeed * (heavy ? 0.45 : 0.65) * dt / change) : 0;
+	const thrust = change > 0 ? Math.min(1, thrustSpeed * (heavy ? 0.45 : 0.65) * dt / change) : 0;
 	flight.vx = vx + dx * thrust; flight.vy = vy + dy * thrust;
 	flight.vz = vz + dz * thrust;
 	const before = point.z ?? 0;
@@ -76,7 +76,7 @@ const pitchHeavy = function (flight: Flight, dt: number, accelerationScale = 1):
 // Keep the thrust reference separate so speed-cap tuning preserves acceleration.
 export const fly = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, inertial = false, heavy = false, thrustSpeed = maxSpeed): void {
 	if (dt <= 0) return;
-	if (inertial) { flyInertial(point, flight, desired, maxSpeed, turnRate, dt, heavy); return; }
+	if (inertial) { flyInertial(point, flight, desired, maxSpeed, turnRate, dt, heavy, thrustSpeed); return; }
 	const angle = length(desired) < 0.01 ? flight.angle : Math.atan2(desired.y, desired.x);
 	const turn = Math.atan2(Math.sin(angle - flight.angle), Math.cos(angle - flight.angle));
 	const climb = clamp(desired.z ?? 0, maxSpeed * 0.3);
