@@ -555,11 +555,10 @@ navigation behavior; owner playtesting remains the acceptance check for feel.
 ### Capital-ship handling
 
 Hostile carriers, armored ships, and flagships have combat speed limits of
-19, 20, and 18 m/s respectively, and an approach cruise limit of 30 m/s. These
-are 12.5% of their original speeds after the quarter-speed pass and another
-50% reduction. Small-craft limits are described above. Linear thrust remains at the reduced
-acceleration introduced with heavy-hull steering; lowering the speed limit does
-not reduce that acceleration again. Yaw and pitch behavior are unchanged.
+38, 40, and 36 m/s respectively, and an approach cruise limit of 60 m/s. These
+are 25% of their original speeds. Small-craft limits are described above.
+Speed tuning preserves the reduced linear acceleration introduced with
+heavy-hull steering. Yaw and pitch behavior are unchanged.
 
 Guardians use 12.5% of their original top speed and 25% of their original
 acceleration: their speed limit is 42.5 m/s and shared linear thrust/braking
@@ -573,16 +572,12 @@ and coverage assignments are unchanged.
 Encounter positions, schedules, route lengths, and deadlines remain unchanged.
 The ark now travels at half its former speed: 24 m/s on balanced power and
 60 m/s at maximum engine allocation. Route lengths remain unchanged, so
-balanced travel takes twice as long. Capitals can fall behind it and cannot
-catch up at combat speed. Delayed arrivals, longer clearance after reaching the
+balanced travel takes twice as long. At combat speed, capitals can now overtake
+the balanced ark, while maximum ark engine power can still outrun them. Delayed arrivals, longer clearance after reaching the
 gate, and missed scenario deadlines are accepted consequences. This supports
-the direction of capital ships as slowly repositioning turret platforms. Existing
-strategy snapshots also change: the full-arc spending control clears all contacts
-in about 632 seconds; hull falls to 1175 before restoration to 1200 at completion,
-shields deplete, and sensors fall to 75 while remaining healthy. Its narrow-arc
-comparison loses at about 364 seconds. Current Systems Trial strategies
-reach the unchanged deadline without kills. These are simulation outcomes, not
-acceptance of balance or feel.
+the direction of capital ships as slowly repositioning turret platforms.
+Simulation checks establish repeatable behavior; balance and feel require owner
+playtesting. Current strategy outcomes are recorded in the tests and PR notes.
 
 ### Enemy rendering distance
 

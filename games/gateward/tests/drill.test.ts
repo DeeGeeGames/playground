@@ -113,7 +113,7 @@ test('drill schedule is deterministic and baseline/defenses yield repeatable dis
 	expect(ESCORT_DRILL.encounters.map(function (e) { return e.at; })).toEqual([10, 23, 49, 52]);
 	const outcomes = ['baseline', 'wings', 'guardians'].map(function (s) { if (s !== 'baseline' && s !== 'wings' && s !== 'guardians') throw new Error('Strategy'); const result = strategyRun(s); expect(strategyRun(s)).toEqual(result); return result; });
 	console.table(outcomes); expect(new Set(outcomes.map(function (o) { return o.minimumShield; })).size).toBeGreaterThanOrEqual(2);
-	expect(outcomes[0]?.result).toBe('running'); expect(outcomes[0]?.kills).toBe(0); expect(outcomes.slice(1).every(function (o) { return o.result === 'running' && o.hull > 0 && o.kills > 0; })).toBe(true);
+	expect(outcomes[0]?.result).toBe('lost'); expect(outcomes[0]?.kills).toBe(0); expect(outcomes.slice(1).every(function (o) { return o.result === 'running' && o.hull > 0 && o.kills > 0; })).toBe(true);
 }, 20000);
 test('wing launches and Guardian assignments persist through prolonged encounters', function () {
 	const heldWing = strategyRun('wings', false); const launchedWing = strategyRun('wings');

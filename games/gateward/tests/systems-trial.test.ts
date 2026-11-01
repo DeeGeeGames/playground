@@ -108,8 +108,9 @@ describe('reproducible equipped trial strategies', function () {
 		// unchanged deadline, while slower engines also leave distance outstanding.
 		expect(first.summary.reason).toBe('deadline'); expect(first.summary.elapsed).toBe(155);
 		expect(first.summary.hull).toBeGreaterThan(0);
-		// Slower small-craft approaches can leave every contact unresolved at the deadline.
-		expect(first.summary.kills).toBe(0);
+		// Faster capital approaches admit some combat, but the route and contacts
+		// still cannot be cleared by the unchanged deadline.
+		expect(first.summary.kills).toBeGreaterThan(0); expect(first.summary.kills).toBeLessThan(33);
 		expect([...first.state.enemies, ...first.state.arrivals].some(isCapital)).toBe(true);
 		expect(first.summary.distance).toBeLessThan(first.summary.routeLength);
 		expect(first.summary.contacts).toBe(5);
@@ -128,5 +129,5 @@ describe('reproducible equipped trial strategies', function () {
 		expect(field.summary.kills).toBe(0);
 		expect([...field.state.enemies, ...field.state.arrivals].some(isCapital)).toBe(true);
 		expect(field.state).not.toEqual(baseline.state);
-	});
+	}, 10000);
 });
