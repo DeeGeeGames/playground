@@ -232,14 +232,14 @@ describe('heavy hull response', function () {
 		const state = quiet(); setAllocation(state, { engines: 10, weapons: 0, shields: 0 });
 		step(state, 1 / 60); deploy(state, 'guardian');
 		const guardian = state.escorts[0]; if (!guardian) throw new Error('Missing Guardian');
-		const arkStart = state.ark.x; const before = localPoint(state, guardian).x;
+		const arkStart = state.ark.x;
 		for (let frame = 0; frame < 600; frame++) {
 			step(state, 1 / 60);
 			const velocity = flightVelocity(guardian.flight);
 			expect(Math.hypot(velocity.x, velocity.y, velocity.z ?? 0)).toBeLessThanOrEqual(42.5 + 1e-8);
 		}
-		expect(localPoint(state, guardian).x).toBeLessThan(before);
-		expect(state.ark.x - arkStart).toBeCloseTo(600, 5);
+		expect(localPoint(state, guardian).x).toBeGreaterThan(-tactical(210));
+		expect(state.ark.x - arkStart).toBeCloseTo(75, 5);
 	});
 
 	test('Guardian thrust, braking, yaw and pitch retain one quarter of their former acceleration', function () {

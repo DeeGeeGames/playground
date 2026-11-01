@@ -21,7 +21,7 @@ describe('fleet fighter orders', function () {
 		expect(recallAll(state)).toBe(true); expect(recallAll(state)).toBe(false);
 		expect(state.wings.every(function (wing) { return wing.phase === 'returning'; })).toBe(true);
 		setCoveragePriority(state, 'port', 'all'); setCoveragePriority(state, 'port', 'normal'); balanceCoverage(state);
-		advance(state, 20);
+		advance(state, 40);
 		expect(state.wings.every(function (wing) { return wing.phase === 'ready'; })).toBe(true);
 		expect(state.escorts).toEqual([guardian]); expect(craftCount(state)).toBe(7);
 		expect(state.launches).toBe(2); expect(scrambleAll(state)).toBe(true); expect(state.launches).toBe(4);

@@ -29,12 +29,12 @@ test('expanded weapon reach remains bounded independently of sensor detection', 
 	expect(contactIntel(state, { x: 8001, y: 0 })).toBe('unseen');
 });
 
-test('slower ark engines preserve route length and halve integrated motion', function () {
+test('slower ark engines preserve route length and integrate the new travel rate', function () {
 	const state = createState(); state.status = 'running'; state.nextWave = Infinity;
 	setAllocation(state, { engines: 4, weapons: 4, shields: 2 });
 	for (let frame = 0; frame < 600; frame++) step(state, 1 / 60);
-	expect(state.ark.x).toBeCloseTo(240);
-	expect(state.systems.distanceTraveled / state.systems.routeLength).toBeCloseTo(10 / 240);
+	expect(state.ark.x).toBeCloseTo(30);
+	expect(state.systems.distanceTraveled / state.systems.routeLength).toBeCloseTo(10 / 1920);
 });
 
 test('homing missiles retain the faster launch speed on subsequent updates', function () {

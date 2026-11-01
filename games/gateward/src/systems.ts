@@ -1,4 +1,5 @@
 import { tactical } from './combat-scale';
+import { ENEMIES } from './enemy-config';
 import type { InterdictionField } from './interdiction';
 import { SENSOR_CONFIG } from './sensors';
 export const POWER_CHANNELS = ['engines', 'weapons', 'shields'] as const;
@@ -11,7 +12,9 @@ export const POWER_PRESETS = {
 	weapons: { engines: 2, weapons: 6, shields: 2 },
 	shields: { engines: 2, weapons: 2, shields: 6 },
 } as const;
-export const ARK_SPEED_SCALE = 0.5;
+// Even with all reactor power in engines, the ark cannot outrun any enemy.
+export const ARK_MAX_SPEED = Math.min(...Object.values(ENEMIES).map(function (enemy) { return enemy.speed; })) / 2;
+export const ARK_SPEED_SCALE = ARK_MAX_SPEED / tactical(3) / REACTOR_UNITS;
 export const POWER_OUTPUTS = {
 	speedPerUnit: tactical(3) * ARK_SPEED_SCALE,
 	weaponRatePerUnit: 0.25,

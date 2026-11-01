@@ -32,7 +32,7 @@ describe('one world and shared friendly steering', function () {
 		// Keep the ark moving while the heavier Guardian completes its longer crossing.
 		state.systems.routeLength = 100000; deploy(state, 'guardian');
 		const guardian = state.escorts[0]; if (!guardian) throw new Error('Missing guardian');
-		for (let frame = 0; frame < 9000; frame++) {
+		for (let frame = 0; frame < 27000; frame++) {
 			if (frame === 600) assignGuardian(state, guardian.id, 'starboard');
 			const before = { x: guardian.x, y: guardian.y }; const angle = guardian.angle;
 			step(state, 1 / 60); followsVelocity(state, guardian, before, angle, 1.6);
@@ -95,7 +95,7 @@ describe('world combat and anchoring', function () {
 		expect(placeInterdiction(state, position)).toBe(true);
 		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field');
 		state.shots.push({ id: state.nextId++, x: 1900, y: 200, vx: 0, vy: 0, damage: 1, side: 'enemy', weapon: 'hostile', target: undefined, life: 4 });
-		advance(state, 2); expect(field.world).toEqual(position); expect(state.ark.x).toBeCloseTo(2000 + tactical(12));
+		advance(state, 2); expect(field.world).toEqual(position); expect(state.ark.x).toBeCloseTo(2000 + 6);
 		expect(state.shots[0]?.x).toBe(1900); expect(state.shots[0]?.y).toBe(200);
 	});
 	test('moving hull contact is swept even when a fast round crosses the entire ark in one tick', function () {

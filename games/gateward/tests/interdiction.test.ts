@@ -43,13 +43,13 @@ describe('interdiction placement and lifecycle', function () {
 		const snapshot = JSON.stringify(state);
 		expect(placeInterdiction(state, { x: tactical(300), y: 0 })).toBe(false); step(state, 0.05); expect(JSON.stringify(state)).toBe(snapshot);
 	});
-	for (const engines of [0, 1, 4, 10]) test(`${engines * tactical(1.5)}m/s preserves world anchoring under normal and doubled fixed steps`, function () {
+	for (const engines of [0, 1, 4, 10]) test(`${engines * 0.75}m/s preserves world anchoring under normal and doubled fixed steps`, function () {
 		const state = quiet(engines); const systems = systemsFor(state); systems.distanceTraveled = 77; state.ark.x = 77;
 		expect(placeInterdiction(state, worldPoint(state, { x: tactical(300), y: 0 }))).toBe(true); hostile(state);
 		const twice = structuredClone(state);
 		advance(state, 5); for (let frame = 0; frame < 150; frame++) { step(twice, 1 / 60); step(twice, 1 / 60); }
 		expect(twice).toEqual(state); expect(systems.interdiction.field?.world).toEqual({ x: 77 + tactical(300), y: 0 });
-		expect(fieldRelative(state)?.x).toBeCloseTo(tactical(300) - engines * tactical(1.5) * 5);
+		expect(fieldRelative(state)?.x).toBeCloseTo(tactical(300) - engines * 0.75 * 5);
 		state.paused = true; const frozen = JSON.stringify(state); advance(state, 3); expect(JSON.stringify(state)).toBe(frozen);
 	});
 	test('expiry clears all navigation and permits redeployment only after cooldown', function () {
@@ -132,7 +132,7 @@ describe('deterministic approach shaping', function () {
 		expect(Math.hypot(enemy.x - plainEnemy.x, enemy.y - plainEnemy.y)).toBeGreaterThan(60); expect(enemy.detour).toBeUndefined();
 		expect(systemsFor(shaped).interdiction.field).toBeDefined(); expect(systemsFor(shaped).interdiction.redirected).toBe(1); expect(enemy.hp).toBe(hp); expect(shaped.kills).toBe(0);
 	});
-	for (const kind of ['raider', 'bomber', 'armored', 'flagship'] as const) for (const engines of [0, 1, 4, 10]) test(`${kind} at ${engines * tactical(1.5)}m/s maintains clearance, stable side and bounded movement`, function () {
+	for (const kind of ['raider', 'bomber', 'armored', 'flagship'] as const) for (const engines of [0, 1, 4, 10]) test(`${kind} at ${engines * 0.75}m/s maintains clearance, stable side and bounded movement`, function () {
 		const state = quiet(engines); placeInterdiction(state, { x: tactical(300), y: 0 }); const enemy = hostile(state, kind);
 		const speed = ENEMIES[kind].speed; let side: -1 | 1 | undefined;
 		for (let frame = 0; frame < 1800; frame++) {
