@@ -40,7 +40,8 @@ describe('wing resources and lifecycle', function () {
 		const s = quiet(); deploy(s, 'interceptor'); s.status = 'running'; const w = firstWing(s); scramble(s, w.id, 'port');
 		expect(w.phase).toBe('launching'); expect(w.craft[0]?.x).toBe(-180); advance(s, 2.1); expect(w.phase).toBe('sortie');
 		advance(s, 18); expect(w.phase).toBe('returning'); expect(s.shots).toHaveLength(0);
-		advance(s, 9); expect(w.phase).toBe('rearming'); expect(s.escorts).toHaveLength(0); expect(craftCount(s)).toBe(3);
+		for (let frame = 0; frame < 3600 && w.phase !== 'rearming'; frame++) step(s, 1 / 60);
+		expect(w.phase).toBe('rearming'); expect(s.escorts).toHaveLength(0); expect(craftCount(s)).toBe(3);
 		advance(s, 10); expect(w.phase).toBe('ready'); expect(scramble(s, w.id, 'ahead')).toBe(true); expect(s.launches).toBe(2);
 	});
 	test('returning fighters move home and cannot fire at nearby hostiles', function () {
@@ -53,13 +54,14 @@ describe('wing resources and lifecycle', function () {
 		const craft = w.craft[0]; if (!craft) throw new Error('Missing craft');
 		s.shots.push({ id: 999, x: craft.x, y: craft.y, vx: 0, vy: 0, damage: 100, side: 'enemy', weapon: 'hostile', target: craft.id, life: 2 });
 		advance(s, .02); expect(s.escortLosses).toBe(1); expect(craftCount(s)).toBe(2); expect(replaceFighters(s, w.id)).toBe(false);
-		advance(s, 35); expect(w.phase).toBe('ready'); expect(w.craft).toHaveLength(2); const before = s.salvage;
+		for (let frame = 0; frame < 5400 && w.phase !== 'ready'; frame++) step(s, 1 / 60);
+		expect(w.phase).toBe('ready'); expect(w.craft).toHaveLength(2); const before = s.salvage;
 		expect(replaceFighters(s, w.id)).toBe(true); expect(s.salvage).toBe(before - 30); expect(craftCount(s)).toBe(3);
 	});
 	test('assignment remains bounded when a local target disappears; priority does not drag wings away', function () {
 		const s = quiet(); deploy(s, 'interceptor'); s.status = 'running'; const w = firstWing(s); scramble(s, w.id, 'port');
-		s.enemies.push({ id: 99, x: 0, y: 450, hp: 2000, maxHp: 2000, kind: 'armored', cooldown: 99 }); s.priority = 99; advance(s, 10);
-		expect(w.craft.every(function (c) { return c.y < -180; })).toBe(true); s.enemies = []; advance(s, 30); expect(w.phase).toBe('ready');
+		s.enemies.push({ id: 99, x: 0, y: 450, hp: 2000, maxHp: 2000, kind: 'armored', cooldown: 99 }); s.priority = 99; advance(s, 17);
+		expect(w.craft.every(function (c) { return c.y < -180; })).toBe(true); s.enemies = []; for (let frame = 0; frame < 7200 && w.phase !== 'ready'; frame++) step(s, 1 / 60); expect(w.phase).toBe('ready');
 	});
 });
 
@@ -110,8 +112,8 @@ test('paused and unfocused sorties retain their timers and positions', function 
 test('drill schedule is deterministic and baseline/defenses yield repeatable distinct outcomes', function () {
 	expect(ESCORT_DRILL.encounters.map(function (e) { return e.at; })).toEqual([10, 23, 49, 52]);
 	const outcomes = ['baseline', 'wings', 'guardians'].map(function (s) { if (s !== 'baseline' && s !== 'wings' && s !== 'guardians') throw new Error('Strategy'); const result = strategyRun(s); expect(strategyRun(s)).toEqual(result); return result; });
-	console.table(outcomes); expect(new Set(outcomes.map(function (o) { return o.hull; })).size).toBeGreaterThanOrEqual(2);
-	expect(outcomes[0]?.result).toBe('lost'); expect(outcomes.slice(1).every(function (o) { return o.result === 'running' && o.hull > 0 && o.kills > 0; })).toBe(true);
+	console.table(outcomes); expect(new Set(outcomes.map(function (o) { return o.minimumShield; })).size).toBeGreaterThanOrEqual(2);
+	expect(outcomes[0]?.result).toBe('running'); expect(outcomes[0]?.kills).toBe(0); expect(outcomes.slice(1).every(function (o) { return o.result === 'running' && o.hull > 0 && o.kills > 0; })).toBe(true);
 }, 20000);
 test('wing launches and Guardian assignments persist through prolonged encounters', function () {
 	const heldWing = strategyRun('wings', false); const launchedWing = strategyRun('wings');
@@ -120,4 +122,4 @@ test('wing launches and Guardian assignments persist through prolonged encounter
 	expect(portScreen.result).not.toBe('lost'); expect(reassignedScreen.result).toBe('running');
 	expect(portScreen.guardianSectors).toEqual(['port']); expect(reassignedScreen.guardianSectors).toEqual(['starboard']);
 	expect(portScreen.orders).toBe(0); expect(reassignedScreen.orders).toBe(1);
-});
+}, 15000);

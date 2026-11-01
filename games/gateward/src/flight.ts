@@ -23,11 +23,11 @@ export const isCapital = function (enemy: Pick<Enemy, 'kind'>): boolean { return
 
 // Small-craft thrusters redirect momentum over time. Yaw also accelerates and
 // brakes, rather than immediately reaching the commanded turn rate.
-const flyInertial = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, heavy: boolean, thrustSpeed: number): void {
+const flyInertial = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, heavy: boolean, thrustSpeed: number, angularAccelerationScale: number): void {
 	const magnitude = length(desired);
 	const angle = magnitude < 0.01 ? flight.angle : Math.atan2(desired.y, desired.x);
 	const turn = Math.atan2(Math.sin(angle - flight.angle), Math.cos(angle - flight.angle));
-	const angularAcceleration = turnRate * (heavy ? 0.5 * HEAVY_ACCELERATION_SCALE : 0.8);
+	const angularAcceleration = turnRate * (heavy ? 0.5 * HEAVY_ACCELERATION_SCALE : 0.8 * angularAccelerationScale);
 	const desiredYaw = Math.sign(turn) * Math.min(turnRate * (heavy ? 0.45 : 0.55), Math.abs(turn) * 2, Math.sqrt((heavy ? 1 : 2) * angularAcceleration * Math.abs(turn)));
 	flight.angularVelocity = (flight.angularVelocity ?? 0) + clamp(desiredYaw - (flight.angularVelocity ?? 0), angularAcceleration * dt);
 	const previousAngle = flight.angle;
@@ -74,9 +74,9 @@ const pitchHeavy = function (flight: Flight, dt: number, accelerationScale = 1):
 
 // Capitals keep heading-following courses, with slower thrust and rotational response.
 // Keep the thrust reference separate so speed-cap tuning preserves acceleration.
-export const fly = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, inertial = false, heavy = false, thrustSpeed = maxSpeed): void {
+export const fly = function (point: Point, flight: Flight, desired: Point, maxSpeed: number, turnRate: number, dt: number, inertial = false, heavy = false, thrustSpeed = maxSpeed, angularAccelerationScale = 1): void {
 	if (dt <= 0) return;
-	if (inertial) { flyInertial(point, flight, desired, maxSpeed, turnRate, dt, heavy, thrustSpeed); return; }
+	if (inertial) { flyInertial(point, flight, desired, maxSpeed, turnRate, dt, heavy, thrustSpeed, angularAccelerationScale); return; }
 	const angle = length(desired) < 0.01 ? flight.angle : Math.atan2(desired.y, desired.x);
 	const turn = Math.atan2(Math.sin(angle - flight.angle), Math.cos(angle - flight.angle));
 	const climb = clamp(desired.z ?? 0, maxSpeed * 0.3);

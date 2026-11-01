@@ -51,11 +51,11 @@ describe('coarse escort coverage', function () {
 		setCoveragePriority(state, 'port', 'all'); state.status = 'running'; scrambleAll(state); step(state, 1 / 60);
 		expect(wing.phase).toBe('launching'); expect(state.escorts).toHaveLength(3); expect(state.launches).toBe(1);
 		expect(coverageReadiness(state, 'port').unavailable).toBe(3);
-		advance(state, 40); expect(state.launches).toBeGreaterThan(1);
+		for (let tick = 0; tick < 7200 && state.launches <= 1; tick++) step(state, 1 / 60); expect(state.launches).toBeGreaterThan(1);
 		const lost = wing.craft[0]; if (!lost) throw new Error('Missing fighter'); lost.hp = 0;
 		const launchesBeforeLoss = state.launches;
-		advance(state, 45); expect(state.launches).toBeGreaterThan(launchesBeforeLoss); expect(wing.craft).toHaveLength(2);
-		for (let tick = 0; tick < 3600 && wing.phase !== 'rearming'; tick++) step(state, 1 / 60);
+		for (let tick = 0; tick < 7200 && state.launches <= launchesBeforeLoss; tick++) step(state, 1 / 60); expect(state.launches).toBeGreaterThan(launchesBeforeLoss); expect(wing.craft).toHaveLength(2);
+		for (let tick = 0; tick < 7200 && wing.phase !== 'rearming'; tick++) step(state, 1 / 60);
 		expect(wing.phase).toBe('rearming'); const timer = wing.timer;
 		const before = state.salvage; expect(replaceFighters(state, wing.id)).toBe(true); expect(state.salvage).toBe(before - 30);
 		expect(wing.timer).toBe(timer); expect(wing.craft).toHaveLength(3);

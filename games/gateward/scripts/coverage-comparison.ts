@@ -7,6 +7,9 @@ const fittings = { port: [0, 3], starboard: [4, 7], split: [0, 4] } as const;
 // This fixture isolates placement; it is not a new playable mission.
 export const runFlankComparison = function (coverageDegrees: 120 | 240 | 360, fitting: keyof typeof fittings, flank: -1 | 1) {
 	const state = createState({ coverageDegrees });
+	// Hold the ark at the gate so this placement fixture isolates firing arcs
+	// without letting the now-slower bombers fall behind a moving target.
+	state.systems.routeLength = 0;
 	for (const mount of fittings[fitting]) build(state, mount, 'rail');
 	const spent = state.mounts.reduce(function (total, mount) { return total + invested(mount); }, 0);
 	state.nextWave = Infinity;
