@@ -113,7 +113,8 @@ describe('reproducible equipped trial strategies', function () {
 		if (preset === 'balanced' || preset === 'engines') expect(first.summary.distance).toBe(first.summary.routeLength);
 		else expect(first.summary.distance).toBeLessThan(first.summary.routeLength);
 		expect(first.summary.contacts).toBe(5);
-		if (preset === 'engines' || preset === 'shields') expect(first.summary.shieldAbsorbed).toBeGreaterThan(0);
+		// The new Guardian trajectory can leave the engine strategy without shield damage.
+		if (preset === 'shields') expect(first.summary.shieldAbsorbed).toBeGreaterThan(0);
 		expect(first.summary?.powerChanges).toBe(preset === 'balanced' ? 0 : 1);
 	});
 	test('same balanced fitting plus one approach-phase field redirects real contacts and repeats the full outcome', function () {
