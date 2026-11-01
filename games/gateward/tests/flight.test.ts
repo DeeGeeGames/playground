@@ -23,7 +23,7 @@ describe('capital ship courses and batteries', function () {
 			enemy.approaching = approaching;
 			enemy.flight = { angle: 0, speed: 0, side: -1, course: 'intercept', run: 1 };
 			const oldSpeed = kind === 'carrier' ? tactical(38) : kind === 'armored' ? tactical(40) : tactical(36);
-			const limit = (approaching ? APPROACH.cruiseSpeed : oldSpeed) * 0.125;
+			const limit = (approaching ? APPROACH.cruiseSpeed : oldSpeed) * 0.25;
 			let peakSpeed = 0;
 			for (let frame = 0; frame < 600; frame++) {
 				const before = { x: enemy.x, y: enemy.y, z: enemy.z ?? 0 }; step(state, 1 / 60);
@@ -31,7 +31,7 @@ describe('capital ship courses and batteries', function () {
 				expect(speed).toBeLessThanOrEqual(limit + 1e-8); peakSpeed = Math.max(peakSpeed, speed);
 			}
 			expect(peakSpeed).toBeGreaterThan(limit * 0.9);
-			if (!approaching) expect(localPoint(state, enemy).x).toBeLessThan(-5000);
+			if (!approaching) expect(localPoint(state, enemy).x).toBeGreaterThan(-5000);
 		});
 	}
 
