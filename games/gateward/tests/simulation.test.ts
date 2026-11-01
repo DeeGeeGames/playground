@@ -70,20 +70,20 @@ describe('combat and voyage', function () {
 		step(state, 1 / 60); expect(state.kills).toBe(2); expect(state.salvage - salvage).toBeCloseTo(0.02);
 	});
 	test('an undefended ark loses and ended games reject orders and freeze', function () {
-		const state = createState(); state.status = 'running'; advance(state, 840);
+		const state = createState(); state.status = 'running'; advance(state, ROUTE_SECONDS * 2);
 		expect<State['status']>(state.status).toBe('lost'); const time = state.time; advance(state, 10); expect(state.time).toBe(time);
 		expect(build(state, 0, 'flak')).toBe(false); expect(deploy(state, 'guardian')).toBe(false); expect(pulse(state)).toBe(false);
 	}, 15000);
 	test('a mixed defense survives all five route defenses and reaches the gate', function () {
 		const state = createState(); build(state, 0, 'flak'); build(state, 3, 'rail'); build(state, 4, 'flak'); state.status = 'running';
 		const plan: readonly { slot: number; weapon: Weapon }[] = [{ slot: 7, weapon: 'rail' }, { slot: 1, weapon: 'missile' }, { slot: 6, weapon: 'missile' }, { slot: 2, weapon: 'flak' }, { slot: 5, weapon: 'flak' }];
-		for (let second = 0; second < 840 && state.status === 'running'; second++) {
+		for (let second = 0; second < ROUTE_SECONDS * 2 && state.status === 'running'; second++) {
 			assignRepair(state, 'hull', 4); if (state.enemies.length >= 7) pulse(state);
 			for (const item of plan) build(state, item.slot, item.weapon);
 			for (let i = 0; i < 8; i++) upgrade(state, i);
 			advance(state, 1);
 		}
-		expect<State['status']>(state.status).toBe('won'); expect(state.time).toBeGreaterThanOrEqual(ROUTE_SECONDS); expect(state.wave).toBe(5); expect(state.kills).toBeGreaterThan(0); expect(state.hull).toBeGreaterThan(0);
+		expect<State['status']>(state.status).toBe('won'); expect(state.time).toBeGreaterThanOrEqual(ROUTE_SECONDS - 0.05); expect(state.wave).toBe(5); expect(state.kills).toBeGreaterThan(0); expect(state.hull).toBeGreaterThan(0);
 	}, 25000);
 	test('a wave-clear repair cannot revive a hull destroyed during the final exchange', function () {
 		const state = createState(); state.status = 'running'; state.wave = 5; state.time = ROUTE_SECONDS; state.hull = 10; state.systems.shield.charge = 0;

@@ -37,14 +37,14 @@ test('every state journey uses distance from engines rather than elapsed time', 
 
 test('systems landmarks, ETA and route fraction use integrated distance through reallocations', function () {
 	const state = createState();
-	expect(journeyFor(state)).toEqual({ distance: 0, remaining: tactical(1440), speed: 0, progress: 0, eta: 240 });
+	expect(journeyFor(state)).toEqual({ distance: 0, remaining: tactical(1440), speed: 0, progress: 0, eta: 1920 });
 	state.status = 'running'; state.nextWave = Infinity;
 	for (let i = 0; i < 100; i++) step(state, 0.05);
-	expect(journeyFor(state).distance).toBeCloseTo(tactical(30)); expect(journeyFor(state).eta).toBeCloseTo(235);
+	expect(journeyFor(state).distance).toBeCloseTo(15); expect(journeyFor(state).eta).toBeCloseTo(1915);
 	setAllocation(state, { engines: 6, weapons: 2, shields: 2 });
 	for (let i = 0; i < 100; i++) step(state, 0.05);
 	const journey = journeyFor(state);
-	expect(journey.distance).toBeCloseTo(tactical(75)); expect(journey.speed).toBe(tactical(9)); expect(journey.progress).toBeCloseTo(tactical(75) / tactical(1440)); expect(journey.eta).toBeCloseTo(tactical(1365) / tactical(9));
+	expect(journey.distance).toBeCloseTo(37.5); expect(journey.speed).toBe(4.5); expect(journey.progress).toBeCloseTo(37.5 / tactical(1440)); expect(journey.eta).toBeCloseTo(5722.5 / 4.5);
 	expect(beaconFor(6, state).x).toBe(tactical(1440)); expect(beaconFor(1, state).x).toBe(tactical(240));
 	expect(beaconFor(6, state).x - state.ark.x).toBeCloseTo(journey.remaining);
 	setAllocation(state, { engines: 0, weapons: 4, shields: 6 });
@@ -53,8 +53,8 @@ test('systems landmarks, ETA and route fraction use integrated distance through 
 
 test('actual speed stops during pause, focus loss, results and arrival while configured ETA remains useful', function () {
 	const state = createState(); state.status = 'running';
-	expect(journeyFor(state).speed).toBe(tactical(6));
-	state.paused = true; expect(journeyFor(state).speed).toBe(0); expect(journeyFor(state).eta).toBe(240);
+	expect(journeyFor(state).speed).toBe(3);
+	state.paused = true; expect(journeyFor(state).speed).toBe(0); expect(journeyFor(state).eta).toBe(1920);
 	state.paused = false; state.focused = false; expect(journeyFor(state).speed).toBe(0);
 	state.focused = true; state.status = 'lost'; expect(journeyFor(state).speed).toBe(0);
 	state.status = 'running'; if (!state.systems) throw new Error('Missing systems');

@@ -1,7 +1,7 @@
 import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { worldPoint } from '../src/space';
-import { build, createState, deploy, setAllocation, step, transferPower, WEAPONS, type State } from '../src/simulation';
+import { ENEMIES, build, createState, deploy, setAllocation, step, transferPower, WEAPONS, type State } from '../src/simulation';
 import { POWER_PRESETS, powerOutputs, type SystemsState } from '../src/systems';
 
 const systemsFor = function (state: State): SystemsState {
@@ -118,14 +118,29 @@ describe('distance-based completion', function () {
 		const state = quiet(); const systems = systemsFor(state);
 		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 }); advance(state, 4000);
 		expect(state.time).toBeGreaterThan(155); expect(state.status).toBe('running');
-		expect(systems.distanceTraveled).toBeCloseTo(state.time * engines * tactical(1.5)); expect(systems.distanceTraveled).toBeLessThan(systems.routeLength);
+		expect(systems.distanceTraveled).toBeCloseTo(state.time * engines * 0.75); expect(systems.distanceTraveled).toBeLessThan(systems.routeLength);
 	});
 	test('arrival clamps distance and wins without combat clearance or a minimum duration', function () {
 		const state = quiet(); const systems = systemsFor(state);
 		expect(systems.routeLength).toBe(tactical(1440));
+		systems.routeLength = 30;
 		state.arrivals.push({ at: 999, kind: 'raider', x: 600, y: 0 });
-		setAllocation(state, { engines: 10, weapons: 0, shields: 0 }); advance(state, 2000);
-		expect(systems.distanceTraveled).toBe(tactical(1440)); expect<State['status']>(state.status).toBe('won');
+		setAllocation(state, { engines: 10, weapons: 0, shields: 0 }); advance(state, 100);
+		expect(systems.distanceTraveled).toBe(30); expect<State['status']>(state.status).toBe('won');
 		expect(state.time).toBeLessThan(120); expect(state.arrivals).toHaveLength(1);
 	});
+});
+
+
+test('even maximum healthy engine power is half the slowest enemy speed; damage and allocations only reduce it', function () {
+	const slowest = Math.min(...Object.values(ENEMIES).map(function (enemy) { return enemy.speed; }));
+	const state = quiet();
+	for (const engines of [0, 2, 4, 6, 10]) {
+		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 });
+		const before = state.ark.x; step(state, 0.05);
+		expect((state.ark.x - before) / 0.05).toBeCloseTo(slowest / 2 * engines / 10);
+	}
+	state.systems.engines.integrity = 25;
+	const before = state.ark.x; step(state, 0.05);
+	expect((state.ark.x - before) / 0.05).toBeCloseTo(slowest / 4);
 });
