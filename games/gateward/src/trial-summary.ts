@@ -30,7 +30,7 @@ export const systemsSummary = function (state: State): SystemsSummary {
 export const systemsResultMessage = function (state: State): string {
 	const systems = state.systems;
 	if (state.status !== 'won' && state.status !== 'lost') return '';
-	if (!state.scenario) return state.status === 'won' ? 'Kepler reached. The ark broke through; surviving hostiles were left behind.' : 'Ark destroyed before reaching Kepler. Review shields, coverage and repair timing.';
+	if (!state.scenario) return state.status === 'won' ? 'Kepler reached. The ark broke through; surviving hostiles do not block arrival.' : 'Ark destroyed before reaching Kepler. Review shields, coverage and repair timing.';
 	if (state.status === 'won') return `Kepler reached and every required contact resolved${state.scenario?.deadline === undefined ? '.' : ' before the deadline.'}`;
 	if (state.resultReason !== 'deadline') return 'Ark destroyed before arrival and contact clearance. Review shields, coverage and repair timing.';
 	const remaining = Math.max(0, systems.routeLength - systems.distanceTraveled);
