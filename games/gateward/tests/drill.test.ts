@@ -40,7 +40,8 @@ describe('wing resources and lifecycle', function () {
 		const s = quiet(); deploy(s, 'interceptor'); s.status = 'running'; const w = firstWing(s); scramble(s, w.id, 'port');
 		expect(w.phase).toBe('launching'); expect(w.craft[0]?.x).toBe(-180); advance(s, 2.1); expect(w.phase).toBe('sortie');
 		advance(s, 18); expect(w.phase).toBe('returning'); expect(s.shots).toHaveLength(0);
-		advance(s, 9); expect(w.phase).toBe('rearming'); expect(s.escorts).toHaveLength(0); expect(craftCount(s)).toBe(3);
+		for (let frame = 0; frame < 3600 && w.phase !== 'rearming'; frame++) step(s, 1 / 60);
+		expect(w.phase).toBe('rearming'); expect(s.escorts).toHaveLength(0); expect(craftCount(s)).toBe(3);
 		advance(s, 10); expect(w.phase).toBe('ready'); expect(scramble(s, w.id, 'ahead')).toBe(true); expect(s.launches).toBe(2);
 	});
 	test('returning fighters move home and cannot fire at nearby hostiles', function () {
@@ -53,7 +54,8 @@ describe('wing resources and lifecycle', function () {
 		const craft = w.craft[0]; if (!craft) throw new Error('Missing craft');
 		s.shots.push({ id: 999, x: craft.x, y: craft.y, vx: 0, vy: 0, damage: 100, side: 'enemy', weapon: 'hostile', target: craft.id, life: 2 });
 		advance(s, .02); expect(s.escortLosses).toBe(1); expect(craftCount(s)).toBe(2); expect(replaceFighters(s, w.id)).toBe(false);
-		advance(s, 35); expect(w.phase).toBe('ready'); expect(w.craft).toHaveLength(2); const before = s.salvage;
+		for (let frame = 0; frame < 5400 && w.phase !== 'ready'; frame++) step(s, 1 / 60);
+		expect(w.phase).toBe('ready'); expect(w.craft).toHaveLength(2); const before = s.salvage;
 		expect(replaceFighters(s, w.id)).toBe(true); expect(s.salvage).toBe(before - 30); expect(craftCount(s)).toBe(3);
 	});
 	test('assignment remains bounded when a local target disappears; priority does not drag wings away', function () {

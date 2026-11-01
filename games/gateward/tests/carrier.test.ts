@@ -33,6 +33,7 @@ test('finite complement launches from all four rotated model anchors then stops'
 		expect(fighter.x).toBeCloseTo(carrier.x + scale * (c * bay.x - s * bay.y));
 		expect(fighter.y).toBeCloseTo(carrier.y + scale * (s * bay.x + c * bay.y));
 		expect(fighter.launchedBy).toBe(carrier.id); expect(fighter.flight?.angle).toBe(carrier.flight.angle);
+		expect(fighter.flight?.speed).toBeCloseTo(tactical(90) * 0.25);
 		expect(fighter.launchRemaining).toBe(CARRIER_LAUNCH.clearanceTime);
 	}
 	advance(state, 6); expect(state.enemies.filter(function (enemy) { return enemy.kind === 'raider'; })).toHaveLength(4);

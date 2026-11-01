@@ -18,4 +18,5 @@ export const enemyRadius = function (kind: string): number {
 export const CARRIER_BAYS = [
 	{ x: -6, y: 53 }, { x: -6, y: -53 }, { x: 69, y: 28 }, { x: 69, y: -28 },
 ] as const;
-export const CARRIER_LAUNCH = { interval: 0.9, range: tactical(620), clearanceTime: 1.5, speed: tactical(90) } as const;
+export const SMALL_CRAFT_SPEED_SCALE = 0.25;
+export const CARRIER_LAUNCH = { interval: 0.9, range: tactical(620), clearanceTime: 1.5, speed: tactical(90) * SMALL_CRAFT_SPEED_SCALE } as const;

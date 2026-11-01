@@ -98,11 +98,62 @@ describe('capital ship courses and batteries', function () {
 });
 
 describe('fighter skirmishing', function () {
+	for (const kind of ['raider', 'bomber'] as const) for (const approaching of [false, true]) test(`${kind} uses quarter speed, thrust and yaw acceleration (approaching=${approaching})`, function () {
+		const state = quiet(); const enemy = hostile(state, kind, -5000, 0);
+		enemy.approaching = approaching;
+		enemy.flight = { angle: 0, speed: 0, side: 1, course: 'intercept', run: 1 };
+		const limit = (approaching ? APPROACH.cruiseSpeed : tactical(kind === 'raider' ? 50 : 30)) * 0.25;
+		let peak = 0;
+		for (let frame = 0; frame < 600; frame++) {
+			const before = { x: enemy.x, y: enemy.y, z: enemy.z ?? 0 }; step(state, 1 / 60);
+			const speed = Math.hypot(enemy.x - before.x, enemy.y - before.y, (enemy.z ?? 0) - before.z) * 60;
+			expect(speed).toBeLessThanOrEqual(limit + 1e-8); peak = Math.max(peak, speed);
+			if (frame === 0) {
+				expect(speed).toBeCloseTo(limit * 0.65 / 60);
+				expect(Math.abs(enemy.flight.angularVelocity ?? 0)).toBeLessThanOrEqual(3 * 0.8 * 0.25 / 60 + 1e-8);
+				if (!approaching) expect(Math.abs(enemy.flight.angularVelocity ?? 0)).toBeCloseTo(3 * 0.8 * 0.25 / 60);
+			}
+		}
+		expect(peak).toBeGreaterThan(limit * 0.9);
+	});
+
+	test('interceptor thrust, braking and yaw acceleration are quartered together', function () {
+		const original: Flight = { angle: 0, speed: 0, side: 1, course: 'intercept', run: 1 };
+		const slower = structuredClone(original);
+		fly({ x: 0, y: 0 }, original, { x: 1000, y: 1000, z: 20 }, 640, 4, 1 / 60, true);
+		fly({ x: 0, y: 0 }, slower, { x: 1000, y: 1000, z: 20 }, ESCORTS.interceptor.speed, 4, 1 / 60, true, false, ESCORTS.interceptor.speed, 0.25);
+		const before = flightVelocity(original); const after = flightVelocity(slower);
+		expect(Math.hypot(after.x, after.y, after.z ?? 0)).toBeCloseTo(Math.hypot(before.x, before.y, before.z ?? 0) * 0.25);
+		expect(slower.angularVelocity).toBeCloseTo((original.angularVelocity ?? 0) * 0.25);
+		const braking: Flight = { angle: 0, speed: 160, vx: 160, vy: 0, vz: 0, side: 1, course: 'intercept', run: 1 };
+		fly({ x: 0, y: 0 }, braking, { x: 0, y: 0 }, ESCORTS.interceptor.speed, 4, 1 / 60, true, false, ESCORTS.interceptor.speed, 0.25);
+		expect(160 - braking.speed).toBeCloseTo(640 * 0.65 * 0.25 / 60);
+	});
+
+	test('a deployed interceptor wing observes its quarter-speed ceiling', function () {
+		const state = quiet(); deploy(state, 'interceptor'); const wing = state.wings[0]; if (!wing) throw new Error('Missing wing');
+		scramble(state, wing.id, 'port'); let peak = 0;
+		for (let frame = 0; frame < 600; frame++) {
+			const before = state.escorts.map(function (craft) { return { id: craft.id, x: craft.x, y: craft.y, z: craft.z ?? 0 }; });
+			step(state, 1 / 60);
+			for (const craft of state.escorts) {
+				const start = before.find(function (point) { return point.id === craft.id; }); if (!start) throw new Error('Missing craft position');
+				const speed = Math.hypot(craft.x - start.x, craft.y - start.y, (craft.z ?? 0) - start.z) * 60;
+				expect(speed).toBeLessThanOrEqual(160 + 1e-8); peak = Math.max(peak, speed);
+			}
+		}
+		expect(peak).toBeGreaterThan(144);
+	});
+
 	for (const kind of ['raider', 'bomber'] as const) test(`${kind} keeps moving around the ark and takes repeated pot shots`, function () {
-		const state = quiet(); const enemy = hostile(state, kind, tactical(400), -tactical(100));
+		const state = quiet();
+		// Keep full-orbit stability independent of the ark's forward travel.
+		if (kind === 'bomber') setAllocation(state, { engines: 0, weapons: 10, shields: 0 });
+		const enemy = hostile(state, kind, tactical(400), -tactical(100));
 		advance(state, 20); const before = { x: enemy.x, y: enemy.y }; const absorbed = state.systems.shieldAbsorbed;
 		const quadrants = new Set<string>();
-		for (let i = 0; i < 4800; i++) { step(state, 1 / 60); const relative = localPoint(state, enemy); quadrants.add(`${Math.sign(relative.x)},${Math.sign(relative.y)}`); }
+		const orbitFrames = kind === 'bomber' ? 19200 : 4800;
+		for (let i = 0; i < orbitFrames; i++) { step(state, 1 / 60); const relative = localPoint(state, enemy); quadrants.add(`${Math.sign(relative.x)},${Math.sign(relative.y)}`); }
 		expect(quadrants.size).toBe(4); expect(state.systems.shieldAbsorbed).toBeGreaterThan(absorbed);
 		expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeGreaterThan(30);
 	});
@@ -121,7 +172,7 @@ describe('fighter skirmishing', function () {
 		expect(hostileShots).toBeGreaterThan(2); expect(friendlyShots).toBeGreaterThan(5);
 		expect(enemy.hp).toBeLessThan(100000);
 		expect(state.escorts.some(function (craft, index) { const start = before[index]; return start && Math.hypot(craft.x - start.x, craft.y - start.y) > 30; })).toBe(true);
-		state.escorts = []; const absorbed = state.systems.shieldAbsorbed; advance(state, 60);
+		state.escorts = []; const absorbed = state.systems.shieldAbsorbed; advance(state, 90);
 		expect(state.systems.shieldAbsorbed).toBeGreaterThan(absorbed);
 	});
 	test('courses repeat deterministically and pause, focus loss and results freeze all flight state', function () {

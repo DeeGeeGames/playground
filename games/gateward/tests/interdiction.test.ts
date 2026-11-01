@@ -86,9 +86,10 @@ describe('field geometry and hostile fire', function () {
 	});
 	test('a bomber already at firing range maneuvers instead of parking or firing through the field', function () {
 		const state = quiet(); placeInterdiction(state, { x: tactical(265), y: 0 }); const enemy = hostile(state, 'bomber', 400, 30);
+		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 120;
 		step(state, 0.05); expect(enemy.detour).toBeDefined(); expect(state.shots).toHaveLength(0); expect(enemy.y).not.toBe(tactical(30));
 		let fired = false;
-		for (let frame = 0; frame < 900; frame++) {
+		for (let frame = 0; frame < 3600; frame++) {
 			const id = state.nextId; step(state, 1 / 60);
 			for (const shot of state.shots.filter(function (shot) { return shot.id >= id && shot.side === 'enemy'; })) {
 				fired = true; expect(fieldBlocks(state, shot.origin ?? enemy, { x: shot.x + shot.vx, y: shot.y + shot.vy })).toBe(false);
@@ -125,7 +126,9 @@ describe('deterministic approach shaping', function () {
 	for (const kind of ['raider', 'bomber'] as const) test(`${kind} takes a different approach and rejoins while the field is active`, function () {
 		const direct = quiet(); const shaped = quiet(); placeInterdiction(shaped, { x: tactical(300), y: 0 });
 		const plainEnemy = hostile(direct, kind); const enemy = hostile(shaped, kind); const hp = enemy.hp;
-		advance(direct, 15); advance(shaped, 15);
+		// Keep the obstacle active long enough to test a full detour at the slower fighter speed.
+		const field = shaped.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 120;
+		advance(direct, 60); advance(shaped, 60);
 		expect(Math.hypot(enemy.x - plainEnemy.x, enemy.y - plainEnemy.y)).toBeGreaterThan(60); expect(enemy.detour).toBeUndefined();
 		expect(systemsFor(shaped).interdiction.field).toBeDefined(); expect(systemsFor(shaped).interdiction.redirected).toBe(1); expect(enemy.hp).toBe(hp); expect(shaped.kills).toBe(0);
 	});
@@ -144,10 +147,11 @@ describe('deterministic approach shaping', function () {
 	test('moving escort targets retain the chosen side and release when a clear target returns', function () {
 		const state = quiet(); placeInterdiction(state, { x: tactical(300), y: 0 }); const enemy = hostile(state, 'raider', 450, 0); step(state, 0.05);
 		const side = enemy.detour?.side; expect(side).toBeDefined();
+		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 120;
 		state.escorts.push({ id: state.nextId++, kind: 'guardian', x: tactical(300), y: tactical(10), hp: 100000, cooldown: 9999, angle: 0 });
 		const escort = state.escorts[0]; if (!escort) throw new Error('Missing escort');
 		for (let frame = 0; frame < 120; frame++) { escort.x = tactical(300); escort.y = frame % 2 ? -tactical(15) : tactical(15); state.rally = { x: tactical(300), y: escort.y }; step(state, 1 / 60); expect(enemy.detour?.side).toBe(side); }
-		state.escorts = []; const before = { x: enemy.x, y: enemy.y }; advance(state, 15); expect(enemy.detour).toBeUndefined(); expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeGreaterThan(50);
+		state.escorts = []; const before = { x: enemy.x, y: enemy.y }; advance(state, 60); expect(enemy.detour).toBeUndefined(); expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeGreaterThan(50);
 	});
 	test('an escort inside the field cannot cause an infinite orbit and expiry releases the attacker', function () {
 		const state = quiet(); placeInterdiction(state, { x: tactical(300), y: 0 }); const enemy = hostile(state, 'raider', 450, 0);

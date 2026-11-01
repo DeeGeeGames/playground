@@ -1,6 +1,6 @@
 import { tactical } from './combat-scale';
 import { avoidTraffic, resolveTraffic, traffic, trafficWaypoint } from './ship-traffic';
-import { CARRIER_BAYS, CARRIER_LAUNCH, craftScale, enemyRadius } from './ship-config';
+import { CARRIER_BAYS, CARRIER_LAUNCH, SMALL_CRAFT_SPEED_SCALE, craftScale, enemyRadius } from './ship-config';
 import { craftTurretSolution, hasCraftTurrets, type CraftAim } from './craft-turrets';
 import { advanceInterdiction, arrivalOutsideField, circleHit, enemyClearance, fieldBlocks, INTERDICTION_CONFIG, navigateField, type Detour } from './interdiction';
 import { canAcquire, contactIntel, SENSOR_CONFIG } from './sensors';
@@ -30,13 +30,13 @@ export const WEAPONS = {
 const HEAVY_SPEED_SCALE = 0.125;
 const GUARDIAN_THRUST_SPEED_SCALE = 0.5;
 export const ESCORTS = {
-	interceptor: { name: 'Interceptor wing', cost: 85, count: 3, hp: 65, speed: tactical(160), range: tactical(155), damage: 10, reload: 0.65 },
+	interceptor: { name: 'Interceptor wing', cost: 85, count: 3, hp: 65, speed: tactical(160) * SMALL_CRAFT_SPEED_SCALE, range: tactical(155), damage: 10, reload: 0.65 },
 	guardian: { name: 'Guardian', cost: 105, count: 1, hp: 260, speed: tactical(85) * HEAVY_SPEED_SCALE, range: tactical(240), damage: 24, reload: 0.9 },
 };
 export const ENEMIES = {
 	carrier: { hp: 600, speed: tactical(38) * HEAVY_SPEED_SCALE, range: tactical(400), damage: 0, reload: 1, reward: 45, armor: 0.7 },
-	raider: { hp: 45, speed: tactical(50), range: tactical(100), damage: 7, reload: 1.2, reward: 9, armor: 1 },
-	bomber: { hp: 95, speed: tactical(30), range: tactical(290), damage: 34, reload: 3.8, reward: 17, armor: 1 },
+	raider: { hp: 45, speed: tactical(50) * SMALL_CRAFT_SPEED_SCALE, range: tactical(100), damage: 7, reload: 1.2, reward: 9, armor: 1 },
+	bomber: { hp: 95, speed: tactical(30) * SMALL_CRAFT_SPEED_SCALE, range: tactical(290), damage: 34, reload: 3.8, reward: 17, armor: 1 },
 	armored: { hp: 260, speed: tactical(40) * HEAVY_SPEED_SCALE, range: tactical(185), damage: 22, reload: 2.4, reward: 28, armor: 0.48 },
 	flagship: { hp: 2400, speed: tactical(36) * HEAVY_SPEED_SCALE, range: tactical(370), damage: 55, reload: 2.8, reward: 180, armor: 0.7 },
 };
@@ -595,7 +595,7 @@ export const step = function (state: State, dt: number) {
 		escort.flight ??= { angle: escort.angle, speed: Math.min(state.ark.speed, config.speed), side: i % 2 ? -1 : 1, course: 'intercept', run: 1 };
 		desired.z = (altitudeCourse(escort.id, state.time, escort.kind === 'guardian', engaging ? target : destination, wing?.phase === 'returning' || wing?.phase === 'launching') - (escort.z ?? 0)) * 0.8;
 		const hull = neighbors.find(function (hull) { return hull.id === escort.id; });
-		fly(escort, escort.flight, hull ? avoidTraffic(hull, desired, neighbors, config.speed) : desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt, true, escort.kind === 'guardian', escort.kind === 'guardian' ? config.speed / GUARDIAN_THRUST_SPEED_SCALE : config.speed);
+		fly(escort, escort.flight, hull ? avoidTraffic(hull, desired, neighbors, config.speed) : desired, config.speed, escort.kind === 'guardian' ? 1.6 : 4, dt, true, escort.kind === 'guardian', escort.kind === 'guardian' ? config.speed / GUARDIAN_THRUST_SPEED_SCALE : config.speed, escort.kind === 'interceptor' ? SMALL_CRAFT_SPEED_SCALE : 1);
 		escort.angle = escort.flight.angle;
 		if (target && distance(escort, target) <= config.range) {
 			const velocity = flightVelocity(target.flight); const sourceVelocity = flightVelocity(escort.flight);
@@ -613,6 +613,7 @@ export const step = function (state: State, dt: number) {
 	for (const enemy of [...state.enemies]) {
 		if (enemy.hp <= 0) continue;
 		const config = ENEMIES[enemy.kind]; enemy.cooldown -= dt;
+		const smallCraft = !isCapital(enemy);
 		if (enemy.launchRemaining !== undefined && enemy.launchRemaining > 0 && enemy.flight) {
 			const next = { x: enemy.x + Math.cos(enemy.flight.angle) * enemy.flight.speed * dt, y: enemy.y + Math.sin(enemy.flight.angle) * enemy.flight.speed * dt };
 			const field = state.systems.interdiction.field;
@@ -630,7 +631,7 @@ export const step = function (state: State, dt: number) {
 		const flight = enemy.flight;
 		const approaching = enemy.approaching === true && distance(enemy, state.ark) > SENSOR_CONFIG.shortRange;
 		if (!approaching && enemy.approaching) enemy.approaching = false;
-		const flightSpeed = approaching ? APPROACH.cruiseSpeed * (isCapital(enemy) ? HEAVY_SPEED_SCALE : 1) : config.speed;
+		const flightSpeed = approaching ? APPROACH.cruiseSpeed * (isCapital(enemy) ? HEAVY_SPEED_SCALE : smallCraft ? SMALL_CRAFT_SPEED_SCALE : 1) : config.speed;
 		const waypoint = navigateField(state, enemy, destination, flightSpeed, dt);
 		const desired = waypoint ? arriveCourse(enemy, waypoint, { x: 0, y: 0 }, 2)
 			: approaching ? arriveCourse(enemy, destination, carrierVelocity, 0.5)
@@ -638,7 +639,7 @@ export const step = function (state: State, dt: number) {
 			: fighterCourse(enemy, escort ?? state.ark, tactical(escort ? 60 : enemy.kind === 'bomber' ? 265 : 195), tactical(escort ? 60 : enemy.kind === 'bomber' ? 225 : 105), config.speed, enemy.id % 2 ? -1 : 1, escort ? flightVelocity(escort.flight) : carrierVelocity, state.enemies);
 		desired.z = (altitudeCourse(enemy.id, state.time, isCapital(enemy), escort ?? (isCapital(enemy) ? state.ark : { ...state.ark, z: -45 })) - (enemy.z ?? 0)) * 0.8;
 		const hull = neighbors.find(function (hull) { return hull.id === enemy.id; });
-		fly(enemy, flight, hull ? avoidTraffic(hull, desired, neighbors, flightSpeed) : desired, flightSpeed, isCapital(enemy) ? 0.7 : 3, dt, !isCapital(enemy), false, isCapital(enemy) ? flightSpeed / HEAVY_SPEED_SCALE : flightSpeed);
+		fly(enemy, flight, hull ? avoidTraffic(hull, desired, neighbors, flightSpeed) : desired, flightSpeed, isCapital(enemy) ? 0.7 : 3, dt, !isCapital(enemy), false, isCapital(enemy) ? flightSpeed / HEAVY_SPEED_SCALE : flightSpeed, smallCraft ? SMALL_CRAFT_SPEED_SCALE : 1);
 		if (enemy.kind === 'carrier') { advanceCarrierHangar(state, enemy, flight, dt); continue; }
 		const shotSpeed = tactical(enemy.kind === 'bomber' ? 155 : 235);
 		const escortSolution = escort ? hostileSolution(enemy, escort, flightVelocity(escort.flight), shotSpeed) : undefined;

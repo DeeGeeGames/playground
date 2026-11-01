@@ -55,14 +55,16 @@ describe('bomber response window', function () {
 		const state = setup(); step(state, 1 / 60); advance(state, 1); bomber(state).hp = 0;
 		advance(state, 3); expect(state.enemies).toHaveLength(0); expect(state.shots).toHaveLength(0);
 	});
-	test('same equipment: ignoring hits; post-release Aegis clears; early Aegis only mitigates hull', function () {
+	test('same equipment: post-release Aegis clears; active protection mitigates; an early pulse can expire', function () {
 		const ignored = setup(); const release = untilShot(ignored); advance(ignored, 2);
 		expect(ignored.systems.sensors.integrity).toBe(66); expect(ignored.hull).toBe(1166);
 		const cleared = setup(); expect(untilShot(cleared)).toBe(release); expect(pulse(cleared)).toBe(true); advance(cleared, 2);
 		expect(cleared.systems.sensors.integrity).toBe(100); expect(cleared.hull).toBe(1200);
+		const protectedHull = setup(); untilShot(protectedHull); protectedHull.aegisRemaining = 5; advance(protectedHull, 2);
+		expect(protectedHull.systems.sensors.integrity).toBe(66); expect(protectedHull.hull).toBeCloseTo(1193.2);
 		const early = setup(); step(early, 1 / 60); pulse(early); untilShot(early); advance(early, 2);
-		// Three dimensional lead still reaches the array after an early pulse.
-		expect(early.systems.sensors.integrity).toBe(66); expect(early.hull).toBeCloseTo(1193.2);
+		// Pushback delays the slower bomber until after the early protection expires.
+		expect(early.systems.sensors.integrity).toBe(66); expect(early.hull).toBe(1166);
 		const late = setup(); untilShot(late); advance(late, 2); pulse(late);
 		expect(late.systems.sensors.integrity).toBe(66); expect(late.hull).toBe(1166);
 	});
