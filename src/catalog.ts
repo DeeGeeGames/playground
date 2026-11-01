@@ -13,7 +13,7 @@ export const experiments: readonly Experiment[] = [
 	{
 		title: 'Gateward',
 		href: './games/gateward/',
-		description: 'Build a moving fortress. Fit turrets, launch escort wings, and defend a slow capital ship through six waves on the way to Kepler Gate.',
+		description: 'Build a moving fortress. Fit turrets, launch escort wings, and break through five defensive lines to reach Kepler Gate alive.',
 		controls: 'Mouse + Keyboard · Touch',
 		category: 'Capital ship tower defense prototype',
 	},

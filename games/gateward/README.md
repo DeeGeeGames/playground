@@ -1,118 +1,202 @@
 # Gateward
 
-A self-contained, 3D capital-ship tower defense prototype. The ark follows
-its route automatically; the player builds its defenses instead of piloting.
+Gateward is a browser-only capital-ship defense prototype. The ark follows its
+course automatically; the player fits weapons, assigns escorts and manages ship
+systems to break through the enemies between departure and Kepler Gate.
 
-Open `games/gateward/` from the launcher. Fit the ship with the starting 300
-salvage, then depart. A voyage takes about seven minutes at balanced engine
-power and 1×, or half that at 2×. Push through six defensive lines culminating in a flagship.
-Reach Kepler Gate alive to win; surviving enemies may remain behind you.
-There is no minimum combat time or requirement to destroy every hostile.
+There is one game, **Systems Trial**. Open `games/gateward/` from the launcher,
+fit the ship with **500 salvage**, then depart. Legacy `?mode=` query parameters
+are ignored; they do not select alternate rules or encounters.
 
-- T / Radar opens the live heading-up tactical screen. Long range covers 8 km;
-  short range covers 2800 m, with classification inside 2560 m. Both sensor bands
-  remain active in either view. Escape or Battle view returns to the 3D battle.
-  Space pauses outside native button activation; radar also provides Pause.
-- Long-range returns group contacts by coarse bearing and distance without
-  revealing ship classes, exact counts, or hull strength. Select a contact to
-  mark priority; weapons still obey their existing range and firing arcs.
-  Lost tracks retain only their last observed world position, show their age,
-  and expire after eight simulation seconds. They cannot be targeted.
-- Full Voyage places six defensive lines at equal intervals along the route,
-  before the gate. Each deploys when the ark is within 1600m of its route station.
-  Heavy ships hold world positions across the route; carriers launch fighters and
-  small craft intercept locally within 1300m of their station. Once the ark is
-  more than 960m past a line, survivors disengage permanently and return to their
-  stations. Passing enemies grants no kill salvage or clearance repair. Sensor
-  visibility still depends on real contacts and sensor condition.
-- Escort Drill and Systems Trial retain timed approaches: contacts enter at
-  8.8–9.6 km and cruise until the 2800m combat zone, then use combat speed.
-  Approaches start 15 seconds before encounter time, clamped at departure.
-  Their route, clearance, minimum-duration and deadline rules are unchanged.
-- Sensor integrity below 50 reduces detection to 4 km and classification to
-  920 m. Offline sensors retain 800 m local automatic defense. Repair from radar
-  or the sensor panel costs 70 salvage, with the existing 18-second cooldown.
-- Select one of eight mounts using a visible ship pad, panel buttons, or keys 1–8.
-- Right-drag to orbit and use the wheel to zoom. On touch screens, drag to orbit
-  and pinch to zoom; a tap still gives an order. Reset view and restarting restore
-  the original orthographic tactical camera. The camera stays centered on the ark.
-- Beam costs 125 salvage, reaches 1200m and deals 48 damage per second before armor at balanced weapon power. It automatically tracks one eligible target; upgrades and weapon power scale sustained damage.
-- Flak handles light ships; railguns ignore armor; homing missiles deal splash
-  damage. All turrets turn toward their firing solution before firing automatically
-  within 120° outward arcs in Full Voyage. Flak turns at 360°/s, beams at 180°/s, missiles at 120°/s,
-  and railguns at 90°/s. Projectile barrels track the lead angle; beams track the
-  contact directly. Turning continues during reload and freezes with zero weapon
-  power, pause, or focus loss. Upgrade to level 3
-  for damage, range, and fire rate. Selling returns 70% of the investment.
-- Deploy three interceptors or one guardian. There are nine shared craft slots.
-  Click empty space to rally escorts, or use R / the rally button first. Enemies
-  prefer nearby escorts, allowing guardians to absorb fire. Lost units must be
-  replaced. Escorts engage within a bounded area around their rally point.
-- Click a hostile to set a priority for turrets and nearby escorts. Clear the
-  target to return to nearest-target fire.
-- Q / Aegis pulse clears incoming projectiles, pushes nearby enemies, and reduces
-  hull damage by 80% for five seconds. Recharges in 32 seconds.
-- E / Repair spends 80 salvage for up to 240 hull, with a 15-second cooldown.
-- Kills earn salvage; the reactor produces 1.2 salvage per second. Clearing a
-  active contact group grants 50 salvage and repairs 60 hull only when all
-  deployed enemies are destroyed. Full Voyage encounters follow route progress;
-  stopping engines delays later lines. The two trials retain fixed schedules.
-- Space pauses immediately outside native button activation. Escape returns from radar, otherwise cancels a field
-  preview first, then closes the inspector, then toggles pause. Tab and native
-  button activation work for the command panel. Focus loss and hidden documents pause the running voyage. Pointer/touch
-  commands use the same actions. Physical touch devices are separate acceptance.
+Reach the end of the **5.76 km route alive** to win. Surviving hostiles may remain
+behind the ark. There is no deadline, minimum combat duration, requirement to
+clear every contact, or flagship finale. Losing all hull ends the run. Restart
+returns to fitting with the original budget, systems and route progress.
 
-The canvas fills the viewport. Edge tabs open a single right-side drawer:
-Cover exposes escort priorities without entering radar; Power, Fit, Bay and Intel
-open engineering, weapons, escort management and sensors. Emergency actions remain
-at the lower left. Drawers scroll internally on short screens, preserve the
-camera, and leave survival and threat information visible. Cover / C toggles
-coverage; Escape closes the drawer and restores focus. Opening controls does not
-pause combat. Radar / T remains available for spatial contact inspection.
+## Route defenses
 
-Standard controllers: Y toggles the last drawer, bumpers switch tabs, D-pad up/down
-moves focus, left/right adjusts a select, A activates, B returns, and Start pauses.
-Held buttons are ignored on connection and focus restoration until released.
-Controller support has browser simulation evidence only; physical device and
-couch readability acceptance remain owner checks.
+Five defensive lines occupy fixed stations along the route:
 
-Browser-independent simulation lives in `src/simulation.ts`; Three.js presentation
-and DOM input remain separate. `src/presentation.ts` owns the scene, orthographic
-camera, OrbitControls, lights, models, visual effects, and disposal. The HTML
-command panel remains accessible with keyboard controls. A transparent Canvas
-layer draws screen-space numbers, health bars, navigation labels, and contact
-arrows. Solid world geometry shares WebGL depth testing.
+| Line | Complement |
+| --- | --- |
+| 1 | 8 raiders |
+| 2 | 6 bombers |
+| 3 | 3 armored ships |
+| 4 | 10 raiders |
+| 5 | 3 bombers |
 
-`src/projection.ts` projects and raycasts through the current camera. Mount and
-hostile clicks respect visible mesh surfaces, including hull occlusion; the panel
-can select a mount hidden on the far side. Pointer release issues tap/click orders;
-orbit drags, pinches, cancellation, pause, and focus loss cannot leak into rally or
-target orders. Lost graphics contexts pause the voyage and can be resumed after
-restoration. Renderer shutdown disposes controls, geometry, materials, shadow
-buffers, labels, and its WebGL context. Gameplay still runs on the original 2D
-plane; simulation uses world coordinates without a physics engine, gameplay ECS,
-or persistence migration.
+Raiders begin aboard enemy carriers, with each line's finite fighter complement
+split between the two flanks. Carrier hulls are additional targets. Destroying a
+carrier prevents its remaining fighters from launching; fighters already airborne
+retain their line's orders.
 
-Aircraft occupy a presentation-only flight layer above the bridge. Projectile
-trails join turret height to that layer; incoming fire descends to the existing
-hull collision boundary. Ranges, damage, targeting, and movement stay planar.
+Distance traveled triggers deployment, rather than elapsed time. Each line
+enters when the ark is within 1600m of its station. Heavy ships hold world
+positions across the route, while fighters and bombers intercept locally within
+1300m of their station. Once the ark is more than 960m past a line, its survivors
+disengage permanently and return to their stations. Stopping the engines delays
+later lines but does not freeze enemies or incoming fire.
 
-The ark is a Blender-authored, faceted armored model with a broad chamfered prow,
-segmented shoulder and belly armor, recessed warm lights, a stepped aft bridge,
-and four stern drives. Dynamic turrets retain the eight original mount positions
-and firing rules. The shipped model is `public/models/gateward-ark.glb`; editable
-source is `assets/gateward-ark.blend`. It has about 8,800 triangles, eight materials,
-and no external textures. `tools/build-ark.py` reproduces it in an isolated Blender
-scene and preserves an existing user document when called from live Blender.
+Kills earn salvage, and the reactor produces 1.2 salvage per simulation second.
+Destroying all deployed hostiles with no pending arrivals grants the existing
+clearance bonus of 50 salvage and 60 hull repair. Passing a line or leaving
+survivors behind grants no kill salvage or clearance repair.
 
-The two escort craft and four hostile classes use faceted, segmented steel armor,
-recessed warm glazing, and housed stern drives to match the ark. Escort recognition
-marks stay cyan; hostile plating retains muted rust, ochre, and plum distinctions.
-`src/craft-3d.ts` builds these small models and batches details by material (at most
-eight draws per craft). They keep the original tactical scale, flight layer, and
-planar combat rules. Turret models are unchanged by this supporting-craft pass.
+## Weapons and escorts
 
-To rebuild the source and runtime asset with Blender on your PATH:
+The ark has eight mounts: port 1–4 and starboard 5–8. Every turret uses a **120°
+outward firing arc**, leaving fore and aft blind spots. Select a fitted mount to
+see its actual range and coverage. Priority targeting cannot bypass sensor,
+range or arc requirements. Guns must turn onto their firing solution before
+firing, including after a target change.
+
+- Flak provides rapid fire and prefers classified raiders.
+- Railguns ignore armor and prefer classified armored ships.
+- Missiles seek detected clusters and apply splash damage on impact.
+- Beams sustain instant damage against an eligible target; armor reduces it.
+
+Eligible player focus overrides automatic preferences. Otherwise eligible targets
+use weapon preference, then nearest distance and lowest ID. Upgrade a weapon to
+level 3 for damage, range and firing speed. Selling returns 70% of its investment.
+Zero weapon power stops turret reload progress, turning and firing; changing
+power grants neither instant reload nor damage.
+
+An interceptor wing costs 85 salvage and contains three fighters. A guardian
+costs 105. Both share nine craft slots. Fighters start docked. **Scramble all
+fighters** enables recurring sorties according to coverage priorities; **Recall
+all fighters** brings airborne wings home and holds them docked until scrambled
+again. Changing coverage does not release that hold.
+
+A wing cycles through 2 seconds launching, 18 seconds on sortie, physical return
+to the moving stern, 10 seconds rearming, then ready. Only sortie fighters fire.
+Survivors retain damage. Lost fighters do not regenerate; replacements cost 30
+salvage each and are available while docked or rearming. Lost guardians require
+buying new craft.
+
+**Cover** assigns Fore, Aft, Port and Starboard priorities: Off, Low, Normal,
+High or All. All commits every available escort to one sector until released;
+Balanced restores Normal on every side. Wings stay together, and guardians and
+fighters allocate independently. Escorts choose their own screening and local
+intercept positions, then return to their stations. The older shared rally
+control is removed. Nearby escorts can draw hostile fire away from the ark.
+
+## Reactor, shields and repairs
+
+Allocate ten integer reactor units among engines, weapons and shields. Start at
+4/4/2; choose a preset or transfer one unit between named systems. Fitting allows
+planning. Pause, focus loss and ended runs hold simulation and reject orders.
+
+| Preset | Engines / weapons / shields | Healthy speed | Undamaged route time at 1× |
+| --- | --- | --- | --- |
+| Balanced | 4 / 4 / 2 | 24 m/s | 240 seconds |
+| Engine priority | 6 / 2 / 2 | 36 m/s | 160 seconds |
+| Weapon priority | 2 / 6 / 2 | 12 m/s | 480 seconds |
+| Shield priority | 2 / 2 / 6 | 12 m/s | 480 seconds |
+
+Each engine unit supplies 6 m/s. Ten engine units yield 60 m/s and a 96-second
+healthy route, while leaving no reactor power for ark weapons or shield recharge.
+Weapon power supplies 0.25× turret cadence per unit, up to 2.5×. Shield power
+supplies 4 HP/s of recharge per unit. These figures describe travel and output,
+not strategy or balance acceptance. The 2× setting advances simulation faster.
+
+The energy shield starts with 240 of 360 HP. It absorbs incoming damage before
+hull and recharges after three seconds without an ark hit. **Aegis / Q** is a
+separate emergency action: it clears hostile rounds, pushes nearby enemies and
+reduces hull damage by 80% for five seconds, with a 32-second cooldown. It does
+not refill the energy shield.
+
+Penetrating rounds damage equipment at their hull impact location. Engines,
+sensors, the shield generator and each fitted mount can be impaired below 50
+integrity or offline at zero. Impaired engines and guns operate at half output;
+impaired generators recharge at half rate. An offline generator stops recharge,
+but existing shield charge still protects the ark.
+
+Four reusable repair crews are shared by hull and equipment. Each assigned crew
+repairs 12 hull HP or 4 equipment integrity per simulation second. Repairs cost
+no salvage. Power-drawer controls split or concentrate crews; **E** toggles one
+hull crew and **S** toggles one sensor crew. Reassignment retains repair progress,
+and reaching full integrity releases crews. Repairs freeze with the simulation
+and cannot revive the ark. Selling or upgrading a gun does not repair its mount.
+
+## Sensors and interdiction
+
+**T / Radar** opens a heading-up tactical screen. Long range covers 8 km and short
+range 2800m; both sensor bands remain active in either view. Healthy sensors
+classify contacts within 2560m. Below 50 integrity, detection falls to 4000m and
+classification to 920m. Offline sensors retain 800m local automatic defense with
+no classification. Sensor repair uses the shared free crews.
+
+Unclassified contacts appear as coarse amber groups without exact class, count
+or hull information. Only real detected actors generate warnings. Lost tracks
+retain their last observed world position and age, expire after eight simulation
+seconds and cannot be targeted. Visibility and radar do not extend weapon range
+or firing arcs. Missiles lose guidance outside acquisition range and can recover
+it if acquisition returns; independent escort self-defense continues.
+
+Classified bombers display a two-second **ARRAY SHOT** preparation cue before
+release, followed by FIRED and RECHARGING. Destroy the bomber, intercept its
+rounds with escorts, or block them with a field. Shield absorption protects
+against penetrating equipment damage; Aegis can clear already flying rounds.
+
+**Interdiction / I** previews a world-anchored field after departure. Choose
+Ahead, Port or Starboard, tap/click the battlefield to aim, or use arrow keys
+while the canvas is focused. Enter or Place field confirms; Escape cancels. A tap
+updates the preview without placing it. Green marks a valid position and red an
+invalid one; orbit drags, pinches and cancelled pointers cannot confirm placement.
+
+One field costs 90 salvage, has a 440m radius, lasts 30 simulation seconds and has
+a 40-second cooldown. It must clear the ark and hostiles, begin ahead or beside
+the ark, and stay within 1800m placement range. It blocks hostile firing lines
+and already flying rounds; friendly fire and escorts pass through. Hostiles use
+bounded detours around it, with detected redirected ships labeled DETOUR. The
+field remains at its world position as the ark passes, and expires early when
+more than 2600m astern. Pause, focus loss, restart and results cancel placement.
+
+## Controls and presentation
+
+- Keys **1–8**, mount pads or Fit-drawer buttons select a weapon mount.
+- Click/tap a detected hostile to mark priority; clear the target to resume
+  automatic weapon preferences. Empty-space taps no longer issue rally orders.
+- **C** toggles Cover. Edge tabs open one drawer for coverage, weapons, power,
+  escorts or sensors; drawers scroll on short screens and do not pause combat.
+- **T** toggles radar; **R** also opens it. Escape returns from radar, otherwise
+  cancels field placement, closes a drawer, then toggles pause.
+- **Space** pauses outside native button activation. Focus loss and a hidden
+  document pause play. Tab and native keyboard activation remain available.
+- Right-drag or touch-drag orbits the camera; the wheel or a pinch zooms. Reset
+  view and restart restore the original tactical camera, which follows the ark.
+- Standard controller: Y toggles the last drawer, bumpers switch tabs, D-pad
+  moves focus or changes a selected value, A activates, B returns and Start pauses.
+  Held buttons are ignored after connection or focus restoration until released.
+- Sound on/off toggles session mute. Web Audio effects unlock after interaction;
+  pause, hidden tabs and focus loss cut active voices without replaying missed cues.
+
+The canvas preserves the playfield while HUD, direct emergency actions and edge
+drawers expose ship controls. Navigation landmarks and the gate are world-fixed;
+the camera does not change simulation positions. Reduced motion disables
+nonessential visual motion while retaining physical travel and combat feedback.
+
+## Implementation and assets
+
+`src/simulation.ts` owns browser-independent fixed-step gameplay. Encounter
+composition lives in `src/scenarios.ts`, route defense geometry in
+`src/route-defense.ts`, and reactor/shield rules in `src/systems.ts`.
+`src/flight.ts`, `src/ship-traffic.ts` and `src/space.ts` handle bounded ship
+steering, solid traffic, world positions and explicit ship-local offsets. Active
+ships, shots, effects and fields store world positions independently of camera
+motion. Projectile origins, inherited firing velocity, swept hits and visible
+weapon mounts share the same geometry.
+
+Three.js rendering lives in `src/presentation.ts` with camera-aware picking in
+`src/projection.ts`. It owns camera controls, models, lighting and bounded effects;
+DOM code owns accessible input and status. Lost graphics contexts pause play.
+Shutdown disposes controls, geometry, materials, shadow buffers, labels and the
+WebGL context. No desktop packaging, gameplay ECS, physics engine or shared
+singleton world is required.
+
+The runtime ark model is `public/models/gateward-ark.glb`; its editable source is
+`assets/gateward-ark.blend`. It has eight fitted mount positions and no external
+textures. Rebuild with Blender on PATH:
 
 ```sh
 blender --background --factory-startup --python games/gateward/tools/build-ark.py -- --gateward-export /tmp/gateward-asset
@@ -121,503 +205,37 @@ bunx @gltf-transform/cli@4.5.1 dedup /tmp/gateward-asset/gateward-ark.glb /tmp/g
 bunx @gltf-transform/cli@4.5.1 prune /tmp/gateward-asset/dedup.glb games/gateward/public/models/gateward-ark.glb
 ```
 
-The camera follows the ark along the voyage’s 10.08 km route at a balanced 24 m/s.
-The ark advances through world space; the orthographic camera and its orbit
-center follow it. Navigation beacons, the lattice, debris and Kepler Gate keep
-fixed world positions. Full Voyage ends immediately on arrival if the ark
-survives. The two trials can wait at the gate for required combat clearance.
-Pausing freezes the simulation, and replay returns to departure. Reduced motion
-disables decorative star parallax and engine flicker while physical travel remains.
-
-`bun test games/gateward/tests` exercises economy, combat, escort losses, support
-systems, failure, a complete salvage-funded victory, camera-aware picking,
-orbital projection, resize, model hardpoints, and shield clearance. `bun run check` validates
-the whole workspace. Production preview and owner judgment establish visual and
-play-feel evidence separately from deterministic tests.
-
-## Combat flight
-
-Armored ships and flagships intercept a flank, turn onto parallel courses and
-make repeated broadside runs. They gain ground, then ease aft rather than stop
-at a range boundary. Each side battery covers a 100° arc; bow/stern targets wait
-for the ship to turn. Visible side barrels and shot origins share the hull's
-course heading. Heavy ships cruise at up to 160m/s (armored) or 144m/s (flagship),
-so they can intercept even the ark's maximum 120m/s engine allocation.
-
-Raiders and bombers continuously circle the ark or skirmish around nearby escorts,
-with local separation between hostile craft. Raiders take close pot shots;
-bombers stay farther out with array-seeking rounds. Friendly interceptors maneuver
-around contacts during combat. Guardians retain their screening positions, and
-wing sectors, launch/return/rearm phases and rally limits still apply. Ballistic
-guns lead moving targets; weapon damage, reloads, rewards and economy are unchanged.
-
-`src/flight.ts` owns shared heading-driven steering, braking, turn limits and
-broadside geometry. Every active ship, projectile, field and effect stores a world
-position. The ark moves along its route; camera movement has no gameplay effect.
-Guardians match the ark's forward course at their screening stations while their
-guns track contacts independently. Fighters use the same steering when launching,
-forming up, fighting and returning to the moving stern. Wing phases, sector
-assignments and local leashes are retained.
-
-`src/space.ts` converts explicit local offsets (mount fittings, sector positions
-and rally orders) into world targets. Those anchors travel with the ark; fields,
-shots and effects remain independent once placed or launched. Incoming contacts
-use scheduled bearing offsets only when they enter the world. Sensors, ranges,
-interception, projectile sweeps and input picking use the same world positions.
-
-Projectile speeds are muzzle speeds relative to the firing ship. A round inherits
-its source's world velocity once and records its actual world firing origin.
-Ballistic rounds are unaffected by later engine changes. Guided missiles retain
-their inherited launch velocity and update their guidance separately. Barrels
-track the relative-velocity firing solution and must align before firing; enemy
-side banks also validate that solution against their broadside arc. Swept contact
-checks account for moving ships and hulls. Damage, reloads and economy are unchanged.
-
-`tests/flight.test.ts` covers intercepts and combat maneuvers. The additional
-`tests/world-movement.test.ts` covers every friendly flight phase, moving-stern
-recovery, translated encounters, late world orders/deployment, inherited ballistic
-velocity, fixed fields, swept hull hits and close-field braking. Camera and
-trajectory tests cover translated/rotated picking and world firing origins.
-Strategy comparisons below remain reproducible simulation controls; production
-browser evidence and owner judgment establish visual and flight-feel acceptance.
-
-## Escort Drill
-
-Choose **Escort Drill** in the briefing, pause menu or result, or open
-`?mode=drill`. Restart retains the selected mode. Full voyage remains the default
-with 120° outward arcs and a shared guardian rally. All modes include reactor
-allocation, rechargeable shields, damageable sensors and interdiction by default.
-The drill requires survival, its real 4.32 km route, and clearance of all four
-contacts after at least 90 seconds. Engines can delay arrival; reaching the gate
-early does not skip contacts. Full Voyage uses a 10.08 km route and wins on
-arrival, without a minimum time or contact-clearance requirement.
-
-Drill mounts cover 240° centered outward (port −Y, starboard +Y). The selected
-fitted mount shows a subtle outline at its actual upgraded range; `coverageFor`
-drives both presentation and acquisition. Inclusive angle/range boundaries apply
-to priority targets too. Fore/aft overlap is intentional.
-
-In every mode, buy a three-fighter wing for 85 salvage; fighters start docked.
-After departure, Escort Bay’s Scramble all fighters enables recurring sorties
-according to radar coverage. Recall all fighters interrupts launching and active
-sorties, brings survivors home without firing, and holds them docked until the
-next scramble. Coverage changes do not release this hold. Each wing cycles through: 2s launching, 18s
-sortie, physical return to the stern, 10s rearming, ready. Only sortie craft fire.
-Sector assignments stay fixed if local enemies disappear; the timed sortie ends
-rather than following a disappearing target. Craft engage within 180 units of
-that sector, independently of turret priority. Survivors retain damage. Lost
-fighters never regenerate: replacing missing craft costs 30 each while ready.
-Ready, flying and rearming craft share nine slots with guardians; losses free
-slots. A completely lost wing remains a replaceable empty bay entry.
-
-Guardians cost 105 and start assigned to port. Each has its own sector buttons
-and visible ID/sector label. Port/starboard offsets are ±230 on Y; ahead/astern
-are ±280 on X. Guardians travel at the existing 85 units/s, hold their assignment
-between contacts, and acquire only enemies within 180 of the assigned position.
-There is no shared rally in the drill. Existing nearby-escort enemy targeting
-lets a screen absorb shots. Replacement guardians are paid new craft.
-
-`src/scenarios.ts` defines the fixed encounters: eight port raiders at 10s,
-four starboard bombers at 23s, three port armored craft at 49s, nine ahead
-raiders at 52s. Healthy sensors provide direction, class, count and time until
-first arrival; damaged arrays reduce warning and targeting range. Starting salvage
-is 300 with no free equipment. Existing weapon,
-income, clearance reward, repair and Aegis values are retained. All numbers are
-provisional owner-playtest tuning. Model-level pause/focus/end guards stop
-combat, timers and economy commands; DOM buttons provide keyboard/touch orders.
-
-Reproduce the comparisons with `bun test games/gateward/tests/drill.test.ts`.
-The test prints a table and repeats each run for determinism. Baseline buys
-nothing. Both defenses fit port mount 1 rail and starboard mount 5 flak; wings
-buy one wing and attempt port launches at 7s/42s and ahead at 75s, while guardians
-buy one guardian and redirect it to starboard at 18s. Neither spends earned
-salvage, repairs, pulses or upgrades. Observed outcomes:
-
-| Strategy | Result/time | Hull | Kills | Escort losses | Launches/orders | Salvage |
-| --- | --- | ---: | ---: | ---: | --- | ---: |
-| No intervention | Lost / 42s | 0 | 0 | 0 | 0 / 0 | 350 |
-| Wing defense | Won / 90s | 949 | 24 | 2 | 2 / 2 | 588 |
-| Guardian screen | Won / 90s | 1134 | 24 | 0 | 0 / 1 | 568 |
-
-With moving attackers, both equipped scripts now clear all contacts. Launching
-the wing preserves more hull than holding it in reserve. Guardian reassignment
-also changes hull survival and escort losses with the same fitting. These orders
-affect outcomes without guaranteeing that an old timing remains optimal.
-These limited controls do not establish balance or enjoyable feel. The tests
-repeat each run and compare identical equipment with orders held.
-The unarmed baseline is a simulation control; the browser requires at least one
-defense before departure.
-Physical input and owner play-feel checks remain separate from simulation evidence.
-
-## Ship systems and Systems Trial
-
-Choose **Systems Trial** in the briefing, pause menu or result, or open
-`?mode=systems`. Fit a mixed defense with 500 salvage and complete the actual
-5.76 km route while resolving all required contacts **before 155 seconds**.
-Balanced power takes about 120 seconds of flight; fast engines can arrive early,
-but must still resolve the later contacts. A tick ending exactly at the deadline
-loses. Hull destruction also loses. Time alone cannot complete the route.
-These systems are active in every mode, including the default Full Voyage.
-`?mode=systems` selects the short encounter schedule; it does not enable features.
-There is no systems feature flag or opt-in. Mode choice changes encounters, route
-length, escort control style and deadline, while reactor/shields/sensors/fields
-remain available throughout.
-
-The five fixed encounters are port raiders at 8s, starboard bombers at 26s,
-port armored craft at 58s, ahead raiders at 72s and astern bombers at 98s.
-Sensors still gate what the live feed reveals. The mission strip shows elapsed
-time, deadline, travel ETA and arrival/clearance status. Reactor controls move
-to the top of the command panel during flight. Results explain hull destruction,
-missed arrival, unresolved contacts at the deadline, or successful clearance.
-They record elapsed/distance/ETA, hull/shield, absorption, power changes,
-contact groups/kills, sensor impairments/repairs, fields/detours and escort losses.
-
-The ark starts with 240 of 360 energy shield HP. Hostile rounds hit escorts first,
-then consume shield charge, then damage hull with any overflow. Default recharge
-is 8 HP/s after three simulation seconds without a positive-damage ark hit. Fitting,
-pause/focus loss and results freeze recharge. A depleted shield must recharge;
-it never instantly restores. The blue charge bar and brief blue/amber impact
-shell show energy shields; the green Aegis shell shows its separate five-second
-emergency protection. Aegis still clears enemy rounds and pushes nearby enemies,
-reduces only hull overflow by 80%, and never refills energy shields.
-
-The reactor always allocates ten integer units between engines, weapons and
-shields. Start at 4/4/2; choose a preset or select donor/recipient systems and
-transfer one unit. Controls work with native keyboard activation, pointer and
-simulated touch. Fitting permits planning; pause, focus loss and results reject
-changes. Restart restores 4/4/2, charge and route progress.
-
-| Preset | Engines / weapons / shields | Speed | Ark cadence | Recharge |
-| --- | --- | --- | --- | --- |
-| Balanced | 4 / 4 / 2 | 48 m/s | 1.0× | 8 HP/s |
-| Engines | 6 / 2 / 2 | 72 m/s | 0.5× | 8 HP/s |
-| Weapons | 2 / 6 / 2 | 24 m/s | 1.5× | 8 HP/s |
-| Shields | 2 / 2 / 6 | 24 m/s | 0.5× | 24 HP/s |
-
-Output curves are linear tuning constants: 12 m/s per engine unit, 0.25× reload
-progress per weapon unit (maximum 2.5×), and 4 HP/s per shield unit. Zero engine
-power stops progress while combat continues; zero weapons freezes ark reload
-progress and firing; zero shields stops recharge. Reallocation never grants
-instant charge or reload progress. Escort reactors and weapon damage stay
-independent. The engineering panel's travel ETA excludes combat clearance.
-Navigation beacons, gate position, route percentage and drive plumes share the
-same actual distance/speed. Reduced motion retains physical route progress.
-
-Sensors start at 100 integrity. At 50 or more, they detect contacts at 8000m and
-classify them at 2560m; below 50, those ranges fall to 4000m and 920m. At zero,
-nearby defense still acquires contacts within 800m, with no classification.
-Only classified contacts provide ship class, exact hull and classified group counts.
-Unclassified craft use a generic amber marker; unseen craft have no physical
-model, radar arrow, label, or health readout. The radar groups coarse returns
-without exact counts. Only real actors inside detection range produce warnings;
-pending encounter schedules never reveal their composition. This is a tactical
-prototype, not a generalized line-of-sight system.
-
-Ark turret acquisition and missile guidance respect sensor range. Missiles
-already flying continue ballistically while a lock is out of range and can
-resume guidance after acquisition recovers. Independent escort self-defense
-continues. A stale priority lock drops as soon as damage removes acquisition.
-
-Bombers fire amber array-seeking rounds. Escort interception
-consumes a round; shield absorption protects both hull and sensors. Overflow
-damages the array by up to 35 integrity per round, proportional to the fraction
-that penetrated the shield. Aegis mitigates only hull damage; its round-clearing
-pulse can prevent disruption. No ordinary round or random event damages sensors.
-Repair Sensors / **S** spends 70 salvage to restore 100 integrity with an
-18-second cooldown, competing with hull repairs and new defenses. Sensor damage
-does not heal on its own; paused, unfocused and ended runs freeze repair timers
-and reject commands. Full voyage and Escort Drill retain their previous intel
-and targeting rules.
-
-Interdiction / **I** previews a single field after departure. Choose Ahead, Port
-or Starboard, tap/click the battlefield to aim, or use arrow keys while the
-canvas is focused (up/down ahead/astern; left/right port/starboard, 80m per press).
-**Enter** or **Place field** confirms; **Esc** cancels. A tap only updates the
-preview. Green marks a valid position, red an invalid one; the outer ring shows
-the 1800m placement range. Orbit drags, pinches and pointer cancellation never
-confirm placement. Pause, focus loss, restart and result transitions discard it.
-
-A field costs 90 salvage, has a 440m radius, lasts 30 simulation seconds and has a
-40-second cooldown. Only one can be active. Its circle must clear the ark and
-hostiles at deployment, stay within 1800m and start ahead/beside the ark (X ≥ −200m).
-The field keeps its absolute world position as the ark passes it, so its
-position relative to the ark moves aft by actual route travel. It expires early once more than 2600m astern.
-Reduced motion keeps this physical movement. Friendly fire and escort movement
-pass through; hostile firing lines and already flying rounds are blocked.
-
-Hostiles choose a stable side and tangent/arc waypoints around the field, then
-resume their approach once clear. **DETOUR** identifies detected craft being
-redirected. A hostile targeting an escort inside the field waits at the boundary
-until the target emerges or the temporary field expires. World-space detours
-feed the same bounded steering as open flight, including full braking when a
-new field is placed close to an approaching hull; there is no ark-drift compensation. New arrivals covered by a
-field enter farther out on their original bearing, before first appearing.
-Expiry clears navigation state. Intercept effects preserve the round's actual
-presented trajectory while gameplay geometry remains on the 2D plane.
-
-`bun test games/gateward/tests/interdiction.test.ts` compares the same unarmed,
-stationary-ark encounter with and without a field at (300, 0). A hostile starts at
-(600, 0), with no escorts. The field changes the flight path and blocks firing
-through its boundary. The checks cover all four hostile classes at 0, 3, 12 and
-30m/s ark speeds, verifying clearance, bounded movement, a stable detour side,
-and release back to normal flight. Unobstructed craft now maneuver as well, so
-these comparisons measure path differences rather than deviation from a straight
-line. These deterministic checks demonstrate path shaping, not feel or balance.
-
-### Reproduce the integrated comparisons
-
-Run `bun games/gateward/tests/trial-strategy.ts` for complete JSON summaries, or
-`bun test games/gateward/tests/systems-trial.test.ts` for repeated full-state
-determinism and arrival/deadline/lifecycle assertions.
-
-Every strategy starts with port mount **1 rail**, starboard mount **5 flak**, one
-Guardian and one interceptor wing (380 of 500 salvage). The script attempts these
-orders on the first fixed step at or after each time: launch port at 7s, assign
-Guardian starboard at 23s, build rail on mount **8** at 45s, launch port at 54s,
-assign Guardian ahead at 75s and astern at 98s if it survives. Hull repair is
-attempted below 800 hull and sensor repair below 55 integrity, subject to costs
-and cooldowns. Repair requirements vary with flight paths and targeting. These
-are scripted controls; human input timing and physical-device feel remain separate.
-
-The field comparison adds one ahead field at (300, 0) at 70s. The reallocation
-comparison starts with weapon priority, then switches to balanced at 50s. The
-other strategies retain their preset. Rounded outcomes:
-
-| Strategy | Result / time | Distance | Kills | Hull / shield |
-| --- | --- | ---: | ---: | ---: |
-| Balanced | Won / 120.0s | 1440m | 30 | 1200 / 360 |
-| Engine priority | Won / 107.8s | 1440m | 30 | 1000 / 0 |
-| Weapon priority | Deadline / 155.0s | 930m | 30 | 1200 / 360 |
-| Shield priority | Deadline / 155.0s | 930m | 30 | 1015 / 360 |
-| Weapons → balanced at 50s | Won / 145.0s | 1440m | 30 | 1200 / 360 |
-| Balanced + field at 70s | Won / 120.0s | 1440m | 30 | 1200 / 360 |
-
-| Strategy | Shield absorbed | Power changes | Sensor impairments / repairs | Fields / redirected | Escort losses |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Balanced | 295 | 0 | 0 / 0 | 0 / 0 | 2 |
-| Engine priority | 555 | 1 | 0 / 0 | 0 / 0 | 3 |
-| Weapon priority | 177 | 1 | 0 / 0 | 0 / 0 | 3 |
-| Shield priority | 809 | 1 | 0 / 0 | 0 / 0 | 4 |
-| Weapons → balanced at 50s | 256 | 2 | 0 / 0 | 0 / 0 | 3 |
-| Balanced + field at 70s | 267 | 0 | 0 / 0 | 1 / 12 | 2 |
-
-Engine priority arrives early and resolves all contacts with less hull remaining.
-Static weapon/shield priority travels too slowly; switching weapon priority back
-to balanced at 50s makes the deadline with the same fitting. The field redirects
-12 approaches and reduces shield damage by 28 while preserving all 30 kills.
-These equipped scripts avoid sensor impairment in this sample. Focused
-bomber/shield tests exercise the exact absorption, impairment and recovery rules.
-Allocation changes warning and defensive opportunities rather than the scheduled clock.
-These examples establish explainable behavior differences, not final balance.
-
-Owner follow-up enables systems in every mode for rapid prototype iteration.
-Assess pacing, readability, touch hardware, audio and decision feel separately.
-The scripted runs do not establish final balance.
-
-Sound effects use local Web Audio synthesis: flak reports, railgun cracks,
-missile exhaust, escort fire, hull impacts, explosions, contact/clear signals,
-Aegis, repairs, departure and results. Sound unlocks on the first pointer or
-keyboard interaction. **Sound on/off** toggles a session-only mute; restart keeps
-that choice. Pause, hidden tabs and focus loss cut active effects; resuming never
-replays missed sounds. Simultaneous cues are grouped and rate/voice limited at
-both simulation speeds. Audio is optional when browser playback is unavailable.
-
-## Full Voyage directional coverage (#52)
-
-Full Voyage uses **120° outward coverage** by owner direction. Open
-`games/gateward/` and prepare as usual: there is no coverage URL flag.
-Restart and returning from another mode retain the voyage default. Escort Drill
-and Systems Trial keep their existing 240° arcs and escort rules.
-
-The mount inspector identifies the mode and arc. A selected fitted mount shows
-its temporary coverage outline at the upgraded range. Port mounts 1–4 protect
-port; starboard mounts 5–8 protect starboard. At 120°, there are fore/aft blind
-spots rather than the overlap of the earlier 240° trial. The priority and automatic
-target paths share coverage eligibility; an out-of-arc priority cannot bypass it.
-The selected mount and contact inspector explain when its priority is outside
-range or arc. Voyage retains its guardian rally; fighters use the docked wing lifecycle in every mode.
-
-Reproduce deterministic placement comparisons and rerun #51's spending policy:
-
-```sh
-bun games/gateward/scripts/coverage-comparison.ts
-bun test games/gateward/tests/voyage-coverage.test.ts
-```
-
-The comparison script retains explicit 360° and 240° simulation controls alongside
-120°; these are analysis inputs, not playable URL options. The mirrored fixture
-uses Full Voyage rules with two simultaneous bomber arrivals 340m off either
-flank, 30 seconds, two level-one railguns (230 salvage), and no later spending or
-support orders. Port fitting uses mounts 1/4, starboard 5/8, split 1/5. This is not
-a playable mode. The fixture stalls the ark by disabling its engines; enemy
-flight remains active. Mirrored attacks can yield asymmetric damage. The table
-below records the historical moving-ark fixture before the breakthrough change.
-
-| Arc | Fitting | Attack flank | Minimum shield | Kills / hull |
-| --- | --- | --- | ---: | --- |
-| 360° | Any of the three | Either | 240 | 2 / 1200 |
-| 240° | Port | Starboard | 137.47 | 2 / 1200 |
-| 240° | Starboard | Port | 152.93 | 2 / 1200 |
-| 120° | Port | Port | 240 | 2 / 1200 |
-| 120° | Port | Starboard | 35.87 | 1 / 1200 |
-| 120° | Starboard | Port | 93.20 | 2 / 1200 |
-| 120° | Starboard | Starboard | 240 | 2 / 1200 |
-| 120° | Split | Either | 240 | 2 / 1200 |
-
-Moving equivalent firepower to the attacked flank or splitting it avoids shield
-loss in this fixture. It does not establish difficulty or feel. For a production
-playtest, compare two railguns on 1/4 against 1/5 and select each mount to inspect
-coverage. Keep spending/support orders equal. The playable voyage retains its
-six route-anchored defensive lines (the historical comparisons below used
-the earlier timed waves).
-
-The historical #51 spending policy wins at 360° and 240° at 210.017s with 86 kills,
-1200 minimum/final hull, 100 minimum sensors, and zero impairments. Both spend
-1835 salvage after the same 265-salvage opening fitting; minimum shield is 166.33
-and 240 respectively. At 120°, that same policy loses at 189.333s with 69 kills,
-zero final hull, zero minimum shield/sensors and one sensor impairment. It spends
-1292 salvage after the same opening; it earns less and ends earlier. This is a
-balance signal from one strategy. Weapon stats, economy, and attack schedules
-were not rebalanced to restore its previous victory.
-
-The owner selected 120° and removal of the flag. Physical devices and owner
-acceptance of the resulting combat feel remain separate from this configuration
-decision and from deterministic/browser evidence.
-
-Verification for the 120° default: `bun run check` passed (429 tests,
-typecheck, lint, build). Production Chromium checks at 1380×840, 390×844 and
-844×390 covered all eight mount keys, pointer/emulated-touch panel selection,
-493m upgraded range, travel, orbit/zoom, resize, pause/restart and mode defaults.
-Old coverage query parameters had no effect on the voyage's 120° setting. The
-pass reported zero page errors. Browser emulation does not establish physical
-touch/controller behavior or owner acceptance of combat feel.
-
-### Automatic target preferences
-
-Eligible player focus always wins. Otherwise flak prefers classified raiders;
-railguns prefer classified armored ships or flagships equally. Missiles prefer
-the aim point with the most other live, detected contacts strictly within the
-existing 85m splash radius. Splash neighbours may be outside the mount's firing
-arc/range, but the aim point must satisfy sensors, upgraded range and coverage.
-Unclassified contacts receive no class bonus. Equal scores use nearest distance,
-then lowest ID; no preferred target falls back to nearest. Beam stays nearest.
-Turning, power, firing and damage rules are unchanged.
-
-Issue #53 reran #51's unchanged spending control at 60Hz (simulation evidence,
-not owner acceptance of feel):
-
-| Coverage | Before | Role preferences |
-| --- | --- | --- |
-| 120° | Lost at 189.33s, 69 kills | Lost at 194.93s, 75 kills |
-| 240° | Won at 210.02s, 86 kills, minimum shield 240 | Won at 210.02s, 86 kills, minimum shield 170.13 |
-| 360° | Won at 210.02s, 86 kills, minimum shield 166.33 | Won at 210.02s, 86 kills, minimum shield 167 |
-
-Both 120° runs lost all hull and sensors; both wider-coverage runs retained full
-hull and sensors. These results isolate acquisition; no budget or combat tuning
-was changed.
-
-### Rack carrier asset (concept C)
-
-`public/models/gateward-carrier.glb` is an asset-only enemy carrier, with an
-editable source at `assets/gateward-carrier.blend`. It is not registered in the
-combat simulation. Four external hangar pods attach to a narrow command spine;
-rear pods sit farther outboard so all four forward launch corridors remain clear.
-The carrier has no main battery. Its proposed offensive role is recurring fighter
-launches; timing, capacity and combat balance remain gameplay work.
-
-The model faces +X, uses Y up in glTF, and has a centered identity-transform root.
-`Launch_01` through `Launch_04` mark the four exits; each launches along +X.
-Clear bay apertures are 18 units wide by 12 high. The model is approximately
-163 units long, sized around future half-scale fighters. This does not rescale
-existing ships: the intended fleet change remains fighters ×0.5, other ships
-×1.5, with the player's master ship unchanged. No collision proxy is shipped;
-launch anchors are attachment points, not a physics implementation.
-
-Rebuild with the existing ark builder alongside this script:
+The active enemy carrier uses `public/models/gateward-carrier.glb`, with editable
+source `assets/gateward-carrier.blend`. Four external hangar pods attach to a
+command spine; the hull has no main battery and launches a finite fighter
+complement. The GLB faces +X with Y up; Launch_01 through Launch_04 mark bay exits.
+Runtime launch geometry and collision envelopes are centralized in
+`src/ship-config.ts`. Rebuild its source and GLB with:
 
 ```sh
 blender --background --factory-startup --python games/gateward/tools/build-carrier.py -- /tmp/gateward-carrier
 ```
 
-Copy the generated GLB and blend into their respective directories. Preview
-lighting and cameras are stored in the blend but excluded from the GLB. Meshes
-are batched by material, use no textures, and need no runtime compression decoder.
+Copy the generated blend and GLB to their asset/runtime directories. Preview
+cameras and lighting remain in the blend, outside the GLB. Other craft are built
+by `src/craft-3d.ts`; raiders and interceptors use half scale and other craft use
+1.5× scale relative to their source hulls, while the ark keeps its scale.
 
-### Small-craft acceleration
+`src/combat-scale.ts` centralizes the 4× tactical distance and linear speed
+multiplier. Hull dimensions, hit envelopes and angular rates are separate. The
+camera can zoom out to 0.1625. Decorative asteroid cells, debris, grid and star
+layers follow the visible camera footprint and do not affect combat or sensors.
 
-Interceptors, raiders and bombers keep world velocity separately
-from hull heading. Their top speeds are now 80, 25, and 15 m/s respectively,
-12.5% of their original values after a further 50% reduction. Thrusters accelerate
-or brake at up to 0.65 times these speed limits per second, shared across
-horizontal and vertical steering;
-this also reduces thrust and braking to 12.5% of their original values. Yaw
-acceleration is now 0.1 times the configured turn rate per second, one eighth
-of its original value, while the yaw rate ceiling remains 55% of that rate. Enemy approach cruise is 30 m/s and the
-carrier launch burst is 45 m/s, both also one eighth of their original values.
-Ships drift through turns and counter-thrust before settling on a new course;
-weapon lead and traffic prediction use that actual velocity. Capital ships and
-Guardians use the slower handling described below. Small craft advance
-interdiction corners with a short lookahead so slower turning does not strand
-them at a waypoint. Existing solid hull and altitude boundaries still constrain
-movement.
+## Validation
 
-These values are an initial handling pass. Simulation and browser checks establish
-navigation behavior; owner playtesting remains the acceptance check for feel.
+Run `bun test games/gateward/tests` for focused simulation, combat, input-model,
+projection and geometry checks. `bun run check` runs the whole workspace's tests,
+typechecking, lint and production build. Use a production preview to exercise
+fitting, departure, defensive lines, power/repair/escort orders, pause, focus loss,
+arrival with survivors, restart and responsive layouts.
 
-### Capital-ship handling
-
-Hostile carriers, armored ships, and flagships have combat speed limits of
-38, 40, and 36 m/s respectively, and an approach cruise limit of 60 m/s. These
-are 25% of their original speeds. Small-craft limits are described above.
-Speed tuning preserves the reduced linear acceleration introduced with
-heavy-hull steering. Yaw and pitch behavior are unchanged.
-
-Guardians use 12.5% of their original top speed and 25% of their original
-acceleration: their speed limit is 42.5 m/s and shared linear thrust/braking
-is 38.25 m/s². Yaw
-acceleration is 0.2 rad/s² and pitch acceleration is 0.03 rad/s². They retain
-momentum through turns and use a longer arrival horizon and earlier rotational
-braking to approach orders gradually. They spawn no faster than their speed
-limit, including when the ark runs at full engine power. Guns, armor, cost,
-and coverage assignments are unchanged.
-
-Escort Drill and Systems Trial retain their encounter positions, schedules,
-route lengths and deadlines. Full Voyage now uses route-anchored defensive lines
-as described above.
-The ark now travels at half its former speed: 24 m/s on balanced power and
-60 m/s at maximum engine allocation. Route lengths remain unchanged, so
-balanced travel takes twice as long. At combat speed, capitals can now overtake
-the balanced ark during trial encounters. Full Voyage capitals instead hold
-route stations; the carrier wins by reaching the gate and can leave them behind.
-Delayed arrivals, longer clearance at the gate and missed deadlines apply to
-the two trial modes. This supports
-the direction of capital ships as slowly repositioning turret platforms.
-Simulation checks establish repeatable behavior; balance and feel require owner
-playtesting. Current strategy outcomes are recorded in the tests and PR notes.
-
-### Enemy rendering distance
-
-Enemy models and contact markers render to twice their former distance cutoffs,
-including degraded or offline sensor states. Healthy sensors permit models to
-render up to 5,120 m and contact markers to 16,000 m. Rendering alone does not
-extend classification, radar, priority selection, weapon acquisition or weapon
-range. Labels and hull details still require their original sensor intel. Camera
-zoom and framing are unchanged.
-
-## Combat space tuning
-
-`src/combat-scale.ts` centralizes the current 4× tactical distance and linear
-speed multiplier. Weapon and sensor reach, flight lanes/orbits, escort stations,
-fields, approach distances, and route length grow together with travel speeds.
-Hull geometry, hardpoints, hit envelopes, damage, reloads, angular rates and trial
-schedules retain their original values. Full Voyage uses distance-triggered
-defensive lines and arrival victory. The camera permits
-zoom down to 0.1625 (four times farther out than the previous 0.65 limit).
-Historical validation snapshots above describe their original tuning; they are
-not balance or play-feel acceptance for this expanded space.
-
-The decorative backdrop follows the visible camera footprint at all zooms and
-orbits. The world-anchored grid adjusts spacing as the camera zooms out;
-deterministic instanced asteroid cells provide nearby debris and a larger outer
-field. Camera-aligned star layers retain viewport coverage and optional parallax.
-These decorations do not participate in combat, sensors, or collision rules.
+Deterministic tests establish repeatable behavior, and browser automation can
+exercise simulated pointer, touch, keyboard and controller input. Neither proves
+physical-device performance, touch/controller feel, speaker output or owner
+acceptance of difficulty and pacing. Record current delivery evidence separately;
+old mode-comparison snapshots are not acceptance for this single ruleset.

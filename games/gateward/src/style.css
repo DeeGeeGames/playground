@@ -58,9 +58,6 @@ meter::-moz-meter-bar { background:#c6d6ae; }
 .route-track { height:3px; background:#213140; margin:7px 0; }
 .route-track i { display:block; height:3px; width:0; background:var(--mint); }
 #travel-eta { font-size:10px; }
-.trial-status { position:absolute; top:calc(var(--top) + 174px); left:var(--left); max-width:320px; display:grid; gap:4px; padding:8px 10px; border-left:2px solid var(--mint); background:#10202be8; font:11px monospace; color:var(--muted); pointer-events:none; }
-.trial-status b { color:var(--mint); }
-.trial-status.urgent b,.trial-status.urgent #trial-eta { color:#f1b585; }
 .sector { position:absolute; top:var(--top); left:calc(var(--left) + 348px); max-width:320px; padding:10px 12px; background:#1c2630ed; border-left:2px solid #e9b77b; pointer-events:none; }
 .sector>span { display:block; color:#e9b77b; font:11px monospace; letter-spacing:.5px; }
 .sector small { display:block; margin-top:6px; color:var(--cyan); font:10px monospace; }
@@ -139,10 +136,8 @@ h1 em { font-style:normal; color:var(--mint); }
 #contact-info { font-size:13px; line-height:1.6; color:var(--muted); }
 @media(max-width:1000px) {
 	.sector { top:calc(var(--top) + 170px); left:var(--left); max-width:300px; }
-	#game[data-mode="systems"] .sector { top:calc(var(--top) + 253px); }
 	.field-bottom { display:none; }
 	.message { left:var(--left); transform:none; top:calc(var(--top) + 230px); max-width:300px; }
-	#game[data-mode="systems"] .message { top:calc(var(--top) + 305px); }
 }
 /* Narrow, tall screens use a bottom sheet. Width and height both matter. */
 @media(max-width:600px) and (min-height:501px) {
@@ -158,10 +153,7 @@ h1 em { font-style:normal; color:var(--mint); }
 	.sector { top:calc(var(--top) + 173px); max-width:calc(100% - var(--left) - var(--right)); padding:7px 9px; }
 	.sector>span { font-size:10px; }
 	.sector b { font-size:11px; }
-	.trial-status { top:calc(var(--top) + 171px); width:calc(100% - var(--left) - var(--right)); max-width:none; font-size:10px; grid-template-columns:1fr 1fr; padding:6px 8px; }
-	#trial-goal { grid-column:1/-1; grid-row:2; }
-	#game[data-mode="systems"] .sector { top:calc(var(--top) + 231px); }
-	.message,#game[data-mode="systems"] .message { top:auto; bottom:calc(var(--bottom) + 224px); left:var(--left); right:var(--right); max-width:none; width:auto; font-size:11px; }
+	.message { top:auto; bottom:calc(var(--bottom) + 224px); left:var(--left); right:var(--right); max-width:none; width:auto; font-size:11px; }
 	#game[data-fitting="true"] .message { bottom:calc(var(--bottom) + 224px); }
 	.panel { padding:22px; }
 	h1 { font-size:50px; }
@@ -176,19 +168,17 @@ h1 em { font-style:normal; color:var(--mint); }
 	.route-track { margin:4px 0; }
 	#shield-status { margin-top:4px; font-size:9px; }
 	#travel-eta { font-size:9px; }
-	.sector,#game[data-mode="systems"] .sector { left:calc(var(--left) + 280px); top:var(--top); max-width:calc(100% - var(--left) - var(--right) - 368px); padding:5px 8px; }
+	.sector { left:calc(var(--left) + 280px); top:var(--top); max-width:calc(100% - var(--left) - var(--right) - 368px); padding:5px 8px; }
 	.sector>span { font-size:9px; }
 	.sector b { font-size:10px; margin-top:3px; }
-	.trial-status { left:calc(var(--left) + 280px); top:calc(var(--top) + 68px); max-width:210px; font-size:10px; padding:5px 7px; }
-	.message,#game[data-mode="systems"] .message { left:calc(var(--left) + 300px); top:calc(var(--top) + 135px); transform:none; max-width:220px; font-size:10px; }
+	.message { left:calc(var(--left) + 300px); top:calc(var(--top) + 135px); transform:none; max-width:220px; font-size:10px; }
 }
 @media(max-height:350px) {
 	.survival-hud { width:240px; }
 	.route { width:240px; top:calc(var(--top) + 83px); }
 	.route-track { display:none; }
 	#shield-status { display:none; }
-	.sector,#game[data-mode="systems"] .sector { left:calc(var(--left) + 254px); max-width:calc(100% - var(--left) - var(--right) - 334px); }
-	.trial-status { left:calc(var(--left) + 254px); top:calc(var(--top) + 75px); }
+	.sector { left:calc(var(--left) + 254px); max-width:calc(100% - var(--left) - var(--right) - 334px); }
 	#game[data-fitting="true"] .route { top:calc(var(--top) + 75px); }
 }
 @media(prefers-reduced-motion:reduce) { * { scroll-behavior:auto!important; } }
@@ -208,13 +198,7 @@ h1 em { font-style:normal; color:var(--mint); }
 /* Keep mission and sensor information above the short portrait sheet. */
 @media(max-width:600px) and (min-height:501px) {
 	.route { top:calc(var(--top) + 96px); }
-	.trial-status { top:calc(var(--top) + 147px); }
 	.sector { top:calc(var(--top) + 147px); }
-	#game[data-mode="systems"] .sector { top:calc(var(--top) + 201px); }
-}
-@media(max-height:350px) {
-	.trial-status { left:var(--left); top:calc(var(--top) + 80px); width:280px; max-width:280px; display:grid; grid-template-columns:1fr 1fr; gap:2px; padding:3px 5px; font-size:9px; }
-	#trial-goal { grid-column:1/-1; grid-row:2; }
 }
 /* One expandable command surface. Its measured height keeps the world framing clear. */
 .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
@@ -243,7 +227,7 @@ h1 em { font-style:normal; color:var(--mint); }
 @media(max-width:600px) and (min-height:501px) {
 	.command-console { width:auto; right:var(--right); }
 	.commands { max-height:min(44dvh,calc(100dvh - var(--sheet-top,245px) - var(--command-height,110px) - var(--bottom))); }
-	.message,#game[data-mode="systems"] .message { top:auto; bottom:calc(var(--bottom) + var(--command-height,110px) + 8px); left:var(--left); right:var(--right); max-width:none; width:auto; font-size:11px; }
+	.message { top:auto; bottom:calc(var(--bottom) + var(--command-height,110px) + 8px); left:var(--left); right:var(--right); max-width:none; width:auto; font-size:11px; }
 }
 /* Short landscape keeps the two parts beside each other, leaving the center usable. */
 @media(max-height:500px), (max-height:600px) and (min-width:601px) {
@@ -255,12 +239,10 @@ h1 em { font-style:normal; color:var(--mint); }
 }
 
 @media(min-width:601px) and (max-width:700px) and (min-height:351px) and (max-height:600px) {
-	.trial-status { left:var(--left); top:calc(var(--top) + 136px); width:280px; max-width:280px; display:grid; grid-template-columns:1fr 1fr; }
-	#trial-goal { grid-column:1/-1; grid-row:2; }
 }
 
 /* Radar is a separate live command surface; keep menus above it. */
-#game[data-radar-open="true"] .layout, #game[data-radar-open="true"] .survival-hud, #game[data-radar-open="true"] .command-console, #game[data-radar-open="true"]>.route, #game[data-radar-open="true"]>.trial-status, #game[data-radar-open="true"]>.menu-toggle { visibility:hidden; }
+#game[data-radar-open="true"] .layout, #game[data-radar-open="true"] .survival-hud, #game[data-radar-open="true"] .command-console, #game[data-radar-open="true"]>.route, #game[data-radar-open="true"]>.menu-toggle { visibility:hidden; }
 .selection-row { grid-template-columns:1fr 1fr 1.6fr; }
 #game[data-fitting="true"] .selection-row { grid-template-columns:1fr 1fr 1.6fr 1fr; }
 

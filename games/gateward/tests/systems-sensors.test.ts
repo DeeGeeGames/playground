@@ -5,7 +5,7 @@ import { build, contactWarning, createState, deploy, MAX_HULL, pulse, repairSens
 import { canAcquire, contactIntel, sensorRanges } from '../src/sensors';
 
 const quiet = function () {
-	const state = createState({ scenario: 'drill' });
+	const state = createState();
 	state.status = 'running'; state.nextWave = Infinity;
 	return state;
 };
@@ -51,7 +51,7 @@ describe('range-limited sensor intelligence', function () {
 			}
 		}
 	});
-	test('scheduled encounters stay hidden until a real contact is detected and classified', function () {
+	test('unobserved contacts cannot reveal composition before classification', function () {
 		const state = quiet(); state.wave = 1; state.time = 17;
 		expect(contactWarning(state)).toBe('Scanning for contacts');
 		const enemy = enemyAt(state, 0, 1500);
@@ -67,14 +67,14 @@ describe('range-limited sensor intelligence', function () {
 		enemy.y = tactical(600);
 		expect(contactWarning(state)).toBe('STARBOARD · 1 bomber · in range');
 	});
-	test('voyage and drill both use sensors without an opt-in', function () {
-		for (const state of [createState(), createState({ scenario: 'drill' })]) {
+	test('the core game uses sensors without an opt-in', function () {
+		{ const state = createState();
 			const enemy = enemyAt(state, 10000);
 			expect(contactIntel(state, enemy)).toBe('unseen');
 			expect(setPriority(state, enemy.id)).toBe(false);
 			expect(repairSensors(state)).toBe(false);
 		}
-		expect(contactWarning(createState({ scenario: 'drill' }))).toBe('Scanning for contacts');
+		expect(contactWarning(createState())).toBe('Scanning for contacts');
 		const voyage = createState(); voyage.time = 4; expect(contactWarning(voyage)).toBe('Scanning for contacts');
 		voyage.systems.sensors.integrity = 0; expect(contactWarning(voyage)).toBe('Scanning for contacts');
 	});

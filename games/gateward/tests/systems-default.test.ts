@@ -5,19 +5,13 @@ import { POWER_PRESETS } from '../src/systems';
 import { journeyFor } from '../src/journey';
 import { systemsResultMessage, systemsSummary } from '../src/trial-summary';
 
-const modes = [
-	{ name: 'Full Voyage', options: {}, route: tactical(2520) },
-	{ name: 'Escort Drill', options: { scenario: 'drill' }, route: tactical(1080) },
-	{ name: 'Systems Trial', options: { scenario: 'systems' }, route: tactical(1440) },
-] as const;
-
-for (const mode of modes) test(`${mode.name} supports the complete systems loop without enabling a flag`, function () {
-	const state = createState(mode.options); const fresh = structuredClone(state);
-	expect(state.systems.routeLength).toBe(mode.route);
+test('the core game supports the complete systems loop without a feature flag', function () {
+	const state = createState(); const fresh = structuredClone(state);
+	expect(state.systems.routeLength).toBe(tactical(1440));
 	expect(state.systems.allocation).toEqual(POWER_PRESETS.balanced);
 	expect(build(state, 0, 'rail')).toBe(true);
 	expect(setAllocation(state, POWER_PRESETS.engines)).toBe(true);
-	expect(journeyFor(state).eta).toBe(mode.route / tactical(9));
+	expect(journeyFor(state).eta).toBe(tactical(1440) / tactical(9));
 	state.status = 'running'; state.nextWave = Infinity;
 	state.systems.sensors.integrity = 0;
 	expect(repairSensors(state)).toBe(true);
@@ -32,7 +26,7 @@ for (const mode of modes) test(`${mode.name} supports the complete systems loop 
 	expect(summary.powerChanges).toBe(1); expect(summary.sensorRepairs).toBe(0); expect(summary.fieldPlacements).toBe(1); expect(summary.shieldAbsorbed).toBe(100);
 	expect(setAllocation(state, { engines: 0, weapons: 8, shields: 2 })).toBe(true);
 	step(state, 0.05); expect(state.systems.distanceTraveled).toBeCloseTo(tactical(0.45)); expect(journeyFor(state).eta).toBe(Infinity);
-	expect(createState(mode.options)).toEqual(fresh);
+	expect(createState()).toEqual(fresh);
 	state.status = 'won';
-	expect(systemsResultMessage(state).includes('deadline')).toBe(mode.name === 'Systems Trial');
+	expect(systemsResultMessage(state)).toContain('Kepler reached');
 });

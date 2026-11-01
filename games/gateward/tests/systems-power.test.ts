@@ -9,7 +9,7 @@ const systemsFor = function (state: State): SystemsState {
 	return state.systems;
 };
 const quiet = function () {
-	const state = createState({ scenario: 'drill' });
+	const state = createState();
 	state.status = 'running'; state.nextWave = Infinity;
 	return state;
 };
@@ -113,28 +113,19 @@ describe('powered cadence and shields', function () {
 	});
 });
 
-describe('distance and combat completion', function () {
+describe('distance-based completion', function () {
 	for (const engines of [0, 1, 2]) test(`${engines} engines cannot win from elapsed time`, function () {
-		const state = quiet(); const systems = systemsFor(state); state.wave = state.scenario?.encounters.length ?? 0;
-		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 }); advance(state, 1820);
-		expect(state.time).toBeGreaterThan(90); expect(state.status).toBe('running');
+		const state = quiet(); const systems = systemsFor(state);
+		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 }); advance(state, 4000);
+		expect(state.time).toBeGreaterThan(155); expect(state.status).toBe('running');
 		expect(systems.distanceTraveled).toBeCloseTo(state.time * engines * tactical(1.5)); expect(systems.distanceTraveled).toBeLessThan(systems.routeLength);
 	});
-	test('arrival clamps while combat continues, and all scheduled and pending contacts must resolve', function () {
+	test('arrival clamps distance and wins without combat clearance or a minimum duration', function () {
 		const state = quiet(); const systems = systemsFor(state);
-		expect(systems.routeLength).toBe(tactical(1080)); expect(systemsFor(createState()).routeLength).toBe(tactical(2520));
-		setAllocation(state, { engines: 10, weapons: 0, shields: 0 }); advance(state, 1820);
-		expect(systems.distanceTraveled).toBe(tactical(1080)); expect(state.status).toBe('running');
-		state.wave = state.scenario?.encounters.length ?? 0; state.arrivals.push({ at: 999, kind: 'raider', x: 600, y: 0 }); step(state, 0.05); expect(state.status).toBe('running');
-		state.arrivals = []; state.enemies.push({ id: state.nextId++, kind: 'raider', x: 600, y: 0, hp: 45, maxHp: 45, cooldown: 999 }); step(state, 0.05); expect(state.status).toBe('running');
-		state.enemies = []; step(state, 0.05); expect(state.status).toBe('won');
-	});
-	test('early arrival waits for scenario duration and every mode requires scheduled contacts', function () {
-		const state = quiet(); state.wave = state.scenario?.encounters.length ?? 0; setAllocation(state, { engines: 10, weapons: 0, shields: 0 });
-		advance(state, 1500); expect(systemsFor(state).distanceTraveled).toBe(tactical(1080)); expect(state.status).toBe('running');
-		advance(state, 1010); expect(state.status).toBe('won');
-		const waiting = createState({ scenario: 'drill' }); waiting.status = 'running'; waiting.nextWave = Infinity;
-		advance(waiting, 3610); expect<State['status']>(waiting.status).toBe('running');
-		waiting.wave = waiting.scenario?.encounters.length ?? 0; step(waiting, 0.05); expect<State['status']>(waiting.status).toBe('won');
+		expect(systems.routeLength).toBe(tactical(1440));
+		state.arrivals.push({ at: 999, kind: 'raider', x: 600, y: 0 });
+		setAllocation(state, { engines: 10, weapons: 0, shields: 0 }); advance(state, 2000);
+		expect(systems.distanceTraveled).toBe(tactical(1440)); expect<State['status']>(state.status).toBe('won');
+		expect(state.time).toBeLessThan(120); expect(state.arrivals).toHaveLength(1);
 	});
 });

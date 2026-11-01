@@ -108,7 +108,7 @@ describe('field geometry and hostile fire', function () {
 	});
 	test('guardian and interceptor movement through the field is unaffected', function () {
 		for (const kind of ['guardian', 'interceptor'] as const) {
-			const direct = quiet(); direct.salvage = 1000; deploy(direct, kind); direct.rally = { x: tactical(420), y: 0 };
+			const direct = quiet(); direct.salvage = 1000; deploy(direct, kind);
 			const shaped = structuredClone(direct); placeInterdiction(shaped, { x: tactical(300), y: 0 });
 			advance(direct, 8); advance(shaped, 8); expect(shaped.escorts).toEqual(direct.escorts);
 		}
@@ -150,7 +150,7 @@ describe('deterministic approach shaping', function () {
 		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 240;
 		state.escorts.push({ id: state.nextId++, kind: 'guardian', x: tactical(300), y: tactical(10), hp: 100000, cooldown: 9999, angle: 0 });
 		const escort = state.escorts[0]; if (!escort) throw new Error('Missing escort');
-		for (let frame = 0; frame < 120; frame++) { escort.x = tactical(300); escort.y = frame % 2 ? -tactical(15) : tactical(15); state.rally = { x: tactical(300), y: escort.y }; step(state, 1 / 60); expect(enemy.detour?.side).toBe(side); }
+		for (let frame = 0; frame < 120; frame++) { escort.x = tactical(300); escort.y = frame % 2 ? -tactical(15) : tactical(15); step(state, 1 / 60); expect(enemy.detour?.side).toBe(side); }
 		state.escorts = []; const before = { x: enemy.x, y: enemy.y }; advance(state, 60); expect(enemy.detour).toBeUndefined(); expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeGreaterThan(50);
 	});
 	test('an escort inside the field cannot cause an infinite orbit and expiry releases the attacker', function () {
@@ -158,7 +158,6 @@ describe('deterministic approach shaping', function () {
 		state.escorts.push({ id: state.nextId++, kind: 'guardian', x: tactical(300), y: 0, hp: 100000, cooldown: 9999, angle: 0 });
 		const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field'); field.remaining = 60;
 		const escort = state.escorts[0]; if (!escort) throw new Error('Missing escort');
-		state.rally = { x: tactical(255), y: 0 };
 		for (let frame = 0; frame < 3000; frame++) { escort.x = tactical(300); escort.y = 0; step(state, 1 / 60); }
 		expect(enemy.detour).toBeDefined(); const before = { x: enemy.x, y: enemy.y };
 		for (let frame = 0; frame < 120; frame++) { escort.x = tactical(300); escort.y = 0; step(state, 1 / 60); }

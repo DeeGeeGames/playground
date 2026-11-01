@@ -50,7 +50,7 @@ export const createRadarCoverage = function (root: HTMLElement, svg: SVGSVGEleme
 		balanced.disabled = !available() || all !== undefined;
 		text(override, all ? `All escorts → ${SECTOR_NAMES[all]}. Other priorities are held. Choose another priority here to restore them.` : 'On station / planned craft. Whole wings stay together; guardians and fighters allocate separately.');
 		const readiness = coverageReadiness(state, selected);
-		text(status, `${SECTOR_NAMES[selected]} · ${readiness.onStation} screening · ${readiness.inbound} inbound · ${readiness.unavailable} in bay / launching / returning. ${state.experimental ? 'Scrambled wings launch when ready. Replace losses during rearm in Escort Bay.' : 'Escorts intercept this side, then return to screen.'}`);
+		text(status, `${SECTOR_NAMES[selected]} · ${readiness.onStation} screening · ${readiness.inbound} inbound · ${readiness.unavailable} in bay / launching / returning. Scrambled wings launch when ready. Replace losses during rearm in Escort Bay.`);
 	};
 	return { update, reset: function () { selected = 'port'; } };
 };

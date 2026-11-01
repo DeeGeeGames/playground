@@ -22,7 +22,7 @@ test('placement ray and field ring share the flight plane after orbit and resize
 
 test('a fixed world buoy moves aft in the projected view at actual engine speed', function () {
 	for (const engines of [0, 1, 4, 10]) {
-		const state = createState({ scenario: 'drill' }); state.status = 'running'; state.nextWave = Infinity;
+		const state = createState(); state.status = 'running'; state.nextWave = Infinity;
 		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 });
 		expect(placeInterdiction(state, { x: tactical(300), y: 0 })).toBe(true);
 		const view = viewFor(1440, 900); const field = state.systems.interdiction.field; if (!field) throw new Error('Missing field');

@@ -43,13 +43,11 @@ test('point-blank railgun fire is audible even when its projectile hits in the s
 });
 
 test('hidden approaches stay silent until their first real detection, then cue once', function () {
-	const state = createState({ scenario: 'drill' });
-	state.status = 'running';
-	const read = createSoundObserver(); read(state); step(state, 1 / 60);
-	expect(state.wave).toBe(1); expect(read(state)).not.toContain('contact');
-	state.nextWave = Infinity; state.arrivals = [];
-	const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing approach');
+	const state = createState(); state.status = 'running'; state.nextWave = Infinity;
+	const enemy = { id: state.nextId++, kind: 'carrier' as const, x: 0, y: -8800, hp: 600, maxHp: 600, cooldown: 999 };
 	state.enemies = [enemy];
+	const read = createSoundObserver(); read(state); step(state, 1 / 60);
+	expect(read(state)).not.toContain('contact');
 	enemy.x = state.ark.x; enemy.y = state.ark.y - 1500;
 	expect(read(state)).toContain('contact'); expect(read(state)).not.toContain('contact');
 	state.systems.sensors.integrity = 0; read(state);

@@ -10,6 +10,9 @@ const advance = function (state: State, seconds: number): void {
 test('route defenses stay ahead at fixed world stations and progress, not time, deploys the next line', function () {
 	const state = createState(); setAllocation(state, { engines: 0, weapons: 4, shields: 6 });
 	state.status = 'running'; step(state, 0.05);
+	// Isolate station holding from the fighters that can now launch immediately.
+	state.enemies = state.enemies.filter(function (enemy) { return enemy.kind === 'carrier'; });
+	for (const enemy of state.enemies) if (enemy.hangar) enemy.hangar.remaining = 0;
 	expect(state.wave).toBe(1); expect(state.enemies).toHaveLength(2);
 	const anchors = state.enemies.map(function (enemy) { return enemy.defense?.anchor; });
 	expect(state.enemies.every(function (enemy) { return enemy.x > state.ark.x && enemy.approaching !== true; })).toBe(true);
@@ -29,7 +32,7 @@ test('route defenses stay ahead at fixed world stations and progress, not time, 
 test('translated routes preserve both flanks and launched fighters inherit their line', function () {
 	const state = createState(); state.routeOrigin = { x: 5000, y: 7000 }; state.ark.x = 5000; state.ark.y = 7000;
 	state.status = 'running'; step(state, 0.05); state.nextWave = Infinity;
-	expect(state.enemies).toHaveLength(2);
+	expect(state.enemies.filter(function (enemy) { return enemy.kind === 'carrier'; })).toHaveLength(2);
 	const carrier = state.enemies[0]; if (!carrier?.defense) throw new Error('Missing defensive carrier');
 	state.ark.x = carrier.defense.anchor.x; state.systems.distanceTraveled = carrier.defense.distance;
 	advance(state, 2);
@@ -76,4 +79,19 @@ test('arrival wins with pending and surviving contacts, freezes results, and sam
 		if (!destroyed) expect(systemsResultMessage(state)).toContain('surviving hostiles');
 		const ended = structuredClone(state); advance(state, 1); expect(state).toEqual(ended);
 	}
+});
+
+test('all five distance-triggered lines retain trial compositions without a flagship finale', function () {
+	const state = createState(); setAllocation(state, { engines: 0, weapons: 4, shields: 6 }); state.status = 'running';
+	const expected = [{ kind: 'raider', count: 8 }, { kind: 'bomber', count: 6 }, { kind: 'armored', count: 3 }, { kind: 'raider', count: 10 }, { kind: 'bomber', count: 3 }];
+	for (const [index, encounter] of expected.entries()) {
+		state.systems.distanceTraveled = state.nextWave; state.ark.x = state.nextWave;
+		step(state, 0.05); expect(state.wave).toBe(index + 1);
+		const station = state.systems.routeLength * (index + 1) / 6;
+		const line = state.enemies.filter(function (enemy) { return enemy.defense?.distance === station; });
+		const count = line.filter(function (enemy) { return enemy.kind === encounter.kind; }).length + (encounter.kind === 'raider' ? line.reduce(function (sum, enemy) { return sum + (enemy.hangar?.remaining ?? 0); }, 0) : 0);
+		expect(count).toBe(encounter.count);
+		expect(line.every(function (enemy) { return enemy.x > state.ark.x && enemy.kind !== 'flagship'; })).toBe(true);
+	}
+	expect(state.nextWave).toBe(Infinity); expect(state.enemies.some(function (enemy) { return enemy.kind === 'flagship'; })).toBe(false);
 });

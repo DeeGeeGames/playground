@@ -22,7 +22,7 @@ import { drawTacticalRing } from './tactical-ring';
 type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'hull' };
 export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined }
 export interface Presentation {
-	render: (state: State, selected: number, reducedMotion: boolean, rallyMode: boolean, controlsEnabled: boolean, placement?: Point, screenOffsetY?: number) => void;
+	render: (state: State, selected: number, reducedMotion: boolean, controlsEnabled: boolean, placement?: Point, screenOffsetY?: number) => void;
 	pick: (point: Point, state: State) => PickResult;
 	placementPoint: (point: Point) => Point | undefined;
 	resetCamera: () => void;
@@ -147,7 +147,6 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	energyShield.scale.copy(shield.scale).multiplyScalar(1.015); energyShield.position.copy(shield.position); energyShield.visible = false; carrier.add(energyShield);
 	const range = new Line(new BufferGeometry(), new LineBasicMaterial({ color: '#77dec8', transparent: true, opacity: 0.22, depthWrite: false })); carrier.add(range);
 	let coverageSignature = '';
-	const rally = circle('#b7dbe4', 25, 0.7, 1); carrier.add(rally);
 	const field = circle('#d7bf89', INTERDICTION_CONFIG.radius, 0.85, 2); field.visible = false; scene.add(field);
 	const buoy = new Mesh(new IcosahedronGeometry(8, 0), new MeshBasicMaterial({ color: '#d7bf89' })); buoy.visible = false; scene.add(buoy);
 	const fieldPreview = circle('#d0e7a6', INTERDICTION_CONFIG.radius, 0.65, 2); fieldPreview.visible = false; scene.add(fieldPreview);
@@ -283,7 +282,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	};
 
 	return {
-		render: function (state, selected, reducedMotion, rallyMode, controlsEnabled, placement, screenOffsetY = 0) {
+		render: function (state, selected, reducedMotion, controlsEnabled, placement, screenOffsetY = 0) {
 			if (disposed) return;
 			resize(); if (view.width <= 0 || view.height <= 0) return;
 			if (offsetView(view, screenOffsetY)) labelsDirty = true;
@@ -320,8 +319,6 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				}
 				range.position.set(mount.x, TURRET_HEIGHT, mount.y);
 			}
-			rally.visible = !state.coverage.enabled && !state.experimental && (state.escorts.length > 0 || rallyMode); rally.position.set(state.rally.x, 1, state.rally.y);
-			if (rally.material instanceof MeshBasicMaterial) rally.material.color.set(rallyMode ? '#d5ed9b' : '#9edbf0');
 			const target = state.enemies.find(function (enemy) { return enemy.id === state.priority && canAcquire(state, enemy); }); priority.visible = !!target;
 			if (target) { priority.position.set(target.x, FLIGHT_HEIGHT + (target.z ?? 0), target.y); priority.scale.setScalar(contactIntel(state, target) === 'classified' && target.kind === 'flagship' ? 70 : 42); }
 			const liveEnemies = new Set(state.enemies.map(function (enemy) { return enemy.id; }));

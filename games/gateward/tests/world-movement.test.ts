@@ -3,7 +3,7 @@ import { hullClearance, traffic } from '../src/ship-traffic';
 import { describe, expect, test } from 'bun:test';
 import { arkVelocity, flightVelocity, localPoint, mountWorld, worldPoint } from '../src/space';
 import { enemyClearance } from '../src/interdiction';
-import { assignGuardian, build, createState, deploy, ENEMIES, placeInterdiction, scramble, setAllocation, setRally, step, type Escort, type Point, type State } from '../src/simulation';
+import { assignGuardian, build, createState, deploy, ENEMIES, placeInterdiction, scramble, setAllocation, step, type Escort, type Point, type State } from '../src/simulation';
 
 const quiet = function (origin: Point = { x: 0, y: 0 }): State {
 	const state = createState(); Object.assign(state.ark, origin); state.routeOrigin = { ...origin };
@@ -27,7 +27,7 @@ const followsVelocity = function (state: State, craft: Escort, before: Point, be
 
 describe('one world and shared friendly steering', function () {
 	test('guardian carries momentum, matches ark course at station, and turns through reassignment', function () {
-		const state = createState({ scenario: 'drill' }); state.status = 'running'; state.nextWave = Infinity;
+		const state = createState(); state.status = 'running'; state.nextWave = Infinity;
 		state.ark.x = 1400; state.routeOrigin.x = 1400;
 		// Keep the ark moving while the heavier Guardian completes its longer crossing.
 		state.systems.routeLength = 100000; deploy(state, 'guardian');
@@ -44,7 +44,7 @@ describe('one world and shared friendly steering', function () {
 		expect(guardian.flight?.speed).toBeCloseTo(state.ark.speed, 1);
 	});
 	test('fighters launch, form up, return to the moving stern and rearm without snapping their hulls', function () {
-		const state = createState({ scenario: 'drill' }); state.status = 'running'; state.nextWave = Infinity;
+		const state = createState(); state.status = 'running'; state.nextWave = Infinity;
 		state.ark.x = 800; state.routeOrigin.x = 800; setAllocation(state, { engines: 10, weapons: 0, shields: 0 });
 		state.coverage.enabled = false; // Exercise the explicit launch API independently of automatic radar orders.
 		deploy(state, 'interceptor'); const wing = state.wings[0]; if (!wing) throw new Error('Missing wing');
@@ -58,15 +58,14 @@ describe('one world and shared friendly steering', function () {
 		expect(state.escorts).toHaveLength(0); expect(wing.craft).toHaveLength(3);
 		for (const craft of wing.craft) { expect(localPoint(state, craft).x).toBeCloseTo(-110); expect(localPoint(state, craft).y).toBeCloseTo(0); }
 	});
-	test('world orders and late deployment use the moving ark, including a rotated local anchor', function () {
+	test('sector orders and late deployment use the moving ark, including a rotated local anchor', function () {
 		const state = quiet({ x: 2000, y: -800 }); state.ark.angle = Math.PI / 2;
-		expect(setRally(state, worldPoint(state, { x: 120, y: -200 }))).toBe(true);
-		expect(state.rally.x).toBeCloseTo(120); expect(state.rally.y).toBeCloseTo(-200);
+
 		deploy(state, 'guardian'); const guardian = state.escorts[0]; if (!guardian) throw new Error('Missing guardian');
 		expect(localPoint(state, guardian).x).toBeCloseTo(-220);
 		advance(state, 110); expect(guardian.y).toBeGreaterThan(-700);
-		expect(localPoint(state, guardian).x).toBeCloseTo(120 + tactical(45) + state.ark.speed / 60, 0);
-		expect(localPoint(state, guardian).y).toBeCloseTo(-200, 0);
+		expect(localPoint(state, guardian).x).toBeCloseTo(state.ark.speed / 60, 0);
+		expect(localPoint(state, guardian).y).toBeCloseTo(-tactical(230), 0);
 	});
 });
 

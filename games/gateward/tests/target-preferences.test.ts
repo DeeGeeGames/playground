@@ -6,21 +6,19 @@ import { build, createState, mountTarget, step, type Enemy, type EnemyKind, type
 const contact = function (id: number, kind: EnemyKind, x: number, y: number): Enemy {
 	return { id, kind, x: -96 + tactical(x + 96), y: -43 + tactical(y + 43), hp: 10000, maxHp: 10000, cooldown: 999 };
 };
-const fixture = function (weapon: Weapon, coverageDegrees = 120) {
-	const state = createState({ coverageDegrees });
+const fixture = function (weapon: Weapon) {
+	const state = createState();
 	build(state, 0, weapon); state.status = 'running'; state.nextWave = Infinity;
 	const mount = state.mounts[0]; if (!mount) throw new Error('Missing mount');
 	state.enemies = [contact(100, 'bomber', -96, -120), contact(101, 'raider', -160, -230), contact(102, 'armored', -30, -250), contact(103, 'flagship', -25, -290)];
 	return { state, mount };
 };
-for (const arc of [120, 240, 360]) {
 	for (const [weapon, expected] of [['flak', 101], ['rail', 102], ['missile', 102], ['beam', 100]] as const) {
-		test(`${weapon} chooses its role at ${arc} degrees despite a nearer bomber`, function () {
-			const { state, mount } = fixture(weapon, arc);
+		test(`${weapon} chooses its role despite a nearer bomber`, function () {
+			const { state, mount } = fixture(weapon);
 			expect(mountTarget(state, mount)?.id).toBe(expected);
 		});
 	}
-}
 for (const weapon of ['flak', 'rail', 'missile', 'beam'] as const) {
 	test(`${weapon} priority overrides preferences only while eligible`, function () {
 		const { state, mount } = fixture(weapon);
@@ -56,11 +54,11 @@ for (const weapon of ['flak', 'rail'] as const) {
 }
 
 test('missile clusters use detected live neighbours and the strict splash radius', function () {
-	const { state, mount } = fixture('missile', 360); state.systems.sensors.integrity = 25;
-	state.enemies = [contact(100, 'bomber', -96, -100), contact(101, 'bomber', 225, -120), contact(102, 'raider', 285, -120)];
+	const { state, mount } = fixture('missile'); state.systems.sensors.integrity = 25;
+	state.enemies = [contact(100, 'bomber', -96, -100), contact(101, 'bomber', 20, -250), contact(102, 'raider', 80, -250)];
 	expect(mountTarget(state, mount)?.id).toBe(101);
 	const neighbour = state.enemies[2]; if (!neighbour) throw new Error('Missing neighbour');
-	neighbour.x = -96 + tactical(310 + 96); expect(mountTarget(state, mount)?.id).toBe(100); // exactly the scaled 85m splash boundary
+	neighbour.x = -96 + tactical(105 + 96); expect(mountTarget(state, mount)?.id).toBe(100); // exactly the scaled 85m splash boundary
 	neighbour.x = tactical(1001); neighbour.y = -tactical(140); // outside impaired detection
 	expect(mountTarget(state, mount)?.id).toBe(100);
 	neighbour.x = tactical(300); neighbour.y = -tactical(120); neighbour.hp = 0;
@@ -77,7 +75,7 @@ test('upgraded range admits preferred targets without ignoring mount coverage', 
 for (const weapon of ['flak', 'rail', 'missile', 'beam'] as const) {
 	test(`${weapon} moving mixed threats produce repeatable trajectories and allow alignment`, function () {
 		const run = function () {
-			const { state, mount } = fixture(weapon, 240); mount.aim = 0;
+			const { state, mount } = fixture(weapon); mount.aim = 0;
 			const trajectories = [];
 			for (let tick = 0; tick < 240; tick++) {
 				step(state, 1 / 60);
@@ -92,7 +90,7 @@ for (const weapon of ['flak', 'rail', 'missile', 'beam'] as const) {
 
 for (const weapon of ['flak', 'rail'] as const) {
 	test(`${weapon} ignores class outside impaired classification range`, function () {
-		const { state, mount } = fixture(weapon, 360); state.systems.sensors.integrity = 25;
+		const { state, mount } = fixture(weapon); state.systems.sensors.integrity = 25;
 		state.enemies = [contact(100, 'bomber', -96, -120), contact(101, weapon === 'flak' ? 'raider' : 'flagship', -96, -280)];
 		expect(mountTarget(state, mount)?.id).toBe(100);
 		state.systems.sensors.integrity = 100;

@@ -4,7 +4,7 @@ import { createState, deploy, MAX_HULL, pulse, step, type Shot, type State } fro
 import { absorbShieldDamage, SHIELD_CONFIG, type SystemsState } from '../src/systems';
 
 const quiet = function (): State {
-	const state = createState({ scenario: 'drill' });
+	const state = createState();
 	state.nextWave = Infinity;
 	state.status = 'running';
 	return state;
@@ -24,7 +24,7 @@ const shot = function (state: State, damage: number, side: Shot['side'] = 'enemy
 
 describe('shield state and damage conservation', function () {
 	test('every mode owns independent systems without an opt-in', function () {
-		for (const state of [createState(), createState({ scenario: 'drill' }), createState({ scenario: 'systems' })]) {
+		{ const state = createState();
 			expect(state.systems.shield.charge).toBe(240); expect(state.systems.allocation).toEqual({ engines: 4, weapons: 4, shields: 2 });
 		}
 		const first = systemsFor(quiet());

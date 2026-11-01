@@ -4,33 +4,27 @@ import { contactIntel, SENSOR_CONFIG } from '../src/sensors';
 import { APPROACH, build, contactWarning, covered, createState, distance, mountTarget, setAllocation, setPriority, step, type Enemy, type State } from '../src/simulation';
 
 const startApproach = function (engines: number): { state: State; enemy: Enemy } {
-	const state = createState({ scenario: 'drill' });
+	const state = createState();
 	setAllocation(state, { engines, weapons: 10 - engines, shields: 0 });
-	state.status = 'running'; step(state, 1 / 60);
-	const enemy = state.enemies[0];
-	if (!enemy) throw new Error('Expected first real approach');
-	state.nextWave = Infinity; state.arrivals = []; state.enemies = [enemy];
+	state.status = 'running'; state.nextWave = Infinity; state.systems.routeLength = 100000;
+	const enemy: Enemy = { id: state.nextId++, approaching: true, x: 0, y: -APPROACH.spawnRange, kind: 'carrier', hp: 600, maxHp: 600, cooldown: 99 };
+	state.enemies = [enemy]; step(state, 1 / 60);
 	return { state, enemy };
 };
 
-test('real approaches spawn outside detection and never reveal scheduled composition', function () {
-	const state = createState({ scenario: 'systems' });
-	expect(contactWarning(state)).toBe('Scanning for contacts');
-	state.status = 'running'; step(state, 1 / 60);
-	expect(state.enemies.length).toBeGreaterThan(0);
-	for (const enemy of state.enemies) {
-		expect(distance(state.ark, enemy)).toBeGreaterThan(SENSOR_CONFIG.healthyDetectionRange);
-		expect(distance(state.ark, enemy)).toBeLessThanOrEqual(APPROACH.spawnRange + 1);
-		expect(contactIntel(state, enemy)).toBe('unseen');
-		expect(setPriority(state, enemy.id)).toBe(false);
-	}
+test('an unseen physical approach cannot reveal composition or accept priority', function () {
+	const { state, enemy } = startApproach(4);
+	expect(distance(state.ark, enemy)).toBeGreaterThan(SENSOR_CONFIG.healthyDetectionRange);
+	expect(contactIntel(state, enemy)).toBe('unseen'); expect(setPriority(state, enemy.id)).toBe(false);
 	expect(contactWarning(state)).toBe('Scanning for contacts');
 });
 
-for (const engines of [0, 4, 10]) test(`real approach with ${engines} engine power crosses both sensor bands continuously`, function () {
+for (const engines of [0, 4, 10]) test(`physical approach with ${engines} engine power crosses both sensor bands continuously`, function () {
 	const { state, enemy } = startApproach(engines);
 	let detection: number | undefined; let shortEntry: number | undefined; let classified: number | undefined;
 	for (let frame = 0; frame < 10800 && classified === undefined; frame++) {
+		// A fast ark can outrun the approach; then coast to observe the remaining crossing.
+		if (engines === 10 && frame === 600) setAllocation(state, { engines: 0, weapons: 10, shields: 0 });
 		const before = { x: enemy.x, y: enemy.y, z: enemy.z ?? 0 };
 		step(state, 1 / 60);
 		expect(distance(before, enemy)).toBeLessThanOrEqual(APPROACH.cruiseSpeed * 0.25 / 60 + 1e-8);
@@ -62,7 +56,7 @@ test('long-range priority cannot extend a weapon range or firing arc', function 
 	expect(state.shots.filter(function (shot) { return shot.side === 'player'; })).toHaveLength(0);
 });
 
-test('an approach remains world anchored and pause freezes both motion and scheduled arrivals', function () {
+test('an approach remains world anchored and pause freezes all motion', function () {
 	const { state, enemy } = startApproach(4);
 	const before = { x: enemy.x, y: enemy.y, z: enemy.z ?? 0 };
 	state.ark.x += 1000; step(state, 1 / 60);
