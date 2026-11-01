@@ -538,13 +538,30 @@ from hull heading. Thrusters accelerate or brake at up to 0.65 times their speed
 limit per second, shared across horizontal and vertical steering. Yaw accelerates
 at 0.8 times the configured turn rate per second and caps at 55% of that rate.
 Ships drift through turns and counter-thrust before settling on a new course;
-weapon lead and traffic prediction use that actual velocity. Capital ships retain
-their previous handling. Small craft advance interdiction corners with a short
+weapon lead and traffic prediction use that actual velocity. Capital ships use the slower handling described below. Small craft advance interdiction corners with a short
 lookahead so slower turning does not strand them at a waypoint. Existing solid
 hull and altitude boundaries still constrain movement.
 
 These values are an initial handling pass. Simulation and browser checks establish
 navigation behavior; owner playtesting remains the acceptance check for feel.
+
+### Capital-ship handling
+
+Hostile carriers, armored ships, and flagships have combat speed limits of
+38, 40, and 36 m/s respectively, and an approach cruise limit of 60 m/s. These
+are 25% of their former speeds. Guardians, interceptor wings, raiders, bombers,
+and the ark retain their speed limits. Linear thrust remains at the reduced
+acceleration introduced with heavy-hull steering; lowering the speed limit does
+not reduce that acceleration again. Yaw and pitch behavior are unchanged.
+
+Encounter positions, schedules, route lengths, and deadlines remain unchanged.
+The balanced ark travels at 48 m/s, so capitals can fall behind it and cannot
+catch up at combat speed. Delayed arrivals, longer clearance after reaching the
+gate, and missed scenario deadlines are accepted consequences. This supports
+the direction of capital ships as slowly repositioning turret platforms. Existing
+strategy snapshots also change: the narrow-arc spending-control defense now
+loses while its full-arc comparison still wins. These are simulation outcomes,
+not acceptance of balance or feel.
 
 ## Combat space tuning
 

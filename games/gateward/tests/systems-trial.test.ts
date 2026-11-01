@@ -1,4 +1,5 @@
 import { tactical } from '../src/combat-scale';
+import { isCapital } from '../src/flight';
 import { describe, expect, test } from 'bun:test';
 import { assignGuardian, build, contactWarning, createState, deploy, placeInterdiction, pulse, repair, repairSensors, replaceFighters, scramble, sell, setAllocation, setPriority, step, transferPower, upgrade, type State } from '../src/simulation';
 import { SYSTEMS_TRIAL } from '../src/scenarios';
@@ -91,45 +92,41 @@ describe('Systems Trial route and results', function () {
 });
 
 describe('reproducible equipped trial strategies', function () {
-	test('one weapons-to-balanced reallocation completes the same route and repeats the full outcome', function () {
+	test('one weapons-to-balanced reallocation reaches the gate but unresolved capitals repeat the deadline outcome', function () {
 		const first = runTrialStrategy('weapons-then-balanced');
 		expect(first).toEqual(runTrialStrategy('weapons-then-balanced'));
-		expect(first.summary?.reason).toBe('arrival'); expect(first.summary?.powerChanges).toBe(2);
-		expect(first.summary?.elapsed).toBeCloseTo(145, 1); expect(first.summary?.kills).toBe(33);
+		expect(first.summary.reason).toBe('deadline'); expect(first.summary.powerChanges).toBe(2);
+		expect(first.summary.elapsed).toBe(155);
+		expect(first.summary.distance).toBe(first.summary.routeLength);
+		expect([...first.state.enemies, ...first.state.arrivals].some(isCapital)).toBe(true);
 		expect(first.summary?.contacts).toBe(5);
 	});
 	for (const preset of ['balanced', 'engines', 'weapons', 'shields'] as const) test(`${preset} uses identical fitting and orders and repeats its complete outcome`, function () {
 		const first = runTrialStrategy(preset); const second = runTrialStrategy(preset);
 		expect(first.summary).toEqual(second.summary); expect(first.state).toEqual(second.state);
-		if (preset === 'engines') {
-			// Fast travel reaches the gate; clearing the final contact before the
-			// deadline is sensitive to contact trajectories and heavy-hull turn time.
-			expect(first.summary.distance).toBe(first.summary.routeLength);
-			expect(first.summary.hull).toBeGreaterThan(0);
-			expect(first.summary.kills).toBeGreaterThanOrEqual(31);
-			expect(['arrival', 'deadline']).toContain(first.summary.reason ?? '');
-		} else expect(first.summary.reason).toBe(preset === 'balanced' ? 'arrival' : 'deadline');
-		expect(first.summary?.contacts).toBe(5);
-		// A weapons-heavy run can eliminate every attacker before shields take damage.
-		if (preset !== 'weapons') expect(first.summary?.shieldAbsorbed).toBeGreaterThan(0);
-		else expect(first.summary?.kills).toBe(33);
+		// Keeping the original encounters leaves slow capitals unresolved at the
+		// unchanged deadline, even when engine power reaches the gate.
+		expect(first.summary.reason).toBe('deadline'); expect(first.summary.elapsed).toBe(155);
+		expect(first.summary.hull).toBeGreaterThan(0);
+		expect(first.summary.kills).toBeGreaterThan(0); expect(first.summary.kills).toBeLessThan(33);
+		expect([...first.state.enemies, ...first.state.arrivals].some(isCapital)).toBe(true);
+		if (preset === 'balanced' || preset === 'engines') expect(first.summary.distance).toBe(first.summary.routeLength);
+		else expect(first.summary.distance).toBeLessThan(first.summary.routeLength);
+		expect(first.summary.contacts).toBe(5);
+		if (preset === 'engines' || preset === 'shields') expect(first.summary.shieldAbsorbed).toBeGreaterThan(0);
 		expect(first.summary?.powerChanges).toBe(preset === 'balanced' ? 0 : 1);
 	});
 	test('same balanced fitting plus one approach-phase field redirects real contacts and repeats the full outcome', function () {
 		const baseline = runTrialStrategy('balanced'); const field = runTrialStrategy('balanced', true);
 		expect(field.state).toEqual(runTrialStrategy('balanced', true).state);
 		expect(field.summary.fieldPlacements).toBe(1); expect(field.summary.redirected).toBeGreaterThan(0);
-		// As with the engines strategy, runtime-specific trajectories can leave
-		// the final contact alive at the deadline. Repeatability is checked above.
+		// A field changes contact paths without rescuing the unchanged deadline.
 		expect(field.summary.distance).toBe(field.summary.routeLength);
 		expect(field.summary.hull).toBeGreaterThan(0);
 		expect(field.summary.contacts).toBe(field.summary.totalContacts);
-		expect(field.summary.kills).toBeGreaterThanOrEqual(31);
-		expect(['arrival', 'deadline']).toContain(field.summary.reason ?? '');
-		if (field.summary.reason === 'arrival') {
-			expect(field.summary.kills).toBe(33);
-			expect(field.state.enemies).toHaveLength(0);
-		} else expect(field.summary.elapsed).toBe(155);
+		expect(field.summary.reason).toBe('deadline'); expect(field.summary.elapsed).toBe(155);
+		expect(field.summary.kills).toBeGreaterThan(0); expect(field.summary.kills).toBeLessThan(33);
+		expect([...field.state.enemies, ...field.state.arrivals].some(isCapital)).toBe(true);
 		expect(field.state).not.toEqual(baseline.state);
 	});
 });

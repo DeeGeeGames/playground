@@ -70,14 +70,14 @@ describe('combat and voyage', function () {
 		step(state, 1 / 60); expect(state.kills).toBe(2); expect(state.salvage - salvage).toBeCloseTo(0.02);
 	});
 	test('an undefended ark loses and ended games reject orders and freeze', function () {
-		const state = createState(); state.status = 'running'; advance(state, 120);
+		const state = createState(); state.status = 'running'; advance(state, 420);
 		expect<State['status']>(state.status).toBe('lost'); const time = state.time; advance(state, 10); expect(state.time).toBe(time);
 		expect(build(state, 0, 'flak')).toBe(false); expect(deploy(state, 'guardian')).toBe(false); expect(pulse(state)).toBe(false);
 	});
 	test('the historical full-arc mixed defense can defeat all six waves and reach the gate', function () {
 		const state = createState({ coverageDegrees: 360 }); build(state, 0, 'flak'); build(state, 3, 'rail'); build(state, 4, 'flak'); state.status = 'running';
 		const plan: readonly { slot: number; weapon: Weapon }[] = [{ slot: 7, weapon: 'rail' }, { slot: 1, weapon: 'missile' }, { slot: 6, weapon: 'missile' }, { slot: 2, weapon: 'flak' }, { slot: 5, weapon: 'flak' }];
-		for (let second = 0; second < 300 && state.status === 'running'; second++) {
+		for (let second = 0; second < 420 && state.status === 'running'; second++) {
 			if (state.hull < 930) repair(state); if (state.enemies.length >= 7) pulse(state);
 			for (const item of plan) build(state, item.slot, item.weapon);
 			for (let i = 0; i < 8; i++) upgrade(state, i);

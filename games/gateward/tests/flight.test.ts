@@ -3,7 +3,7 @@ import { CRAFT_MOUNTS } from '../src/craft-turrets';
 import { describe, expect, test } from 'bun:test';
 import { broadsideMuzzle, fly, type Flight } from '../src/flight';
 import { flightVelocity, localPoint } from '../src/space';
-import { createState, deploy, scramble, ENEMIES, setAllocation, setRally, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
+import { createState, deploy, scramble, ENEMIES, APPROACH, setAllocation, setRally, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
 
 const quiet = function (): State {
 	const state = createState(); state.status = 'running'; state.nextWave = Infinity;
@@ -17,19 +17,37 @@ const hostile = function (state: State, kind: EnemyKind, x: number, y: number): 
 const advance = function (state: State, seconds: number): void { for (let i = 0; i < Math.round(seconds * 60); i++) step(state, 1 / 60); };
 
 describe('capital ship courses and batteries', function () {
+	for (const kind of ['carrier', 'armored', 'flagship'] as const) {
+		for (const approaching of [false, true]) test(`${kind} respects its reduced world-speed cap (approaching=${approaching})`, function () {
+			const state = quiet(); const enemy = hostile(state, kind, -5000, 0);
+			enemy.approaching = approaching;
+			enemy.flight = { angle: 0, speed: 0, side: -1, course: 'intercept', run: 1 };
+			const oldSpeed = kind === 'carrier' ? tactical(38) : kind === 'armored' ? tactical(40) : tactical(36);
+			const limit = (approaching ? APPROACH.cruiseSpeed : oldSpeed) * 0.25;
+			let peakSpeed = 0;
+			for (let frame = 0; frame < 600; frame++) {
+				const before = { x: enemy.x, y: enemy.y, z: enemy.z ?? 0 }; step(state, 1 / 60);
+				const speed = Math.hypot(enemy.x - before.x, enemy.y - before.y, (enemy.z ?? 0) - before.z) * 60;
+				expect(speed).toBeLessThanOrEqual(limit + 1e-8); peakSpeed = Math.max(peakSpeed, speed);
+			}
+			expect(peakSpeed).toBeGreaterThan(limit * 0.9);
+			if (!approaching) expect(localPoint(state, enemy).x).toBeLessThan(-5000);
+		});
+	}
+
 	for (const kind of ['armored', 'flagship'] as const) for (const start of [{ x: 520, y: 0 }, { x: -520, y: 0 }, { x: 0, y: -460 }, { x: 0, y: 460 }]) {
-		test(`${kind} intercepts from (${start.x}, ${start.y}), then travels parallel while firing broadsides`, function () {
-			const state = quiet(); const enemy = hostile(state, kind, start.x, start.y);
+		test(`${kind} intercepts from (${start.x}, ${start.y}), maneuvers and fires broadsides beside a stationary ark`, function () {
+			const state = quiet(); setAllocation(state, { engines: 0, weapons: 10, shields: 0 });
+			const enemy = hostile(state, kind, start.x, start.y);
 			// Reduced thrust and early braking need a longer approach.
 			advance(state, 65);
 			expect(enemy.flight?.course).toBe('broadside');
-			const before = { x: enemy.x, y: enemy.y }; const charge = state.systems.shield.charge;
-			let travel = 0;
-			for (let frame = 0; frame < 480; frame++) { const x = localPoint(state, enemy).x; step(state, 1 / 60); travel += Math.abs(localPoint(state, enemy).x - x); }
-			expect(travel).toBeGreaterThan(35);
-			expect(Math.abs(enemy.y - before.y)).toBeLessThan(20);
-			expect(Math.cos(enemy.flight?.angle ?? Math.PI)).toBeGreaterThan(0.98);
-			expect(state.systems.shield.charge).toBeLessThan(charge);
+			const absorbed = state.systems.shieldAbsorbed;
+			for (let frame = 0; frame < 480; frame++) {
+				const before = { x: enemy.x, y: enemy.y, z: enemy.z ?? 0 }; step(state, 1 / 60);
+				expect(Math.hypot(enemy.x - before.x, enemy.y - before.y, (enemy.z ?? 0) - before.z)).toBeLessThanOrEqual(ENEMIES[kind].speed / 60 + 1e-8);
+			}
+			expect(state.systems.shieldAbsorbed).toBeGreaterThan(absorbed);
 			expect(Math.abs(enemy.y)).toBeGreaterThan(100);
 		});
 	}
@@ -162,6 +180,15 @@ describe('small-craft inertia', function () {
 
 
 describe('heavy hull response', function () {
+	test('lowering a capital speed ceiling preserves its thrust acceleration', function () {
+		const original: Flight = { angle: 0, speed: 0, side: 1, course: 'intercept', run: 1 };
+		const slower = structuredClone(original);
+		fly({ x: 0, y: 0 }, original, { x: 1000, y: 0, z: 10 }, 160, 0.7, 1 / 60);
+		fly({ x: 0, y: 0 }, slower, { x: 1000, y: 0, z: 10 }, 40, 0.7, 1 / 60, false, false, 160);
+		expect(slower.speed).toBeCloseTo(original.speed);
+		expect(slower.vz).toBeCloseTo(original.vz ?? 0);
+	});
+
 	test('capital rotation brakes before reaching its commanded bearing', function () {
 		const craft: Flight = { angle: 0, speed: 0, side: 1, course: 'intercept', run: 1 };
 		const point = { x: 0, y: 0 };

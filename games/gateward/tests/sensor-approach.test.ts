@@ -30,10 +30,10 @@ test('real approaches spawn outside detection and never reveal scheduled composi
 for (const engines of [0, 4, 10]) test(`real approach with ${engines} engine power crosses both sensor bands continuously`, function () {
 	const { state, enemy } = startApproach(engines);
 	let detection: number | undefined; let shortEntry: number | undefined; let classified: number | undefined;
-	for (let frame = 0; frame < 4800 && classified === undefined; frame++) {
+	for (let frame = 0; frame < 10800 && classified === undefined; frame++) {
 		const before = { x: enemy.x, y: enemy.y, z: enemy.z ?? 0 };
 		step(state, 1 / 60);
-		expect(distance(before, enemy)).toBeLessThanOrEqual(APPROACH.cruiseSpeed / 60 + 1e-8);
+		expect(distance(before, enemy)).toBeLessThanOrEqual(APPROACH.cruiseSpeed * 0.25 / 60 + 1e-8);
 		const intel = contactIntel(state, enemy);
 		if (detection === undefined && intel !== 'unseen') detection = state.time;
 		if (shortEntry === undefined && distance(state.ark, enemy) <= SENSOR_CONFIG.shortRange) shortEntry = state.time;
@@ -42,9 +42,11 @@ for (const engines of [0, 4, 10]) test(`real approach with ${engines} engine pow
 	}
 	if (detection === undefined || shortEntry === undefined || classified === undefined) throw new Error('Approach never crossed all sensor boundaries');
 	expect(detection).toBeLessThan(shortEntry); expect(shortEntry).toBeLessThan(classified);
-	expect(shortEntry - detection).toBeGreaterThan(20);
-	expect(shortEntry - detection).toBeLessThan(40);
-	expect(classified).toBeLessThan(70);
+	expect(shortEntry - detection).toBeGreaterThan(80);
+	expect(shortEntry - detection).toBeLessThan(130);
+	// Capitals now remain in the coarse sensor band much longer.
+	expect(classified).toBeGreaterThan(90);
+	expect(classified).toBeLessThan(160);
 	expect(enemy.approaching).toBe(false);
 });
 
