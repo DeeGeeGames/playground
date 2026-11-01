@@ -63,7 +63,7 @@ describe('combat and voyage', function () {
 		expect(hit('rail')).toBe(160); expect(hit('flak')).toBe(212);
 	});
 	test('missiles damage nearby ships and kills pay salvage only once', function () {
-		const state = createState(); state.status = 'running';
+		const state = createState(); state.status = 'running'; state.nextWave = Infinity;
 		for (let i = 0; i < 2; i++) state.enemies.push({ id: 90 + i, x: 250 + i * 40, y: 0, kind: 'raider', hp: 45, maxHp: 45, cooldown: 99 });
 		state.shots.push({ id: 100, x: 240, y: 0, vx: 300, vy: 0, damage: 52, side: 'player', weapon: 'missile', target: 90, life: 3 });
 		step(state, 1 / 60); expect(state.kills).toBe(2); expect(state.enemies).toHaveLength(0); const salvage = state.salvage;
@@ -74,7 +74,7 @@ describe('combat and voyage', function () {
 		expect<State['status']>(state.status).toBe('lost'); const time = state.time; advance(state, 10); expect(state.time).toBe(time);
 		expect(build(state, 0, 'flak')).toBe(false); expect(deploy(state, 'guardian')).toBe(false); expect(pulse(state)).toBe(false);
 	}, 15000);
-	test('the historical full-arc mixed defense can defeat all six waves and reach the gate', function () {
+	test('a mixed defense survives all six route defenses and reaches the gate', function () {
 		const state = createState({ coverageDegrees: 360 }); build(state, 0, 'flak'); build(state, 3, 'rail'); build(state, 4, 'flak'); state.status = 'running';
 		const plan: readonly { slot: number; weapon: Weapon }[] = [{ slot: 7, weapon: 'rail' }, { slot: 1, weapon: 'missile' }, { slot: 6, weapon: 'missile' }, { slot: 2, weapon: 'flak' }, { slot: 5, weapon: 'flak' }];
 		for (let second = 0; second < 840 && state.status === 'running'; second++) {
@@ -83,7 +83,7 @@ describe('combat and voyage', function () {
 			for (let i = 0; i < 8; i++) upgrade(state, i);
 			advance(state, 1);
 		}
-		expect<State['status']>(state.status).toBe('won'); expect(state.time).toBeGreaterThanOrEqual(ROUTE_SECONDS); expect(state.wave).toBe(6); expect(state.kills).toBe(96); expect(state.hull).toBeGreaterThan(0); expect(state.enemies).toHaveLength(0);
+		expect<State['status']>(state.status).toBe('won'); expect(state.time).toBeGreaterThanOrEqual(ROUTE_SECONDS); expect(state.wave).toBe(6); expect(state.kills).toBeGreaterThan(0); expect(state.hull).toBeGreaterThan(0);
 	}, 25000);
 	test('a wave-clear repair cannot revive a hull destroyed during the final exchange', function () {
 		const state = createState(); state.status = 'running'; state.wave = 6; state.time = ROUTE_SECONDS; state.hull = 10; state.systems.shield.charge = 0;
@@ -92,9 +92,9 @@ describe('combat and voyage', function () {
 		state.shots.push({ id: 101, x: 0, y: 0, vx: 0, vy: 0, damage: 10, side: 'enemy', weapon: 'hostile', target: undefined, life: 3 });
 		step(state, 1 / 60); expect<State['status']>(state.status).toBe('lost'); expect(state.hull).toBe(0); expect(state.kills).toBe(1);
 	});
-	test('reaching the gate with surviving hostiles does not win the voyage', function () {
-		const state = createState(); state.status = 'running'; state.time = ROUTE_SECONDS; state.wave = 6;
+	test('reaching the gate with surviving hostiles wins the voyage', function () {
+		const state = createState(); state.status = 'running'; state.time = 100; state.wave = 6; state.systems.distanceTraveled = state.systems.routeLength; state.ark.x = state.systems.routeLength;
 		state.enemies.push({ id: 99, x: 500, y: 0, kind: 'flagship', hp: 2400, maxHp: 2400, cooldown: 99 });
-		step(state, 1 / 60); expect(state.status).toBe('running'); expect(state.enemies).toHaveLength(1);
+		step(state, 1 / 60); expect<State['status']>(state.status).toBe('won'); expect(state.enemies).toHaveLength(1); expect(state.time).toBeLessThan(ROUTE_SECONDS);
 	});
 });

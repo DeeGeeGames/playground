@@ -4,9 +4,10 @@ A self-contained, 3D capital-ship tower defense prototype. The ark follows
 its route automatically; the player builds its defenses instead of piloting.
 
 Open `games/gateward/` from the launcher. Fit the ship with the starting 300
-salvage, then depart. A voyage takes about 3½ minutes at 1×, or half that at 2×.
-Six directional waves culminate in a flagship. Reach Kepler Gate and destroy all
-hostiles to win; losing the ark's hull ends the run.
+salvage, then depart. A voyage takes about seven minutes at balanced engine
+power and 1×, or half that at 2×. Push through six defensive lines culminating in a flagship.
+Reach Kepler Gate alive to win; surviving enemies may remain behind you.
+There is no minimum combat time or requirement to destroy every hostile.
 
 - T / Radar opens the live heading-up tactical screen. Long range covers 8 km;
   short range covers 2800 m, with classification inside 2560 m. Both sensor bands
@@ -17,11 +18,17 @@ hostiles to win; losing the ark's hull ends the run.
   mark priority; weapons still obey their existing range and firing arcs.
   Lost tracks retain only their last observed world position, show their age,
   and expire after eight simulation seconds. They cannot be targeted.
-- Encounters enter at 8.8–9.6 km and cruise at 240 m/s until entering the 2800 m
-  combat zone, then use their normal combat speed. Detection warning time uses
-  actual relative closing speed. Voyage approaches start every 28 seconds after
-  the first at 5 seconds; scenario approaches start 15 seconds before their
-  encounter time, clamped at departure. Mission durations/deadlines are unchanged.
+- Full Voyage places six defensive lines at equal intervals along the route,
+  before the gate. Each deploys when the ark is within 1600m of its route station.
+  Heavy ships hold world positions across the route; carriers launch fighters and
+  small craft intercept locally within 1300m of their station. Once the ark is
+  more than 960m past a line, survivors disengage permanently and return to their
+  stations. Passing enemies grants no kill salvage or clearance repair. Sensor
+  visibility still depends on real contacts and sensor condition.
+- Escort Drill and Systems Trial retain timed approaches: contacts enter at
+  8.8–9.6 km and cruise until the 2800m combat zone, then use combat speed.
+  Approaches start 15 seconds before encounter time, clamped at departure.
+  Their route, clearance, minimum-duration and deadline rules are unchanged.
 - Sensor integrity below 50 reduces detection to 4 km and classification to
   920 m. Offline sensors retain 800 m local automatic defense. Repair from radar
   or the sensor panel costs 70 salvage, with the existing 18-second cooldown.
@@ -47,8 +54,9 @@ hostiles to win; losing the ark's hull ends the run.
   hull damage by 80% for five seconds. Recharges in 32 seconds.
 - E / Repair spends 80 salvage for up to 240 hull, with a 15-second cooldown.
 - Kills earn salvage; the reactor produces 1.2 salvage per second. Clearing a
-  wave grants 50 salvage and repairs 60 hull. Waves follow a fixed schedule, so
-  slow defenses can face overlapping contacts.
+  active contact group grants 50 salvage and repairs 60 hull only when all
+  deployed enemies are destroyed. Full Voyage encounters follow route progress;
+  stopping engines delays later lines. The two trials retain fixed schedules.
 - Space pauses immediately outside native button activation. Escape returns from radar, otherwise cancels a field
   preview first, then closes the inspector, then toggles pause. Tab and native
   button activation work for the command panel. Focus loss and hidden documents pause the running voyage. Pointer/touch
@@ -113,10 +121,11 @@ bunx @gltf-transform/cli@4.5.1 dedup /tmp/gateward-asset/gateward-ark.glb /tmp/g
 bunx @gltf-transform/cli@4.5.1 prune /tmp/gateward-asset/dedup.glb games/gateward/public/models/gateward-ark.glb
 ```
 
-The camera follows the ark along the voyage’s 10.08 km route at a balanced 48 m/s.
+The camera follows the ark along the voyage’s 10.08 km route at a balanced 24 m/s.
 The ark advances through world space; the orthographic camera and its orbit
 center follow it. Navigation beacons, the lattice, debris and Kepler Gate keep
-fixed world positions. The ark stops at the gate even if combat continues.
+fixed world positions. Full Voyage ends immediately on arrival if the ark
+survives. The two trials can wait at the gate for required combat clearance.
 Pausing freezes the simulation, and replay returns to departure. Reduced motion
 disables decorative star parallax and engine flicker while physical travel remains.
 
@@ -180,7 +189,8 @@ with 120° outward arcs and a shared guardian rally. All modes include reactor
 allocation, rechargeable shields, damageable sensors and interdiction by default.
 The drill requires survival, its real 4.32 km route, and clearance of all four
 contacts after at least 90 seconds. Engines can delay arrival; reaching the gate
-early does not skip contacts. Full voyage uses a 10.08 km route and at least 210s.
+early does not skip contacts. Full Voyage uses a 10.08 km route and wins on
+arrival, without a minimum time or contact-clearance requirement.
 
 Drill mounts cover 240° centered outward (port −Y, starboard +Y). The selected
 fitted mount shows a subtle outline at its actual upgraded range; `coverageFor`
@@ -439,8 +449,9 @@ The comparison script retains explicit 360° and 240° simulation controls along
 uses Full Voyage rules with two simultaneous bomber arrivals 340m off either
 flank, 30 seconds, two level-one railguns (230 salvage), and no later spending or
 support orders. Port fitting uses mounts 1/4, starboard 5/8, split 1/5. This is not
-a playable mode. Travel and flight remain active, so mirrored attacks can yield
-asymmetric damage.
+a playable mode. The fixture stalls the ark by disabling its engines; enemy
+flight remains active. Mirrored attacks can yield asymmetric damage. The table
+below records the historical moving-ark fixture before the breakthrough change.
 
 | Arc | Fitting | Attack flank | Minimum shield | Kills / hull |
 | --- | --- | --- | ---: | --- |
@@ -457,7 +468,8 @@ Moving equivalent firepower to the attacked flank or splitting it avoids shield
 loss in this fixture. It does not establish difficulty or feel. For a production
 playtest, compare two railguns on 1/4 against 1/5 and select each mount to inspect
 coverage. Keep spending/support orders equal. The playable voyage retains its
-original six waves.
+six route-anchored defensive lines (the historical comparisons below used
+the earlier timed waves).
 
 The historical #51 spending policy wins at 360° and 240° at 210.017s with 86 kills,
 1200 minimum/final hull, 100 minimum sensors, and zero impairments. Both spend
@@ -569,12 +581,16 @@ braking to approach orders gradually. They spawn no faster than their speed
 limit, including when the ark runs at full engine power. Guns, armor, cost,
 and coverage assignments are unchanged.
 
-Encounter positions, schedules, route lengths, and deadlines remain unchanged.
+Escort Drill and Systems Trial retain their encounter positions, schedules,
+route lengths and deadlines. Full Voyage now uses route-anchored defensive lines
+as described above.
 The ark now travels at half its former speed: 24 m/s on balanced power and
 60 m/s at maximum engine allocation. Route lengths remain unchanged, so
 balanced travel takes twice as long. At combat speed, capitals can now overtake
-the balanced ark, while maximum ark engine power can still outrun them. Delayed arrivals, longer clearance after reaching the
-gate, and missed scenario deadlines are accepted consequences. This supports
+the balanced ark during trial encounters. Full Voyage capitals instead hold
+route stations; the carrier wins by reaching the gate and can leave them behind.
+Delayed arrivals, longer clearance at the gate and missed deadlines apply to
+the two trial modes. This supports
 the direction of capital ships as slowly repositioning turret platforms.
 Simulation checks establish repeatable behavior; balance and feel require owner
 playtesting. Current strategy outcomes are recorded in the tests and PR notes.
@@ -593,8 +609,9 @@ zoom and framing are unchanged.
 `src/combat-scale.ts` centralizes the current 4× tactical distance and linear
 speed multiplier. Weapon and sensor reach, flight lanes/orbits, escort stations,
 fields, approach distances, and route length grow together with travel speeds.
-Hull geometry, hardpoints, hit envelopes, damage, reloads, angular rates, wave
-schedules, and mission clocks retain their original values. The camera permits
+Hull geometry, hardpoints, hit envelopes, damage, reloads, angular rates and trial
+schedules retain their original values. Full Voyage uses distance-triggered
+defensive lines and arrival victory. The camera permits
 zoom down to 0.1625 (four times farther out than the previous 0.65 limit).
 Historical validation snapshots above describe their original tuning; they are
 not balance or play-feel acceptance for this expanded space.
