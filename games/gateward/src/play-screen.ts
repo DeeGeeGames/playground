@@ -12,9 +12,9 @@ export const priorityCoverage = function (state: State, selected: number): strin
 	return covered(state, mount, target) ? `${name}: priority within range and coverage; turret must turn before firing.` : `${name}: priority outside firing arc; other eligible weapons may engage.`;
 };
 
-export type Inspector = 'mounts' | 'reactor' | 'escorts' | 'sensors' | 'field' | 'contact';
+export type Inspector = 'actions' | 'mounts' | 'reactor' | 'escorts' | 'sensors' | 'field' | 'contact';
 export const inspectorName = function (value: string | undefined): Inspector | undefined {
-	return value === 'mounts' || value === 'reactor' || value === 'escorts' || value === 'sensors' || value === 'field' || value === 'contact' ? value : undefined;
+	return value === 'actions' || value === 'mounts' || value === 'reactor' || value === 'escorts' || value === 'sensors' || value === 'field' || value === 'contact' ? value : undefined;
 };
 export const presetFor = function (allocation: Readonly<Allocation>) {
 	return Object.entries(POWER_PRESETS).find(function ([, preset]) {
