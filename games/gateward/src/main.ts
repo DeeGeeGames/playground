@@ -1,5 +1,3 @@
-import { createCoveragePanel } from './coverage-panel';
-import { createController } from './controller';
 import { tactical } from './combat-scale';
 import { createRadar } from './radar';
 import { createAudio } from './audio';
@@ -57,18 +55,6 @@ const shutdown = await mountGame('game', async function (container) {
 	let inspector: Inspector | undefined;
 	let inspectedContact: number | undefined;
 	let radarOpen = false;
-	let coverageOpen = false;
-	let coverageReturn: HTMLElement | undefined;
-	const coverageHost = element('coverage-panel');
-	const setCoverage = function (open: boolean) {
-		if (open && !available()) return;
-		if (open && !coverageOpen) coverageReturn = document.activeElement instanceof HTMLElement ? document.activeElement : button('open-coverage');
-		for (const child of container.children) if (child instanceof HTMLElement) child.inert = false;
-		coverageOpen = open; coverageHost.hidden = !open; container.dataset['coverageOpen'] = String(open); button('open-coverage').setAttribute('aria-expanded', String(open));
-		pointers.clear(); multiTouch = false; placement = undefined; presentation.cancelInteraction();
-		if (open) { closeInspector(); coveragePanel.update(); coveragePanel.focus(); }
-		else { const target = coverageReturn?.isConnected && !coverageReturn.closest('[hidden]') ? coverageReturn : button('open-coverage'); target.focus({ preventScroll: true }); }
-	};
 	const radarHost = element('radar');
 	const setRadar = function (open: boolean) {
 		if (open && !available()) return;
@@ -77,32 +63,27 @@ const shutdown = await mountGame('game', async function (container) {
 		button('open-radar').setAttribute('aria-expanded', String(open));
 		pointers.clear(); multiTouch = false; placement = undefined; presentation.cancelInteraction();
 		for (const child of container.children) if (child instanceof HTMLElement && child !== radarHost && child !== ui.pausePanel && child !== ui.result && child !== ui.brief) child.inert = open;
-		if (open) { setCoverage(false); closeInspector(); radar.update(); radar.focus(); }
+		if (open) { closeInspector(); radar.update(); radar.focus(); }
 		else button('open-radar').focus({ preventScroll: true });
 	};
 	let inspectorReturn: HTMLElement | undefined;
 	const openInspector = function (view: Inspector) {
 		if (!available()) return;
-		if (view !== 'field') placement = undefined;
 		if (!inspector) inspectorReturn = document.activeElement instanceof HTMLElement ? document.activeElement : button('open-systems');
-		pointers.clear(); multiTouch = false; presentation.cancelInteraction();
 		inspector = view; element('inspector').hidden = false; container.dataset['inspectorOpen'] = 'true';
 		for (const section of container.querySelectorAll<HTMLElement>('[data-inspector-content]')) section.hidden = section.dataset['inspectorContent'] !== view;
 		for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) control.setAttribute('aria-pressed', String(control.dataset['inspector'] === view));
-		label(element('inspector-title'), view === 'actions' ? 'Combat actions' : view === 'mounts' ? 'Weapon mounts' : view === 'contact' ? 'Contact' : view === 'field' ? 'Interdiction field' : view === 'reactor' ? 'Reactor allocation' : view === 'escorts' ? 'Escort bay' : 'Sensor array');
-		button('open-actions').setAttribute('aria-expanded', String(view === 'actions'));
+		label(element('inspector-title'), view === 'mounts' ? 'Weapon mounts' : view === 'contact' ? 'Contact' : view === 'field' ? 'Interdiction field' : view === 'reactor' ? 'Reactor allocation' : view === 'escorts' ? 'Escort bay' : 'Sensor array');
 		button('open-systems').setAttribute('aria-expanded', 'true'); button('open-reactor').setAttribute('aria-expanded', String(view === 'reactor')); button('field-entry').setAttribute('aria-expanded', String(view === 'field'));
 	};
 	const closeInspector = function () {
-		placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
 		inspector = undefined; element('inspector').hidden = true; container.dataset['inspectorOpen'] = 'false';
-		button('open-actions').setAttribute('aria-expanded', 'false');
 		button('open-systems').setAttribute('aria-expanded', 'false'); button('open-reactor').setAttribute('aria-expanded', 'false'); button('field-entry').setAttribute('aria-expanded', 'false');
 		const target = inspectorReturn?.isConnected && !inspectorReturn.closest('[hidden]') ? inspectorReturn : button('open-systems');
 		target.focus({ preventScroll: true });
 	};
 	const available = function () { return contextAvailable && state.focused && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'); };
-	const focusCanvas = function () { for (const child of container.children) if (child instanceof HTMLElement) child.inert = false; if (radarOpen) { for (const child of container.children) if (child instanceof HTMLElement && child !== radarHost && child !== ui.pausePanel && child !== ui.result && child !== ui.brief) child.inert = true; radar.focus(); } else if (coverageOpen) coveragePanel.focus(); else canvas.focus({ preventScroll: true }); };
+	const focusCanvas = function () { for (const child of container.children) if (child instanceof HTMLElement) child.inert = false; if (radarOpen) { for (const child of container.children) if (child instanceof HTMLElement && child !== radarHost && child !== ui.pausePanel && child !== ui.result && child !== ui.brief) child.inert = true; radar.focus(); } else canvas.focus({ preventScroll: true }); };
 	const setPause = function (value: boolean) {
 		if (briefing || state.status === 'won' || state.status === 'lost') return;
 		if (!value && !contextAvailable) return;
@@ -134,7 +115,7 @@ const shutdown = await mountGame('game', async function (container) {
 	button('reset-camera').addEventListener('click', function () { presentation.resetCamera(); if (!paused) focusCanvas(); }, options);
 	const restart = function () {
 		audio.reset();
-		setRadar(false); radar.reset(); setCoverage(false); coveragePanel.reset();
+		setRadar(false); radar.reset();
 		pointers.clear(); multiTouch = false;
 		placement = undefined; state = newState(); selected = 0; paused = false; briefing = false; speed = 1; accumulator = 0;
 		ui.pausePanel.hidden = true; ui.result.hidden = true; ui.brief.hidden = true; inspectedContact = undefined; openInspector('mounts'); focusCanvas();
@@ -178,12 +159,8 @@ const shutdown = await mountGame('game', async function (container) {
 	for (const control of container.querySelectorAll<HTMLButtonElement>('[data-mode]')) control.addEventListener('click', function () {
 		mode = control.dataset['mode'] === 'systems' ? 'systems' : control.dataset['mode'] === 'drill' ? 'drill' : 'voyage'; restart();
 	}, options);
-	const radar = createRadar(radarHost, function () { return state; }, available, { coverage: function (sector) { setRadar(false); setCoverage(true); coveragePanel.select(sector); }, close: function () { setRadar(false); }, pause: function () { setPause(true); }, repair: function () { order(function () { return repairSensors(state); }); }, selectedMount: function () { return selected; } }, abort.signal);
+	const radar = createRadar(radarHost, function () { return state; }, available, { close: function () { setRadar(false); }, pause: function () { setPause(true); }, repair: function () { order(function () { return repairSensors(state); }); }, selectedMount: function () { return selected; } }, abort.signal);
 	button('open-radar').addEventListener('click', function () { setRadar(!radarOpen); }, options);
-	const coveragePanel = createCoveragePanel(coverageHost, function () { return state; }, available, function () { setCoverage(false); }, function () { setPause(true); }, abort.signal);
-	button('open-coverage').addEventListener('click', function () { setCoverage(!coverageOpen); }, options);
-	button('open-actions').addEventListener('click', function () { openInspector('actions'); }, options);
-	const combatEscortPanel = createEscortPanel(element('combat-escort-orders'), function () { return state; }, available, abort.signal);
 	const escortPanel = createEscortPanel(element('escort-orders'), function () { return state; }, available, abort.signal);
 	const engineeringPanel = createEngineeringPanel(element('engineering'), function () { return state; }, available, abort.signal);
 	const interdictionPanel = createInterdictionPanel(element('interdiction-panel'), function () { return state; }, available, { get: function () { return placement; }, aim: aimPlacement, cancel: cancelPlacement, confirm: confirmPlacement }, abort.signal);
@@ -201,10 +178,10 @@ const shutdown = await mountGame('game', async function (container) {
 	button('resume').addEventListener('click', function () { setPause(false); }, options);
 	button('restart').addEventListener('click', restart, options); button('restart-pause').addEventListener('click', restart, options);
 	ui.speed.addEventListener('click', function () { if (!briefing && contextAvailable && state.focused && (state.status === 'fitting' || state.status === 'running')) speed = speed === 1 ? 2 : 1; }, options);
-	ui.coverage.addEventListener('click', function () { setCoverage(true); }, options);
+	ui.coverage.addEventListener('click', function () { setRadar(true); }, options);
 	ui.clear.addEventListener('click', function () { if (available()) setPriority(state, undefined); }, options);
 	canvas.addEventListener('pointerdown', function (event) {
-		if (event.button !== 0 || radarOpen || coverageOpen || (inspector !== undefined && !placement)) return;
+		if (event.button !== 0 || radarOpen) return;
 		pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, moved: false });
 		if (pointers.size > 1) multiTouch = true;
 	}, options);
@@ -218,7 +195,7 @@ const shutdown = await mountGame('game', async function (container) {
 		pointers.delete(event.pointerId);
 		if (pointers.size === 0) multiTouch = false;
 		if (document.elementFromPoint(event.clientX, event.clientY) !== canvas) return;
-		if (!start || start.moved || gesture || cancelled || event.button !== 0 || !available() || coverageOpen || (inspector !== undefined && !placement)) return;
+		if (!start || start.moved || gesture || cancelled || event.button !== 0 || !available()) return;
 		const rect = canvas.getBoundingClientRect();
 		if (placement) {
 			const point = presentation.placementPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top });
@@ -239,7 +216,7 @@ const shutdown = await mountGame('game', async function (container) {
 	window.addEventListener('keydown', function (event) {
 		if (event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
 		if (event.code === 'Tab') {
-			const modal = briefing ? ui.brief : paused ? ui.pausePanel : !ui.result.hidden ? ui.result : radarOpen ? radarHost : coverageOpen ? coverageHost : undefined;
+			const modal = briefing ? ui.brief : paused ? ui.pausePanel : !ui.result.hidden ? ui.result : radarOpen ? radarHost : undefined;
 			if (modal) {
 				const controls = [...modal.querySelectorAll<HTMLElement>('button:enabled, a[href], summary, select:enabled')].filter(function (control) { return control.getClientRects().length > 0; });
 				const first = controls.at(0); const last = controls.at(-1);
@@ -252,15 +229,12 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.target instanceof HTMLSelectElement && event.code !== 'Escape') return;
 		// Preserve native keyboard activation when navigating DOM controls.
 		if (event.code === 'Space' && (event.target instanceof HTMLButtonElement || event.target instanceof HTMLElement && event.target.tagName === 'SUMMARY')) return;
-		if (event.code === 'Escape' && coverageOpen && !paused) { event.preventDefault(); coveragePanel.back(); return; }
-		if (event.code === 'KeyC' && available() && !radarOpen) { event.preventDefault(); setCoverage(!coverageOpen); return; }
 		if (event.code === 'Escape' && radarOpen && !paused) { event.preventDefault(); setRadar(false); return; }
 		if (event.code === 'KeyT' && available()) { event.preventDefault(); setRadar(!radarOpen); return; }
 		if (event.code === 'Escape' && placement) { event.preventDefault(); cancelPlacement(); return; }
 		if (event.code === 'Escape' && inspector && !paused) { event.preventDefault(); closeInspector(); return; }
 		if (event.code === 'Escape' || event.code === 'Space') { event.preventDefault(); setPause(!paused); return; }
 		if (!available()) return;
-		if (coverageOpen) return;
 		if (radarOpen && event.code !== 'KeyS' && event.code !== 'KeyQ' && event.code !== 'KeyE') return;
 		if (event.code === 'KeyI') { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement(worldPoint(state, { x: tactical(300), y: 0 })); return; }
 		if (placement && event.target === canvas) {
@@ -275,26 +249,6 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'KeyS') { event.preventDefault(); order(function () { return repairSensors(state); }); }
 		if (event.code === 'KeyR') { event.preventDefault(); setRadar(true); }
 	}, options);
-	const controller = createController(container, {
-		activate: function () {
-			if (paused || briefing || !ui.result.hidden) return false;
-			if (coverageOpen && document.activeElement?.closest('.coverage-compass')) { coveragePanel.enter(); return true; }
-			if (placement && document.activeElement === canvas) { confirmPlacement(); return true; }
-			return false;
-		},
-		command: function () { if (!radarOpen) setCoverage(!coverageOpen); },
-		pause: function () { setPause(!paused); },
-		back: function () { if (paused) setPause(false); else if (coverageOpen) coveragePanel.back(); else if (radarOpen) setRadar(false); else if (placement) cancelPlacement(); else if (inspector) closeInspector(); else setPause(true); },
-		direction: function (direction) {
-			if (paused || briefing || !ui.result.hidden) return false;
-			if (coverageOpen) return coveragePanel.direction(direction);
-			if (placement && document.activeElement === canvas) {
-				const adjustment = direction === 'up' ? { x: tactical(20), y: 0 } : direction === 'down' ? { x: -tactical(20), y: 0 } : direction === 'left' ? { x: 0, y: -tactical(20) } : { x: 0, y: tactical(20) };
-				const offset = worldPoint(state, adjustment); placement = { x: placement.x + offset.x - state.ark.x, y: placement.y + offset.y - state.ark.y }; return true;
-			}
-			return false;
-		},
-	}, abort.signal);
 	window.addEventListener('blur', function () { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); setPause(true); }, options);
 	document.addEventListener('visibilitychange', function () { if (document.hidden) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); state.focused = false; audio.setActive(false); setPause(true); } }, options);
 	window.addEventListener('focus', function () { state.focused = true; }, options);
@@ -312,15 +266,14 @@ const shutdown = await mountGame('game', async function (container) {
 			if (container.style.getPropertyValue('--side-top') !== sideTop) container.style.setProperty('--side-top', sideTop);
 		}
 		if (container.dataset['mode'] !== mode) container.dataset['mode'] = mode;
-		coveragePanel.update(); combatEscortPanel(); escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
-		const modal = briefing ? ui.brief : paused ? ui.pausePanel : !ui.result.hidden ? ui.result : radarOpen ? radarHost : coverageOpen ? coverageHost : undefined;
+		escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
+		const modal = briefing ? ui.brief : paused ? ui.pausePanel : !ui.result.hidden ? ui.result : radarOpen ? radarHost : undefined;
 		for (const child of container.children) if (child instanceof HTMLElement) child.inert = !!modal && child !== modal;
 		const active = available();
 		const allocation = state.systems.allocation; const preset = presetFor(allocation);
 		label(element('reactor-current'), `Power · ${preset ?? 'Custom'}`);
 		label(element('reactor-split'), `${allocation.engines}E / ${allocation.weapons}W / ${allocation.shields}S`);
 		label(element('contact-info'), `${contactDescription(state, inspectedContact ?? state.priority)} ${priorityCoverage(state, selected)}`.trim());
-		button('open-coverage').disabled = !active; button('open-actions').disabled = !active;
 		button('open-systems').disabled = !active; button('open-reactor').disabled = !active;
 		const field = state.systems.interdiction.field;
 		const fieldReason = interdictionReason(state);
@@ -414,13 +367,12 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.coverage.disabled = !active; label(element('escort-help'), 'Fighters start docked. Scramble all to launch using radar coverage; Recall all to return and hold aboard. Replace losses while docked or rearming.');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
 		label(element('coverage-setting'), `${mode === 'voyage' ? 'Full Voyage' : mode === 'drill' ? 'Escort Drill' : 'Systems Trial'} · ${state.coverageDegrees}° ${state.coverageDegrees < 360 ? 'outward coverage' : 'full coverage'}`);
-		label(ui.hint, placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Coverage (C) for escort orders · Click hostile to focus');
+		label(ui.hint, placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Radar for escort coverage · Click hostile to focus');
 		label(ui.message, state.messageTime > 0 ? state.message : ''); label(ui.speed, `${speed}×`); ui.speed.disabled = briefing || !contextAvailable || !state.focused || state.status === 'won' || state.status === 'lost';
-		label(ui.pause, paused ? 'Resume' : 'Pause'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
+		label(ui.pause, paused ? 'Resume' : 'Menu'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
 	};
 	const showResult = function () {
-		setRadar(false); setCoverage(false);
-		ui.result.inert = false;
+		setRadar(false);
 		ui.result.hidden = false; placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
 		label(element('result-title'), mode === 'systems' ? state.status === 'won' ? 'SYSTEMS TRIAL COMPLETE.' : 'SYSTEMS TRIAL LOST.' : state.scenario ? state.status === 'won' ? 'DRILL COMPLETE.' : 'DRILL LOST.' : state.status === 'won' ? 'THE ARK ARRIVES.' : 'THE LIGHTS GO OUT.');
 		const summary = systemsSummary(state);
@@ -439,7 +391,6 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const tick = function (now: number) {
 		if (disposed) return;
-		controller.poll();
 		const elapsed = previous ? Math.min(0.1, (now - previous) / 1000) : 0; previous = now;
 		if (available() && state.status === 'running' && !document.hidden) {
 			accumulator += elapsed * speed;
@@ -448,7 +399,7 @@ const shutdown = await mountGame('game', async function (container) {
 		// Shift the projection above a portrait sheet while retaining the player's orbit and zoom.
 		const panelTop = element('inspector').getBoundingClientRect().top - canvas.getBoundingClientRect().top;
 		const screenOffsetY = inspector && canvas.clientWidth <= 600 && canvas.clientHeight > 500 ? Math.max(0, canvas.clientHeight * 0.52 - panelTop + 50) : 0;
-		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, false, !radarOpen && !coverageOpen && (!inspector || !!placement) && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, screenOffsetY);
+		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, false, !radarOpen && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, screenOffsetY);
 		syncAudio(); hud(); radar.update();
 		frame = requestAnimationFrame(tick);
 	};
