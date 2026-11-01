@@ -1,11 +1,11 @@
 import { createRadarCoverage } from './radar-coverage';
 import { createRadarTracker, radarPoint, RADAR_LONG_RANGE, RADAR_SHORT_RANGE, type RadarContact } from './radar-model';
 import { SENSOR_CONFIG, sensorRanges } from './sensors';
-import { coverageFor, REPAIR_CREWS, MAX_HULL, setPriority, type Point, type Sector, type State } from './simulation';
+import { coverageFor, REPAIR_CREWS, MAX_HULL, setPriority, type Point, type State } from './simulation';
 import { worldPoint } from './space';
 import { priorityCoverage } from './play-screen';
 
-interface RadarCallbacks { coverage: (sector: Sector) => void; close: () => void; pause: () => void; repair: () => void; selectedMount: () => number }
+interface RadarCallbacks { close: () => void; pause: () => void; repair: () => void; selectedMount: () => number }
 const text = function (target: Element, value: string) { if (target.textContent !== value) target.textContent = value; };
 const node = function <K extends keyof HTMLElementTagNameMap>(tag: K, className = '', content = ''): HTMLElementTagNameMap[K] {
 	const element = document.createElement(tag); element.className = className; element.textContent = content; return element;
@@ -43,7 +43,7 @@ export const createRadar = function (host: HTMLElement, getState: () => State, a
 	const coverageTab = control('Coverage', function () { showPanel('coverage'); }); coverageTab.setAttribute('aria-controls', coveragePanel.id); coverageTab.setAttribute('aria-pressed', 'true');
 	const contactTab = control('Contacts', function () { showPanel('contacts'); }); contactTab.setAttribute('aria-controls', detail.id); contactTab.setAttribute('aria-pressed', 'false');
 	tabs.append(coverageTab, contactTab); sidebar.append(tabs, coveragePanel, detail);
-	const escortCoverage = createRadarCoverage(coveragePanel, svg, getState, available, callbacks.coverage, signal);
+	const escortCoverage = createRadarCoverage(coveragePanel, svg, getState, available, function () { showPanel('coverage'); }, signal);
 	const selectorLabel = node('label', 'radar-selector-label', 'CONTACTS'); const selector = node('select'); selector.id = 'radar-contact-select'; selectorLabel.htmlFor = selector.id; detail.append(selectorLabel, selector);
 	selector.addEventListener('change', function () { selectedId = contacts.find(function (contact) { return contact.key === selector.value; })?.ids[0]; update(); }, { signal });
 	const contactHeading = node('h3'); const intel = node('p', 'radar-intel'); const readout = node('dl', 'radar-readout');
