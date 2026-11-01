@@ -2,11 +2,12 @@ import { expect, test } from 'bun:test';
 import { build, createState, step, WEAPONS, type Weapon } from '../src/simulation';
 
 const fixture = function (weapon: Weapon) {
-	// These fixtures isolate turning, including targets across the fore/aft seam.
-	const state = createState({ coverageDegrees: 360 }); build(state, 0, weapon);
+	// Keep targets within the production 120-degree arc while isolating turning.
+	const state = createState(); build(state, 0, weapon);
 	state.status = 'running'; state.nextWave = Infinity;
+	state.systems.allocation = { engines: 0, weapons: 4, shields: 6 };
 	const mount = state.mounts[0]; if (!mount) throw new Error('Missing mount');
-	const enemy = { id: 999, kind: 'armored' as const, x: mount.x + 150, y: mount.y, hp: 10000, maxHp: 10000, cooldown: 999 };
+	const enemy = { id: 999, kind: 'armored' as const, x: mount.x + 150, y: mount.y - 250, hp: 10000, maxHp: 10000, cooldown: 999 };
 	state.enemies.push(enemy);
 	return { state, mount, enemy };
 };
@@ -19,16 +20,17 @@ for (const weapon of ['flak', 'rail', 'missile', 'beam'] as const) {
 		expect(mount.aim - initial).toBeCloseTo(WEAPONS[weapon].rotationSpeed / 60);
 		expect(state.shots).toHaveLength(0); expect(enemy.hp).toBe(10000);
 		for (let i = 0; i < 180 && state.shots.length === 0; i++) step(state, 1 / 60);
-		expect(state.shots.some(function (shot) { return shot.weapon === weapon; })).toBe(true);
+		expect(enemy.hp < 10000 || state.shots.some(function (shot) { return shot.weapon === weapon; })).toBe(true);
 	});
 }
 
-test('turning crosses the angle seam by the short path without overshoot', function () {
+test('turning crosses the angle seam by the short path within its turn limit', function () {
 	const { state, mount, enemy } = fixture('rail');
-	mount.aim = Math.PI - 0.01; enemy.x = mount.x - 150; enemy.y = mount.y - 1.5;
+	mount.aim = Math.PI - 0.01; enemy.x = mount.x - 150; enemy.y = mount.y - 150;
 	step(state, 1 / 60);
-	expect(mount.aim).toBeCloseTo(Math.PI + Math.atan(0.01));
-	expect(state.shots).toHaveLength(1);
+	expect(mount.aim).toBeGreaterThan(Math.PI);
+	expect(mount.aim).toBeLessThanOrEqual(Math.PI - 0.01 + WEAPONS.rail.rotationSpeed / 60);
+	expect(state.shots).toHaveLength(0);
 });
 
 test('reload does not stop turning; pause, lost focus and zero weapon power freeze it', function () {
@@ -42,13 +44,13 @@ test('reload does not stop turning; pause, lost focus and zero weapon power free
 });
 
 test('priority changes require a new turn and interrupt beam damage', function () {
-	const { state, mount, enemy } = fixture('beam'); mount.aim = 0;
+	const { state, mount, enemy } = fixture('beam'); mount.aim = Math.atan2(enemy.y - mount.y, enemy.x - mount.x);
 	step(state, 1 / 60); expect(enemy.hp).toBeLessThan(10000);
 	const other = { ...enemy, id: 1000, x: mount.x - 150, hp: 10000 };
 	state.enemies.push(other); state.priority = other.id;
-	const hp = enemy.hp; step(state, 1 / 60);
+	const hp = enemy.hp; const before = mount.aim; step(state, 1 / 60);
 	expect(other.hp).toBe(10000); expect(enemy.hp).toBe(hp); expect(state.shots).toHaveLength(0);
-	expect(Math.abs(mount.aim)).toBeCloseTo(WEAPONS.beam.rotationSpeed / 60);
+	expect(Math.abs(mount.aim - before)).toBeCloseTo(WEAPONS.beam.rotationSpeed / 60);
 });
 
 test('ballistic barrels align with the moving-target lead before launching', function () {

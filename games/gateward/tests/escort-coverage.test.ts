@@ -3,7 +3,7 @@ import { COVERAGE_SECTORS, coveragePlan, coverageReadiness, coverageStation, poi
 import { balanceCoverage, createState, deploy, replaceFighters, scrambleAll, setCoveragePriority, step, type State } from '../src/simulation';
 import { worldPoint } from '../src/space';
 
-const quiet = function (experimental = false) { const state = createState({ experimental }); state.salvage = 2000; state.nextWave = Infinity; return state; };
+const quiet = function () { const state = createState(); state.salvage = 2000; state.nextWave = Infinity; return state; };
 const advance = function (state: State, seconds: number) { for (let i = 0; i < Math.round(seconds * 60); i++) step(state, 1 / 60); };
 
 describe('coarse escort coverage', function () {
@@ -47,7 +47,7 @@ describe('coarse escort coverage', function () {
 		advance(state, .2); expect(state.shots.filter(function (shot) { return shot.side === 'player'; })).toHaveLength(0);
 	});
 	test('scrambled wings automatically launch intact, return, rearm and launch again without free replacement', function () {
-		const state = quiet(true); deploy(state, 'interceptor'); const wing = state.wings[0]; if (!wing) throw new Error('Missing wing');
+		const state = quiet(); deploy(state, 'interceptor'); const wing = state.wings[0]; if (!wing) throw new Error('Missing wing');
 		setCoveragePriority(state, 'port', 'all'); state.status = 'running'; scrambleAll(state); step(state, 1 / 60);
 		expect(wing.phase).toBe('launching'); expect(state.escorts).toHaveLength(3); expect(state.launches).toBe(1);
 		expect(coverageReadiness(state, 'port').unavailable).toBe(3);

@@ -71,7 +71,7 @@ describe('condition changes output independently of power', function () {
 	test('thresholds and actual engine speed/ETA agree with simulation', function () {
 		expect([100, 50, 49, 0].map(conditionMultiplier)).toEqual([1, 1, 0.5, 0]);
 		const state = quiet(); state.systems.engines.integrity = 49;
-		expect(journeyFor(state).eta).toBe(840); step(state, 0.05); expect(state.ark.speed).toBeCloseTo(tactical(3));
+		expect(journeyFor(state).eta).toBe(480); step(state, 0.05); expect(state.ark.speed).toBeCloseTo(tactical(3));
 		state.systems.engines.integrity = 0; step(state, 0.05); expect(state.ark.speed).toBe(0); expect(journeyFor(state).eta).toBe(Infinity);
 	});
 	test('generator impairment/offline only alters recharge; repairs never directly create charge', function () {

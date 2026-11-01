@@ -3,7 +3,7 @@ import { CRAFT_MOUNTS } from '../src/craft-turrets';
 import { describe, expect, test } from 'bun:test';
 import { broadsideMuzzle, fly, type Flight } from '../src/flight';
 import { flightVelocity, localPoint } from '../src/space';
-import { createState, deploy, scramble, ENEMIES, ESCORTS, APPROACH, setAllocation, setRally, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
+import { createState, deploy, scramble, ENEMIES, ESCORTS, APPROACH, setAllocation, step, type Enemy, type EnemyKind, type State } from '../src/simulation';
 
 const quiet = function (): State {
 	const state = createState(); state.status = 'running'; state.nextWave = Infinity;
@@ -72,7 +72,6 @@ describe('capital ship courses and batteries', function () {
 		const state = quiet(); const enemy = hostile(state, 'armored', 0, -160);
 		enemy.flight = { angle: 0, speed: 20, side: -1, course: 'broadside', run: 1 };
 		state.escorts.push({ id: state.nextId++, kind: 'guardian', x: 90, y: -80, hp: 100000, cooldown: 999, angle: 0 });
-		setRally(state, { x: 400, y: -80 });
 		step(state, 1 / 60);
 		const shot = state.shots.find(function (shot) { return shot.side === 'enemy'; });
 		if (!shot) throw new Error('Missing fallback broadside');
@@ -82,21 +81,16 @@ describe('capital ship courses and batteries', function () {
 		const direction = Math.atan2(shot.vy - (shot.sourceVelocity?.y ?? 0), shot.vx - (shot.sourceVelocity?.x ?? 0)) - enemy.flight.angle;
 		expect(Math.abs(Math.cos(direction))).toBeLessThanOrEqual(Math.sin(50 * Math.PI / 180));
 	});
-	for (const engines of [0, 10]) test(`world speed stays bounded through engine changes and gate arrival (${engines} engines)`, function () {
-		// Trial combat continues at the gate; Full Voyage now ends on arrival.
-		const state = createState({ scenario: 'drill' }); state.status = 'running'; state.nextWave = Infinity;
-		state.systems.shield.capacity = 100000; state.systems.shield.charge = 100000;
-		const enemy = hostile(state, 'flagship', -300, -400);
-		for (let frame = 0; frame < 3600; frame++) {
+	for (const engines of [0, 10]) test(`world speed stays bounded through engine changes and freezes at arrival (${engines} engines)`, function () {
+		const state = quiet(); const enemy = hostile(state, 'flagship', -300, -400);
+		for (let frame = 0; frame < 1800; frame++) {
 			if (frame === 600) setAllocation(state, { engines, weapons: 10 - engines, shields: 0 });
-			if (frame === 1800) { state.systems.distanceTraveled = state.systems.routeLength; state.ark.x = state.routeOrigin.x + state.systems.routeLength; }
-			const before = { x: enemy.x, y: enemy.y };
-			step(state, 1 / 60);
-			const worldX = enemy.x - before.x;
-			expect(Math.hypot(worldX, enemy.y - before.y)).toBeLessThanOrEqual(ENEMIES.flagship.speed / 60 + 1e-8);
+			const before = { x: enemy.x, y: enemy.y }; step(state, 1 / 60);
+			expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeLessThanOrEqual(ENEMIES.flagship.speed / 60 + 1e-8);
 		}
-		const before = { x: enemy.x, y: enemy.y }; advance(state, 5);
-		expect(Math.hypot(enemy.x - before.x, enemy.y - before.y)).toBeGreaterThan(20);
+		state.systems.distanceTraveled = state.systems.routeLength; state.ark.x = state.routeOrigin.x + state.systems.routeLength;
+		step(state, 1 / 60); expect<State['status']>(state.status).toBe('won');
+		const before = { x: enemy.x, y: enemy.y }; advance(state, 5); expect({ x: enemy.x, y: enemy.y }).toEqual(before);
 	});
 });
 

@@ -1,5 +1,6 @@
 import { tactical } from './combat-scale';
-import type { Arrival, EnemyKind, Point, State } from './simulation';
+import { ENCOUNTERS } from './scenarios';
+import type { Arrival, Point, State } from './simulation';
 
 export interface RouteDefense {
 	anchor: Readonly<Point>;
@@ -27,9 +28,10 @@ export const defenseTrigger = function (routeLength: number, line: number, count
 export const defenseArrivals = function (state: State, count: number): Arrival[] {
 	const line = state.wave;
 	const distance = lineDistance(state.systems.routeLength, line, count);
-	const strength = [8, 11, 10, 17, 24, 16][line - 1] ?? 16;
-	return Array.from({ length: strength }, function (_, i): Arrival {
-		const kind: EnemyKind = line === count && i === 0 ? 'flagship' : line >= 3 && i % 5 === 0 ? 'armored' : line >= 2 && i % 3 === 0 ? 'bomber' : 'raider';
+	const encounter = ENCOUNTERS[line - 1];
+	if (!encounter) return [];
+	return Array.from({ length: encounter.count }, function (_, i): Arrival {
+		const kind = encounter.kind;
 		const side = i % 2 === 0 ? -1 : 1;
 		const anchor = {
 			x: state.routeOrigin.x + distance + tactical((i % 3 - 1) * 25),

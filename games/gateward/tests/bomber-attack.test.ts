@@ -3,8 +3,8 @@ import { describe, expect, test } from 'bun:test';
 import { BOMBER_ATTACK, createState, deploy, ENEMIES, pulse, step, type State } from '../src/simulation';
 import { bomberCue, placeBomberCue } from '../src/bomber-cue';
 
-const setup = function (scenario?: 'drill' | 'systems') {
-	const state = createState(scenario ? { scenario } : {});
+const setup = function () {
+	const state = createState();
 	state.status = 'running'; state.nextWave = Infinity;
 	state.systems.allocation = { engines: 4, weapons: 6, shields: 0 };
 	state.systems.shield.charge = 0;
@@ -19,8 +19,8 @@ const untilShot = function (state: State) {
 };
 
 describe('bomber response window', function () {
-	for (const scenario of [undefined, 'drill', 'systems'] as const) test(`${scenario ?? 'voyage'} prepares, releases once, then recovers`, function () {
-		const state = setup(scenario); step(state, 1 / 60);
+	test('prepares, releases once, then recovers', function () {
+		const state = setup(); step(state, 1 / 60);
 		expect(bomber(state).bomberAttack?.phase).toBe('windup');
 		expect(bomberCue(state, bomber(state))?.text).toBe('ARRAY SHOT · 2.0s');
 		advance(state, BOMBER_ATTACK.windup - 1 / 60); expect(state.shots).toHaveLength(0);

@@ -33,8 +33,7 @@
 	.survival-hud { width:calc(100% - var(--left) - var(--right) - 72px); }
 	.route { width:calc(100% - var(--left) - var(--right) - 72px); top:calc(var(--top) + 84px); font-size:10px; }
 	.route-track,#travel-eta,#shield-status { display:none; }
-	.sector,#game[data-mode="systems"] .sector { top:calc(var(--top) + 117px); max-width:calc(100% - 100px); }
-	.trial-status { top:calc(var(--top) + 200px); width:calc(100% - 100px); }
+	.sector { top:calc(var(--top) + 117px); max-width:calc(100% - 100px); }
 	.inspector-heading { padding:6px 8px; }
 	.inspector-heading h2 { font-size:15px; }
 	.inspector-content { padding:8px; scrollbar-gutter:auto; }
@@ -42,8 +41,8 @@
 	#drawer-coverage .radar-coverage-row strong { font-size:12px; }
 	#drawer-coverage .radar-coverage-row small { font-size:10px; }
 }
-@media(max-height:500px) and (min-width:601px) {
-	#game { --drawer-top:calc(var(--top) + 52px); }
+@media(max-height:600px) and (min-width:601px) {
+	#game { --drawer-top:var(--side-top,calc(var(--top) + 68px)); }
 	.commands { bottom:var(--bottom); width:280px; }
 	.command-cluster { width:260px; }
 	.edge-tabs { bottom:calc(var(--bottom) + 54px); }
@@ -57,10 +56,15 @@
 }
 @media(max-width:600px) {
 	#game { --drawer-top:calc(var(--top) + 174px); }
-	#game[data-mode="systems"] { --drawer-top:calc(var(--top) + 234px); }
-	#game[data-inspector-open="true"] .sector,#game[data-inspector-open="true"] .trial-status { visibility:visible; }
-	.sector,#game[data-mode="systems"] .sector { top:calc(var(--top) + 108px); padding:5px 8px; }
+	#game[data-inspector-open="true"] .sector { visibility:visible; }
+	.sector { top:calc(var(--top) + 108px); padding:5px 8px; }
 	.sector small { display:none; }
-	.trial-status { top:calc(var(--top) + 174px); padding:5px 8px; }
+}
+@media(max-width:600px) and (min-width:501px) and (max-height:500px) {
+	#game { --drawer-top:calc(var(--top) + 76px); }
+	.commands { bottom:var(--bottom); width:calc(100% - var(--left) - var(--right) - var(--rail-width) - 208px); }
+	.command-cluster { width:190px; }
+	.sector { top:var(--drawer-top); left:var(--left); max-width:190px; }
+	.edge-tabs { bottom:calc(var(--bottom) + 54px); }
 }
 .edge-tabs button[aria-pressed="true"]:hover { background:#b5efdb; color:#0c252c; }

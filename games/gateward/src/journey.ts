@@ -1,8 +1,7 @@
-import { tactical } from './combat-scale';
 import { effectiveOutputs } from './systems';
-import { ROUTE_SECONDS, type State } from './simulation';
+import { ROUTE_LENGTH, ROUTE_SECONDS, type State } from './simulation';
 
-export const ROUTE_LENGTH = tactical(2520);
+export { ROUTE_LENGTH } from './simulation';
 export const CRUISE_SPEED = ROUTE_LENGTH / ROUTE_SECONDS;
 export const BEACON_SPACING = ROUTE_LENGTH / 6;
 
@@ -12,8 +11,8 @@ export const journeyAt = function (time: number) {
 	return { distance, remaining: ROUTE_LENGTH - distance, speed: elapsed > 0 && elapsed < ROUTE_SECONDS ? CRUISE_SPEED : 0 };
 };
 
-// Ship-relative coordinates of fixed scenery along the route. Combat stays in
-// the ark's local frame; visual navigation never changes simulation positions.
+// Nominal ship-relative scenery for geometry checks. Live navigation uses
+// beaconFor and the simulation's integrated world distance.
 export const beaconAt = function (index: number, time: number) {
 	return { x: index * BEACON_SPACING - journeyAt(time).distance, y: 0 };
 };

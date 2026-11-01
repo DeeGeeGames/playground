@@ -2,15 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { balanceCoverage, craftCount, createState, deploy, recallAll, scrambleAll, setCoveragePriority, step, type State } from '../src/simulation';
 
 const advance = function (state: State, seconds: number) { for (let tick = 0; tick < seconds * 60; tick++) step(state, 1 / 60); };
-const fleet = function (scenario?: 'drill' | 'systems') {
-	const state = createState(scenario ? { scenario } : {}); state.salvage = 1000; state.nextWave = Infinity;
+const fleet = function () {
+	const state = createState(); state.salvage = 1000; state.nextWave = Infinity;
 	deploy(state, 'interceptor'); deploy(state, 'interceptor'); deploy(state, 'guardian');
 	return state;
 };
 
 describe('fleet fighter orders', function () {
-	for (const scenario of [undefined, 'drill', 'systems'] as const) test(`${scenario ?? 'voyage'} starts docked and recalls all wings until explicitly scrambled`, function () {
-		const state = fleet(scenario);
+	test('starts docked and recalls all wings until explicitly scrambled', function () {
+		const state = fleet();
 		expect(craftCount(state)).toBe(7); expect(scrambleAll(state)).toBe(false);
 		state.status = 'running'; advance(state, 3);
 		expect(state.launches).toBe(0); expect(state.escorts).toHaveLength(1);

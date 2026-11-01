@@ -34,7 +34,7 @@ test('slower ark engines preserve route length and halve integrated motion', fun
 	setAllocation(state, { engines: 4, weapons: 4, shields: 2 });
 	for (let frame = 0; frame < 600; frame++) step(state, 1 / 60);
 	expect(state.ark.x).toBeCloseTo(240);
-	expect(state.systems.distanceTraveled / state.systems.routeLength).toBeCloseTo(10 / 420);
+	expect(state.systems.distanceTraveled / state.systems.routeLength).toBeCloseTo(10 / 240);
 });
 
 test('homing missiles retain the faster launch speed on subsequent updates', function () {

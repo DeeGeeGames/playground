@@ -41,7 +41,7 @@ test('side turret arcs reject bow/stern and remain correct after hull rotation',
 test('guardian perimeter turrets cover every distant bearing and land repeated hits', function () {
 	for (let angle = 0; angle < Math.PI * 2; angle += 0.1) expect(craftTurretSolution('guardian', { x: 0, y: 0 }, 0, function () { return { x: Math.cos(angle) * 200, y: Math.sin(angle) * 200 }; })).toBeDefined();
 	const state = createState(); state.status = 'running'; state.nextWave = Infinity;
-	deploy(state, 'guardian'); state.rally = { x: 0, y: -180 };
+	deploy(state, 'guardian');
 	const enemy = { id: state.nextId++, kind: 'armored' as const, x: 80, y: -180, hp: 100000, maxHp: 100000, cooldown: 999 };
 	state.enemies.push(enemy);
 	let shots = 0;

@@ -1,14 +1,13 @@
 import { tactical } from '../src/combat-scale';
 import { describe, expect, test } from 'bun:test';
 import { assignGuardian, build, covered, coverageFor, craftCount, createState, deploy, MAX_HULL, pulse, repair, replaceFighters, scramble, SECTOR_POINTS, step, upgrade, type State } from '../src/simulation';
-import { ESCORT_DRILL } from '../src/scenarios';
 import { localPoint, mountWorld, worldPoint } from '../src/space';
 const advance = function (state: State, seconds: number) { for (let i = 0; i < Math.ceil(seconds * 60); i++) step(state, 1 / 60); };
-const quiet = function () { const s = createState({ experimental: true, coverageDegrees: 240 }); s.nextWave = Infinity; return s; };
+const quiet = function () { const s = createState(); s.nextWave = Infinity; return s; };
 const firstWing = function (s: State) { const w = s.wings[0]; if (!w) throw new Error('Missing wing'); return w; };
 
 describe('directional coverage', function () {
-	test('inclusive angular and range boundaries, opposite flanks, fore/aft overlap and upgraded ranges', function () {
+	test('inclusive angular and range boundaries, opposite flanks, fore/aft blind spots and upgraded ranges', function () {
 		const s = quiet(); s.salvage = 1000; build(s, 0, 'rail'); build(s, 4, 'rail');
 		const port = s.mounts[0]; const starboard = s.mounts[4]; if (!port || !starboard) throw new Error('Missing mounts');
 		const c = coverageFor(s, port);
@@ -19,9 +18,8 @@ describe('directional coverage', function () {
 		}
 		expect(covered(s, port, { x: port.x, y: 200 })).toBe(false);
 		expect(covered(s, starboard, { x: starboard.x, y: -200 })).toBe(false);
-		for (const x of [-300, 200]) { expect(covered(s, port, { x, y: 0 })).toBe(true); expect(covered(s, starboard, { x, y: 0 })).toBe(true); }
+		for (const x of [-300, 200]) { expect(covered(s, port, { x, y: 0 })).toBe(false); expect(covered(s, starboard, { x, y: 0 })).toBe(false); }
 		const far = { x: port.x, y: port.y - tactical(450) }; expect(covered(s, port, far)).toBe(false); upgrade(s, 0); expect(covered(s, port, far)).toBe(true);
-		s.coverageDegrees = 360; expect(covered(s, port, { x: port.x, y: 200 })).toBe(true);
 	});
 	test('outward priority cannot bypass the opposite turret arc', function () {
 		const s = quiet(); build(s, 0, 'rail'); build(s, 4, 'rail'); s.status = 'running';
@@ -84,42 +82,9 @@ describe('guardian screens and restrictions', function () {
 	});
 });
 
-export const strategyRun = function (strategy: 'baseline' | 'wings' | 'guardians', issueOrders = true): { strategy: string; result: State['status']; time: number; hull: number; minimumShield: number; kills: number; losses: number; launches: number; orders: number; salvage: number; guardianSectors: (string | undefined)[] } {
-	const s = createState({ scenario: 'drill' }); s.coverage.enabled = false;
-	if (strategy !== 'baseline') { build(s, 0, 'rail'); if (strategy === 'wings') { deploy(s, 'interceptor'); build(s, 4, 'flak'); } else { deploy(s, 'guardian'); build(s, 4, 'flak'); } }
-	s.status = 'running'; let minimumShield = s.systems.shield.charge;
-	for (let second = 0; second < 300 && s.status === 'running'; second++) {
-		if (issueOrders && strategy === 'wings' && [7, 42, 75].includes(second)) for (const w of s.wings) scramble(s, w.id, second === 75 ? 'ahead' : 'port');
-		if (issueOrders && strategy === 'guardians' && second === 18) for (const g of s.escorts) assignGuardian(s, g.id, 'starboard');
-		for (let frame = 0; frame < 60; frame++) { step(s, 1 / 60); minimumShield = Math.min(minimumShield, s.systems.shield.charge); }
-	}
-	return { strategy, result: s.status, time: Math.round(s.time), hull: Math.ceil(s.hull), minimumShield, kills: s.kills, losses: s.escortLosses, launches: s.launches, orders: s.orders, salvage: Math.floor(s.salvage), guardianSectors: s.escorts.filter(function (craft) { return craft.kind === 'guardian'; }).map(function (craft) { return craft.sector; }) };
-};
-test('drill arrivals obey the schedule and require arrival plus clearance after 90 seconds', function () {
-	const s = createState({ scenario: 'drill' }); s.status = 'running'; expect(s.wave).toBe(0); expect(s.enemies).toHaveLength(0);
-	advance(s, 1 / 60); expect(s.wave).toBe(1); expect(s.enemies[0]?.kind).toBe('carrier'); expect(s.enemies[0]?.hangar?.remaining).toBe(8); expect(s.enemies[0]?.y).toBeLessThan(0); expect(s.arrivals).toHaveLength(0);
-	s.time = 89.99; s.wave = 4; s.nextWave = Infinity; s.arrivals = []; s.systems.distanceTraveled = s.systems.routeLength; s.ark.x = s.routeOrigin.x + s.systems.routeLength;
-	step(s, 1 / 60); expect<State['status']>(s.status).toBe('running'); expect(s.enemies.length).toBeGreaterThan(0);
-	s.enemies = []; step(s, 1 / 60); expect<State['status']>(s.status).toBe('won');
-	const time = s.time; advance(s, 1); expect(s.time).toBe(time);
-});
 test('paused and unfocused sorties retain their timers and positions', function () {
 	const s = quiet(); deploy(s, 'interceptor'); s.status = 'running'; const w = firstWing(s); scramble(s, w.id, 'port'); advance(s, 3);
 	for (const focused of [true, false]) {
 		s.focused = focused; s.paused = focused; const snapshot = JSON.stringify(s); advance(s, 30); expect(JSON.stringify(s)).toBe(snapshot);
 	}
 });
-test('drill schedule is deterministic and baseline/defenses yield repeatable distinct outcomes', function () {
-	expect(ESCORT_DRILL.encounters.map(function (e) { return e.at; })).toEqual([10, 23, 49, 52]);
-	const outcomes = ['baseline', 'wings', 'guardians'].map(function (s) { if (s !== 'baseline' && s !== 'wings' && s !== 'guardians') throw new Error('Strategy'); const result = strategyRun(s); expect(strategyRun(s)).toEqual(result); return result; });
-	console.table(outcomes); expect(new Set(outcomes.map(function (o) { return o.minimumShield; })).size).toBeGreaterThanOrEqual(2);
-	expect(outcomes[0]?.result).toBe('lost'); expect(outcomes[0]?.kills).toBe(0); expect(outcomes.slice(1).every(function (o) { return o.result === 'running' && o.hull > 0 && o.kills > 0; })).toBe(true);
-}, 20000);
-test('wing launches and Guardian assignments persist through prolonged encounters', function () {
-	const heldWing = strategyRun('wings', false); const launchedWing = strategyRun('wings');
-	expect(heldWing.launches).toBe(0); expect(launchedWing.launches).toBeGreaterThan(0);
-	const portScreen = strategyRun('guardians', false); const reassignedScreen = strategyRun('guardians');
-	expect(portScreen.result).not.toBe('lost'); expect(reassignedScreen.result).toBe('running');
-	expect(portScreen.guardianSectors).toEqual(['port']); expect(reassignedScreen.guardianSectors).toEqual(['starboard']);
-	expect(portScreen.orders).toBe(0); expect(reassignedScreen.orders).toBe(1);
-}, 15000);
