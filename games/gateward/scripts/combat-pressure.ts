@@ -25,7 +25,7 @@ export const runSpendingControl = function (coverageDegrees: 120 | 240 | 360 = 3
 		const before = state.salvage;
 		if (order(state)) purchases.push({ time: state.time, mount, action, cost: before - state.salvage });
 	};
-	for (let second = 0; second < 420 && state.status === 'running'; second++) {
+	for (let second = 0; second < 840 && state.status === 'running'; second++) {
 		for (const [mount, weapon] of expansion) recordPurchase(mount, weapon, function (current) { return build(current, mount, weapon); });
 		for (let mount = 0; mount < 8; mount++) recordPurchase(mount, 'upgrade', function (current) { return upgrade(current, mount); });
 		for (let tick = 0; tick < 60 && state.status === 'running'; tick++) {

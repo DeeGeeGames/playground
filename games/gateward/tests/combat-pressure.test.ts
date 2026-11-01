@@ -1,12 +1,11 @@
 import { expect, test } from 'bun:test';
 import { runSpendingControl } from '../scripts/combat-pressure';
 
-test('issue 51 spending control repeats and protects hull and equipment', function () {
+test('spending control repeats and protects hull and equipment through delayed capital clearance', function () {
 	const result = runSpendingControl();
 	expect(result.status).toBe('won');
-	// The gate still opens at 210s; slower capitals may remain to be cleared.
-	expect(result.time).toBeGreaterThan(210);
-	expect(result.time).toBeLessThan(420);
+	// The unchanged route now takes at least 420 seconds and capitals need additional clearance time.
+	expect(result.time).toBeGreaterThan(420); expect(result.time).toBeLessThan(840);
 	expect(result.kills).toBe(96);
 	expect(result.minimumHull).toBe(1200);
 	expect(result.finalHull).toBe(1200);

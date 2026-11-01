@@ -549,28 +549,41 @@ navigation behavior; owner playtesting remains the acceptance check for feel.
 ### Capital-ship handling
 
 Hostile carriers, armored ships, and flagships have combat speed limits of
-38, 40, and 36 m/s respectively, and an approach cruise limit of 60 m/s. These
-are 25% of their former speeds. Interceptor wings, raiders, bombers, and the ark
-retain their speed limits. Linear thrust remains at the reduced
+19, 20, and 18 m/s respectively, and an approach cruise limit of 30 m/s. These
+are 12.5% of their original speeds after the quarter-speed pass and another
+50% reduction. Interceptor wings, raiders, and bombers retain their speed limits. Linear thrust remains at the reduced
 acceleration introduced with heavy-hull steering; lowering the speed limit does
 not reduce that acceleration again. Yaw and pitch behavior are unchanged.
 
-Guardians now also use 25% of their former top speed and acceleration: their
-speed limit is 85 m/s and shared linear thrust/braking is 38.25 m/s². Yaw
+Guardians use 12.5% of their original top speed and 25% of their original
+acceleration: their speed limit is 42.5 m/s and shared linear thrust/braking
+is 38.25 m/s². Yaw
 acceleration is 0.2 rad/s² and pitch acceleration is 0.03 rad/s². They retain
 momentum through turns and use a longer arrival horizon and earlier rotational
 braking to approach orders gradually. They spawn no faster than their speed
 limit, including when the ark runs at full engine power. Guns, armor, cost,
-coverage assignments, and the ark itself are unchanged.
+and coverage assignments are unchanged.
 
 Encounter positions, schedules, route lengths, and deadlines remain unchanged.
-The balanced ark travels at 48 m/s, so capitals can fall behind it and cannot
+The ark now travels at half its former speed: 24 m/s on balanced power and
+60 m/s at maximum engine allocation. Route lengths remain unchanged, so
+balanced travel takes twice as long. Capitals can fall behind it and cannot
 catch up at combat speed. Delayed arrivals, longer clearance after reaching the
 gate, and missed scenario deadlines are accepted consequences. This supports
 the direction of capital ships as slowly repositioning turret platforms. Existing
-strategy snapshots also change: the narrow-arc spending-control defense now
-loses while its full-arc comparison still wins. These are simulation outcomes,
-not acceptance of balance or feel.
+strategy snapshots also change: the full-arc spending control now clears in
+about 618 seconds, while its narrow-arc comparison still has unresolved contacts
+at the diagnostic horizon of 840 seconds. These are simulation outcomes, not
+acceptance of balance or feel.
+
+### Enemy rendering distance
+
+Enemy models and contact markers render to twice their former distance cutoffs,
+including degraded or offline sensor states. Healthy sensors permit models to
+render up to 5,120 m and contact markers to 16,000 m. Rendering alone does not
+extend classification, radar, priority selection, weapon acquisition or weapon
+range. Labels and hull details still require their original sensor intel. Camera
+zoom and framing are unchanged.
 
 ## Combat space tuning
 

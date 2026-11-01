@@ -52,7 +52,7 @@ describe('combat and voyage', function () {
 	});
 	test('escorts move toward the player rally point during a quiet approach', function () {
 		const state = createState(); deploy(state, 'guardian'); setRally(state, { x: 200, y: -200 }); state.status = 'running';
-		advance(state, 8); expect(state.escorts.every(function (escort) { return escort.x > 100 && escort.y < -100; })).toBe(true);
+		advance(state, 20); expect(state.escorts.every(function (escort) { return escort.x > 100 && escort.y < -100; })).toBe(true);
 	});
 	test('railguns bypass armor while flak damage is reduced', function () {
 		const hit = function (weapon: Weapon) {
@@ -70,21 +70,21 @@ describe('combat and voyage', function () {
 		step(state, 1 / 60); expect(state.kills).toBe(2); expect(state.salvage - salvage).toBeCloseTo(0.02);
 	});
 	test('an undefended ark loses and ended games reject orders and freeze', function () {
-		const state = createState(); state.status = 'running'; advance(state, 420);
+		const state = createState(); state.status = 'running'; advance(state, 840);
 		expect<State['status']>(state.status).toBe('lost'); const time = state.time; advance(state, 10); expect(state.time).toBe(time);
 		expect(build(state, 0, 'flak')).toBe(false); expect(deploy(state, 'guardian')).toBe(false); expect(pulse(state)).toBe(false);
 	});
 	test('the historical full-arc mixed defense can defeat all six waves and reach the gate', function () {
 		const state = createState({ coverageDegrees: 360 }); build(state, 0, 'flak'); build(state, 3, 'rail'); build(state, 4, 'flak'); state.status = 'running';
 		const plan: readonly { slot: number; weapon: Weapon }[] = [{ slot: 7, weapon: 'rail' }, { slot: 1, weapon: 'missile' }, { slot: 6, weapon: 'missile' }, { slot: 2, weapon: 'flak' }, { slot: 5, weapon: 'flak' }];
-		for (let second = 0; second < 420 && state.status === 'running'; second++) {
+		for (let second = 0; second < 840 && state.status === 'running'; second++) {
 			if (state.hull < 930) repair(state); if (state.enemies.length >= 7) pulse(state);
 			for (const item of plan) build(state, item.slot, item.weapon);
 			for (let i = 0; i < 8; i++) upgrade(state, i);
 			advance(state, 1);
 		}
 		expect<State['status']>(state.status).toBe('won'); expect(state.time).toBeGreaterThanOrEqual(ROUTE_SECONDS); expect(state.wave).toBe(6); expect(state.kills).toBe(96); expect(state.hull).toBeGreaterThan(0); expect(state.enemies).toHaveLength(0);
-	});
+	}, 15000);
 	test('a wave-clear repair cannot revive a hull destroyed during the final exchange', function () {
 		const state = createState(); state.status = 'running'; state.wave = 6; state.time = ROUTE_SECONDS; state.hull = 10; state.systems.shield.charge = 0;
 		state.enemies.push({ id: 99, x: 250, y: 0, kind: 'raider', hp: 1, maxHp: 45, cooldown: 99 });

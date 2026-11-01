@@ -41,7 +41,7 @@ describe('coarse escort coverage', function () {
 	test('sectors and screening follow a translated, rotated ship; off-side priorities do not pull escorts away', function () {
 		const state = quiet(); state.ark = { x: 1400, y: -800, angle: Math.PI / 2, speed: 0 };
 		for (const [point, sector] of [[{ x: 300, y: 0 }, 'ahead'], [{ x: -300, y: 0 }, 'astern'], [{ x: 0, y: -300 }, 'port'], [{ x: 0, y: 300 }, 'starboard']] as const) expect(pointSector(state, worldPoint(state, point))).toBe(sector);
-		deploy(state, 'guardian'); setCoveragePriority(state, 'port', 'all'); state.status = 'running'; advance(state, 8);
+		deploy(state, 'guardian'); setCoveragePriority(state, 'port', 'all'); state.status = 'running'; advance(state, 16);
 		expect(coverageReadiness(state, 'port').onStation).toBe(1);
 		state.enemies.push({ id: 900, ...worldPoint(state, { x: 0, y: 260 }), hp: 1000, maxHp: 1000, kind: 'armored', cooldown: 99 }); state.priority = 900;
 		advance(state, .2); expect(state.shots.filter(function (shot) { return shot.side === 'player'; })).toHaveLength(0);

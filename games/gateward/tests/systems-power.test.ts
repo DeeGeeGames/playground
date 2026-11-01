@@ -118,7 +118,7 @@ describe('distance and combat completion', function () {
 		const state = quiet(); const systems = systemsFor(state); state.wave = state.scenario?.encounters.length ?? 0;
 		setAllocation(state, { engines, weapons: 10 - engines, shields: 0 }); advance(state, 1820);
 		expect(state.time).toBeGreaterThan(90); expect(state.status).toBe('running');
-		expect(systems.distanceTraveled).toBeCloseTo(state.time * engines * tactical(3)); expect(systems.distanceTraveled).toBeLessThan(systems.routeLength);
+		expect(systems.distanceTraveled).toBeCloseTo(state.time * engines * tactical(1.5)); expect(systems.distanceTraveled).toBeLessThan(systems.routeLength);
 	});
 	test('arrival clamps while combat continues, and all scheduled and pending contacts must resolve', function () {
 		const state = quiet(); const systems = systemsFor(state);
@@ -131,10 +131,10 @@ describe('distance and combat completion', function () {
 	});
 	test('early arrival waits for scenario duration and every mode requires scheduled contacts', function () {
 		const state = quiet(); state.wave = state.scenario?.encounters.length ?? 0; setAllocation(state, { engines: 10, weapons: 0, shields: 0 });
-		advance(state, 800); expect(systemsFor(state).distanceTraveled).toBe(tactical(1080)); expect(state.status).toBe('running');
+		advance(state, 1500); expect(systemsFor(state).distanceTraveled).toBe(tactical(1080)); expect(state.status).toBe('running');
 		advance(state, 1010); expect(state.status).toBe('won');
 		const waiting = createState({ scenario: 'drill' }); waiting.status = 'running'; waiting.nextWave = Infinity;
-		advance(waiting, 1810); expect<State['status']>(waiting.status).toBe('running');
+		advance(waiting, 3610); expect<State['status']>(waiting.status).toBe('running');
 		waiting.wave = waiting.scenario?.encounters.length ?? 0; step(waiting, 0.05); expect<State['status']>(waiting.status).toBe('won');
 	});
 });
