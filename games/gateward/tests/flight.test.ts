@@ -20,7 +20,8 @@ describe('capital ship courses and batteries', function () {
 	for (const kind of ['armored', 'flagship'] as const) for (const start of [{ x: 520, y: 0 }, { x: -520, y: 0 }, { x: 0, y: -460 }, { x: 0, y: 460 }]) {
 		test(`${kind} intercepts from (${start.x}, ${start.y}), then travels parallel while firing broadsides`, function () {
 			const state = quiet(); const enemy = hostile(state, kind, start.x, start.y);
-			advance(state, 45);
+			// Reduced thrust and early braking need a longer approach.
+			advance(state, 65);
 			expect(enemy.flight?.course).toBe('broadside');
 			const before = { x: enemy.x, y: enemy.y }; const charge = state.systems.shield.charge;
 			let travel = 0;
@@ -161,19 +162,46 @@ describe('small-craft inertia', function () {
 
 
 describe('heavy hull response', function () {
+	test('capital rotation brakes before reaching its commanded bearing', function () {
+		const craft: Flight = { angle: 0, speed: 0, side: 1, course: 'intercept', run: 1 };
+		const point = { x: 0, y: 0 };
+		let brakingAngle: number | undefined;
+		for (let frame = 0; frame < 1800; frame++) {
+			const previousYaw = craft.angularVelocity ?? 0;
+			fly(point, craft, { x: 0, y: 100 }, 100, 0.7, 1 / 60);
+			if (brakingAngle === undefined && (craft.angularVelocity ?? 0) < previousYaw) brakingAngle = craft.angle;
+			expect(craft.angle).toBeLessThanOrEqual(Math.PI / 2 + 0.001);
+		}
+		if (brakingAngle === undefined) throw new Error('Capital never began braking');
+		expect(brakingAngle).toBeLessThan(Math.PI / 3);
+		expect(craft.angle).toBeCloseTo(Math.PI / 2, 2);
+	});
+
+	test('capital thrust, braking, climb, yaw and pitch use quarter acceleration', function () {
+		const craft: Flight = { angle: 0, speed: 0, side: 1, course: 'intercept', run: 1 };
+		fly({ x: 0, y: 0 }, craft, { x: 100, y: 0, z: 30 }, 100, 0.7, 1 / 60);
+		expect(craft.speed).toBeCloseTo(45 * 0.25 / 60);
+		expect(craft.vz).toBeCloseTo(20 * 0.25 / 60);
+		expect(craft.pitchVelocity).toBeCloseTo(0.12 * 0.25 / 60);
+		craft.speed = 100;
+		fly({ x: 0, y: 0 }, craft, { x: 0, y: 100 }, 100, 0.7, 1 / 60);
+		expect(craft.speed).toBeCloseTo(100 - 45 * 0.25 / 60);
+		expect(craft.angularVelocity).toBeCloseTo(0.7 * 0.35 * 0.25 / 60);
+	});
+
 	for (const inertial of [false, true]) test(`builds speed and both rotations gradually, then settles (inertial=${inertial})`, function () {
 		const point = { x: 0, y: 0, z: 0 };
 		const craft: Flight = { angle: 0, speed: 0, side: 1, course: 'intercept', run: 1 };
 		fly(point, craft, { x: 100, y: 0 }, 100, 0.7, 1 / 60, inertial, true);
 		expect(craft.speed).toBeGreaterThan(0);
 		expect(craft.speed).toBeLessThan(1);
-		for (let i = 0; i < 240; i++) fly(point, craft, { x: 100, y: 0 }, 100, 0.7, 1 / 60, inertial, true);
+		for (let i = 0; i < 600; i++) fly(point, craft, { x: 100, y: 0 }, 100, 0.7, 1 / 60, inertial, true);
 		expect(craft.speed).toBeCloseTo(100);
 		for (let i = 0; i < 2400; i++) {
 			const yaw = craft.angularVelocity ?? 0; const pitch = craft.pitchVelocity ?? 0;
 			fly(point, craft, { x: 0, y: 100, z: i < 120 ? 30 : 0 }, 100, 0.7, 1 / 60, inertial, true);
-			expect(Math.abs((craft.angularVelocity ?? 0) - yaw)).toBeLessThanOrEqual(0.7 * (inertial ? 0.5 : 0.35) / 60 + 1e-8);
-			expect(Math.abs((craft.pitchVelocity ?? 0) - pitch)).toBeLessThanOrEqual(0.12 / 60 + 1e-8);
+			expect(Math.abs((craft.angularVelocity ?? 0) - yaw)).toBeLessThanOrEqual(0.7 * (inertial ? 0.5 : 0.35 * 0.25) / 60 + 1e-8);
+			expect(Math.abs((craft.pitchVelocity ?? 0) - pitch)).toBeLessThanOrEqual(0.12 * (inertial ? 1 : 0.25) / 60 + 1e-8);
 			expect(Math.hypot(craft.speed, craft.vz ?? 0)).toBeLessThanOrEqual(100 + 1e-8);
 			if (i === 0) { expect(craft.angle).toBeLessThan(0.001); expect(Math.abs(craft.pitch ?? 0)).toBeLessThan(0.001); }
 			if (i === 59) expect(craft.pitch).toBeGreaterThan(0.01);

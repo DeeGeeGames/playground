@@ -45,7 +45,7 @@ test('guardian perimeter turrets cover every distant bearing and land repeated h
 	const enemy = { id: state.nextId++, kind: 'armored' as const, x: 80, y: -180, hp: 100000, maxHp: 100000, cooldown: 999 };
 	state.enemies.push(enemy);
 	let shots = 0;
-	for (let frame = 0; frame < 1200; frame++) {
+	for (let frame = 0; frame < 1800; frame++) {
 		const id = state.nextId; step(state, 1 / 60);
 		shots += state.shots.filter(function (shot) { return shot.id >= id && shot.weapon === 'escort' && shot.originHeight !== undefined; }).length;
 	}
