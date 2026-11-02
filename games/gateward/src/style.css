@@ -250,3 +250,5 @@ h1 em { font-style:normal; color:var(--mint); }
 .repair-row[hidden] { display:none; }
 .repair-row>div { display:flex; flex-shrink:0; gap:4px; }
 .repair-row button { width:44px; padding:5px; }
+
+#platform-formation { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; } #platform-formation label { display: grid; gap: 4px; } #platform-formation select { color: #d6e7ee; background: #152732; padding: 8px; } #passage-scout { line-height: 1.5; } .emergency-row, #open-reactor { opacity: .75; }

@@ -1,4 +1,4 @@
-import { WAVE_COUNT, type State } from './simulation';
+import { PASSAGES, PASSAGE_SECONDS, WAVE_COUNT, type State } from './simulation';
 import { effectiveOutputs } from './systems';
 
 export interface SystemsSummary {
@@ -13,14 +13,14 @@ export interface SystemsSummary {
 export const systemsSummary = function (state: State): SystemsSummary {
 	const systems = state.systems;
 	const remaining = Math.max(0, systems.routeLength - systems.distanceTraveled);
-	const speed = effectiveOutputs(systems).speed;
+	const speed = state.convoy ? systems.routeLength / (PASSAGES.length * PASSAGE_SECONDS) : effectiveOutputs(systems).speed;
 	return {
 		result: state.status, reason: state.resultReason, elapsed: state.time,
 		distance: systems.distanceTraveled, routeLength: systems.routeLength,
 		eta: remaining === 0 ? 0 : speed > 0 ? remaining / speed : null,
 		hull: state.hull, shield: systems.shield.charge, shieldAbsorbed: systems.shieldAbsorbed,
 		powerChanges: systems.powerChanges, contacts: state.wave,
-		totalContacts: WAVE_COUNT, kills: state.kills,
+		totalContacts: state.convoy ? PASSAGES.length : WAVE_COUNT, kills: state.kills,
 		sensorImpairments: systems.sensors.impairments, sensorRepairs: systems.sensors.repairs,
 		fieldPlacements: systems.interdiction.placements, redirected: systems.interdiction.redirected,
 		escortLosses: state.escortLosses, salvage: state.salvage,
