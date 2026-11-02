@@ -9,7 +9,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnemy, createEscort, createTurret, disposeObject, type TurretVisual } from './actors-3d';
 import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, offsetView, pickEnemy, pickMount, resizeView, toScreen, toWorld, translateView, TURRET_HEIGHT, viewFor, type View } from './projection';
 import { beaconFor, CRUISE_SPEED, journeyFor } from './journey';
-import { createState, coverageFor, ESCORTS, interdictionReason, type Enemy, type Point, type State } from './simulation';
+import { createConvoyState, coverageFor, ESCORTS, interdictionReason, type Enemy, type Point, type State } from './simulation';
 import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
 import { createTrajectory, projectileHeight, type Trajectory } from './projectiles-3d';
 import { shieldAppearance } from './shield-view';
@@ -22,7 +22,7 @@ import { drawTacticalRing } from './tactical-ring';
 type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'hull' };
 export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined }
 export interface Presentation {
-	render: (state: State, selected: number, reducedMotion: boolean, controlsEnabled: boolean, placement?: Point, screenOffsetY?: number) => void;
+	render: (state: State, selected: number, reducedMotion: boolean, controlsEnabled: boolean, placement?: Point, screenOffsetY?: number, screenOffsetX?: number) => void;
 	pick: (point: Point, state: State) => PickResult;
 	placementPoint: (point: Point) => Point | undefined;
 	resetCamera: () => void;
@@ -54,6 +54,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = PCFSoftShadowMap;
 	let view = viewFor(1, 1);
+	view.camera.zoom = 0.28; view.camera.updateProjectionMatrix();
 	const controls = new OrbitControls(view.camera, canvas);
 	controls.enablePan = false;
 	controls.enableDamping = false;
@@ -107,7 +108,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		enemyCarrier = (await new GLTFLoader().loadAsync(new URL('./models/gateward-carrier.glb', document.baseURI).href)).scene;
 		enemyCarrier.visible = false; scene.add(enemyCarrier);
 		ark.updateMatrixWorld(true);
-		const mounts = createState().mounts;
+		const mounts = createConvoyState().mounts.filter(function (mount) { return mount.platform === undefined; });
 		for (const [index, mount] of mounts.entries()) {
 			const anchor = ark.getObjectByName(`Mount_${String(index + 1).padStart(2, '0')}`);
 			if (!anchor || anchor.getWorldPosition(new Vector3()).distanceTo(new Vector3(mount.x, DECK_HEIGHT, mount.y)) > 0.05)
@@ -130,9 +131,13 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	scene.add(light, light.target, new HemisphereLight('#b8cede', '#192231', 2));
 	const fill = new DirectionalLight('#7295b3', 1.2);
 	fill.position.set(250, 100, -400); scene.add(fill, fill.target);
-	const turrets: readonly TurretVisual[] = createState().mounts.map(function (mount, index) {
+	const turrets: readonly TurretVisual[] = createConvoyState().mounts.map(function (mount, index) {
 		const turret = createTurret(mount);
 		carrier.add(turret.root); targets.set(turret.root, { kind: 'mount', index }); return turret;
+	});
+	const platforms = [0, 1].map(function () {
+		const hull = new Mesh(new IcosahedronGeometry(1, 0), new MeshStandardMaterial({ color: '#6e929c', metalness: 0.4, roughness: 0.6 }));
+		hull.scale.set(65, 12, 38); carrier.add(hull); return hull;
 	});
 	const drives = [1, 2, 3, 4].map(function (index) { return ark.getObjectByName(`Drive_${String(index).padStart(2, '0')}`); });
 	const plumes = drives.flatMap(function (drive) {
@@ -243,6 +248,10 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			const point = toScreen(mountWorld(state, mount), view, mountHeight(mount) + 12);
 			text(String(index + 1), { x: point.x, y: point.y - 10 }, selected === index ? '#e1f3c1' : '#b4c8d4', view.width < 650 ? 10 : 11);
 		}
+		for (const platform of state.convoy?.platforms ?? []) {
+			const mount = state.mounts.find(function (mount) { return mount.platform === platform.id; });
+			if (mount && platform.hp > 0) text(`P${platform.id + 1} · ${Math.ceil(platform.hp)} HP`, toScreen(worldPoint(state, { x: mount.x + 20, y: mount.y }), view, DECK_HEIGHT + 110), state.mounts[selected]?.platform === platform.id ? '#e1f3c1' : '#b4c8d4', 10);
+		}
 		const cuePositions: Point[] = [];
 		const cues: { text: string; progress: number; color: string; point: Point; anchor: Point }[] = [];
 		for (const enemy of state.enemies) {
@@ -282,13 +291,25 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	};
 
 	return {
-		render: function (state, selected, reducedMotion, controlsEnabled, placement, screenOffsetY = 0) {
+		render: function (state, selected, reducedMotion, controlsEnabled, placement, screenOffsetY = 0, screenOffsetX = 0) {
 			if (disposed) return;
 			resize(); if (view.width <= 0 || view.height <= 0) return;
 			if (offsetView(view, screenOffsetY)) labelsDirty = true;
+			if (view.camera.view?.offsetX !== screenOffsetX) {
+				view.camera.setViewOffset(view.width, view.height, screenOffsetX, screenOffsetY - view.height * 0.02, view.width, view.height); labelsDirty = true;
+			}
 			followArk(state); updateRoute(state); controls.enabled = controlsEnabled; controls.update();
+			for (const [id, hull] of platforms.entries()) {
+				const platform = state.convoy?.platforms[id];
+				const mount = state.mounts.find(function (mount) { return mount.platform === id; });
+				hull.visible = !!platform && platform.hp > 0;
+				if (mount) hull.position.set(mount.x + 20, DECK_HEIGHT - 15, mount.y);
+				hull.material.color.set(state.mounts[selected]?.platform === id ? '#d3d88d' : '#6e929c');
+			}
 			for (const [index, turret] of turrets.entries()) {
 				const mount = state.mounts[index]; if (!mount) continue;
+				if (turret.root.position.x !== mount.x || turret.root.position.z !== mount.y) labelsDirty = true;
+				turret.root.visible = mount.platform === undefined || !!state.convoy?.platforms.some(function (platform) { return platform.id === mount.platform && platform.hp > 0; });
 				const origin = mountWorld(state, mount);
 				const beam = state.status === 'running' && state.shots.some(function (shot) { return shot.beamFrom?.x === origin.x && shot.beamFrom.y === origin.y; });
 				const firing = state.status === 'running' ? state.effects.reduce<State['effects'][number] | undefined>(function (latest, effect) { return effect.feedback?.kind === 'muzzle' && effect.feedback.mount === index && effect.feedback.weapon === mount.weapon ? effect : latest; }, undefined) : undefined;
@@ -311,7 +332,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			const mount = state.mounts[selected];
 			range.visible = !!mount?.weapon;
 			if (mount?.weapon) {
-				const coverage = coverageFor(state, mount); const signature = `${selected}/${coverage.range}/${coverage.arc}`;
+				const coverage = coverageFor(state, mount); const signature = `${selected}/${coverage.range}/${coverage.arc}/${coverage.center}`;
 				if (signature !== coverageSignature) {
 					const points = Array.from({ length: 97 }, function (_, i) { const angle = coverage.center - coverage.arc / 2 + coverage.arc * i / 96; return new Vector3(Math.cos(angle) * coverage.range, 0, Math.sin(angle) * coverage.range); });
 					if (coverage.arc < Math.PI * 2) { points.unshift(new Vector3()); points.push(new Vector3()); }

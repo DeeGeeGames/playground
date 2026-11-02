@@ -36,10 +36,10 @@ export const ESCORTS = {
 	interceptor: { name: 'Interceptor wing', cost: 85, count: 3, hp: 65, speed: tactical(160) * SMALL_CRAFT_SPEED_SCALE, range: tactical(155), damage: 10, reload: 0.65 },
 	guardian: { name: 'Guardian', cost: 105, count: 1, hp: 260, speed: tactical(85) * GUARDIAN_SPEED_SCALE, range: tactical(240), damage: 24, reload: 0.9 },
 };
-export interface Mount extends Point { integrity: number; weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
+export interface Mount extends Point { platform?: number; facing?: number; integrity: number; weapon: Weapon | undefined; level: number; cooldown: number; aim: number }
 export const BOMBER_ATTACK = { windup: 2, releaseCue: 0.35 } as const;
 export type BomberAttack = { phase: 'windup'; remaining: number; target: number | undefined } | { phase: 'released'; remaining: number };
-export interface Enemy extends Point { spawn?: RouteSpawn; hangar?: { remaining: number; launched: number; cooldown: number }; launchRemaining?: number; launchedBy?: number; subsystemTarget?: string; approaching?: boolean; bomberAttack?: BomberAttack; turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
+export interface Enemy extends Point { station?: Readonly<Point>; spawn?: RouteSpawn; hangar?: { remaining: number; launched: number; cooldown: number }; launchRemaining?: number; launchedBy?: number; subsystemTarget?: string; approaching?: boolean; bomberAttack?: BomberAttack; turretAim?: CraftAim; flight?: Flight; interdictionSide?: { fieldId: number; side: -1 | 1 }; detour?: Detour; id: number; kind: EnemyKind; hp: number; maxHp: number; cooldown: number }
 export interface Escort extends Point { turretAim?: CraftAim; flight?: Flight; wingId?: number; sector?: Sector; id: number; kind: EscortKind; hp: number; cooldown: number; angle: number }
 export interface Shot extends Point { vz?: number; originHeight?: number; origin?: Point; sourceVelocity?: Point; beamFrom?: Point; sensorDamage?: number; id: number; vx: number; vy: number; damage: number; side: 'player' | 'enemy'; weapon: Weapon | 'escort' | 'hostile'; target: number | undefined; life: number }
 export type CombatFeedback =
@@ -53,7 +53,19 @@ export type Sector = typeof SECTORS[number];
 export const SECTOR_POINTS: Record<Sector, Point> = { port: { x: 0, y: -tactical(230) }, starboard: { x: 0, y: tactical(230) }, ahead: { x: tactical(280), y: 0 }, astern: { x: -tactical(280), y: 0 } };
 export interface Wing { id: number; phase: 'ready' | 'launching' | 'sortie' | 'returning' | 'rearming'; timer: number; craft: Escort[]; assignment: Sector; }
 export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
+export const FORMATION = ['ahead', 'astern', 'port', 'starboard'] as const;
+export type Formation = typeof FORMATION[number];
+export interface Platform { id: number; slot: Formation; hp: number }
+export const PASSAGES = [
+	{ name: 'Port battery', scout: 'Heavy battery to port; fighters pursue from aft. Port railguns and aft flak are one answer.', threats: [{ kind: 'armored', x: 300, y: -1500 }, { kind: 'raider', x: -1600, y: -90 }, { kind: 'raider', x: -1700, y: 90 }, { kind: 'raider', x: -1800, y: 0 }] },
+	{ name: 'Crossfire', scout: 'Starboard armor with port bombers. Cover both flanks or concentrate long-range fire.', threats: [{ kind: 'armored', x: 500, y: 1400 }, { kind: 'armored', x: 750, y: 1500 }, { kind: 'bomber', x: 200, y: -1500 }, { kind: 'bomber', x: -100, y: -1400 }] },
+	{ name: 'Gate approach', scout: 'Heavy defense ahead; fighters close from aft. Survive the final passage to arrive.', threats: [{ kind: 'flagship', x: 2100, y: -300 }, { kind: 'raider', x: -1600, y: 100 }, { kind: 'raider', x: -1700, y: -100 }, { kind: 'bomber', x: 550, y: 1400 }] },
+] as const;
+export const PASSAGE_SECONDS = 45;
+export const PLATFORM_HP = 240;
 export interface State {
+	convoy?: { platforms: Platform[]; elapsed: number };
+
 	coverage: EscortCoverage;
 	fightersScrambled: boolean;
 	repairs: Record<string, number>;
@@ -103,6 +115,50 @@ export const createState = function (): State {
 		pulseCooldown: 0, aegisRemaining: 0, repairCooldown: 0, cleared: false, message: 'Fit your ship, then depart. Weapons fire automatically.', messageTime: 8,
 	};
 };
+// The convoy entry point keeps isolated combat fixtures and reusable legacy scenarios intact.
+export const createConvoyState = function (): State {
+	const state = createState();
+	state.salvage = 650;
+	state.convoy = { platforms: [{ id: 0, slot: 'port', hp: PLATFORM_HP }, { id: 1, slot: 'astern', hp: PLATFORM_HP }], elapsed: 0 };
+	for (const platform of state.convoy.platforms) {
+		for (const offset of [-20, 20]) state.mounts.push({ platform: platform.id, x: offset, y: 0, integrity: 100, weapon: undefined, level: 0, cooldown: 0, aim: 0 });
+	}
+	positionPlatforms(state);
+	state.message = 'Scout the passage. Fit ark and platforms; choose formation, then launch.';
+	return state;
+};
+const positionPlatforms = function (state: State) {
+	for (const platform of state.convoy?.platforms ?? []) {
+		const station = SECTOR_POINTS[platform.slot];
+		const facing = Math.atan2(station.y, station.x);
+		const mounts = state.mounts.filter(function (mount) { return mount.platform === platform.id; });
+		for (const [index, mount] of mounts.entries()) {
+			mount.x = station.x + (index === 0 ? -20 : 20); mount.y = station.y;
+			mount.facing = facing; mount.aim = facing;
+		}
+	}
+};
+export const arrangePlatform = function (state: State, id: number, slot: Formation): boolean {
+	if (!canOrder(state) || state.status !== 'fitting' || !FORMATION.includes(slot)) return false;
+	const platform = state.convoy?.platforms.find(function (platform) { return platform.id === id; });
+	if (!platform || platform.slot === slot) return false;
+	const occupant = state.convoy?.platforms.find(function (other) { return other.slot === slot; });
+	if (occupant) occupant.slot = platform.slot;
+	platform.slot = slot; positionPlatforms(state); return true;
+};
+export const launchPassage = function (state: State): boolean {
+	const convoy = state.convoy; const passage = PASSAGES[state.wave];
+	if (!canOrder(state) || state.status !== 'fitting' || !convoy || !passage || !state.mounts.some(function (mount) { return !!mount.weapon; })) return false;
+	state.status = 'running'; state.wave++; convoy.elapsed = 0; state.cleared = false;
+	for (const threat of passage.threats) {
+		const config = ENEMIES[threat.kind]; const point = worldPoint(state, threat);
+		state.enemies.push({ ...point, ...(threat.kind === 'armored' || threat.kind === 'flagship' ? { station: { ...point } } : {}), id: state.nextId++, kind: threat.kind, hp: config.hp, maxHp: config.hp, cooldown: 1 });
+	}
+	notify(state, `${passage.name}: automatic passage underway. Survive ${PASSAGE_SECONDS}s.`); return true;
+};
+const canFit = function (state: State, mount?: Mount): boolean {
+	return canOrder(state) && (!state.convoy || state.status === 'fitting') && (mount?.platform === undefined || !!state.convoy?.platforms.some(function (platform) { return platform.id === mount.platform && platform.hp > 0; }));
+};
 export const notify = function (state: State, message: string) { state.message = message; state.messageTime = 4; };
 const canOrder = function (state: State) { return !state.paused && state.focused && (state.status === 'fitting' || state.status === 'running'); };
 export const setCoveragePriority = function (state: State, sector: Sector, priority: CoveragePriority): boolean {
@@ -143,7 +199,7 @@ export const placeInterdiction = function (state: State, point: Point): boolean 
 };
 export const setAllocation = function (state: State, allocation: Readonly<Allocation>): boolean {
 	const systems = state.systems;
-	if (!canOrder(state)) return false;
+	if (!canOrder(state) || (state.convoy && allocation.engines !== 4)) return false;
 	if (!POWER_CHANNELS.every(function (channel) { return Number.isInteger(allocation[channel]) && allocation[channel] >= 0; })) return false;
 	if (POWER_CHANNELS.reduce(function (sum, channel) { return sum + allocation[channel]; }, 0) !== REACTOR_UNITS) return false;
 	if (POWER_CHANNELS.every(function (channel) { return systems.allocation[channel] === allocation[channel]; })) return false;
@@ -158,19 +214,19 @@ export const transferPower = function (state: State, from: PowerChannel, to: Pow
 };
 export const build = function (state: State, index: number, weapon: Weapon): boolean {
 	const mount = state.mounts[index]; const config = WEAPONS[weapon];
-	if (!canOrder(state) || !mount || mount.weapon || state.salvage < config.cost) return false;
+	if (!canFit(state, mount) || !mount || mount.weapon || state.salvage < config.cost) return false;
 	state.salvage -= config.cost; mount.weapon = weapon; mount.level = 1; mount.cooldown = 0;
 	return true;
 };
 export const upgradeCost = function (mount: Mount): number { return mount.weapon ? Math.round(WEAPONS[mount.weapon].cost * (mount.level === 1 ? 0.8 : 1.2)) : 0; };
 export const upgrade = function (state: State, index: number): boolean {
 	const mount = state.mounts[index];
-	if (!canOrder(state) || !mount?.weapon || mount.level >= 3 || state.salvage < upgradeCost(mount)) return false;
+	if (!canFit(state, mount) || !mount?.weapon || mount.level >= 3 || state.salvage < upgradeCost(mount)) return false;
 	state.salvage -= upgradeCost(mount); mount.level += 1; return true;
 };
 export const coverageFor = function (state: State, mount: Mount) {
 	return { range: mount.weapon ? WEAPONS[mount.weapon].range * (1 + (mount.level - 1) * 0.12) : 0,
-		center: mount.y < 0 ? -Math.PI / 2 : Math.PI / 2, arc: state.coverageDegrees * Math.PI / 180 };
+		center: mount.facing ?? (mount.y < 0 ? -Math.PI / 2 : Math.PI / 2), arc: state.coverageDegrees * Math.PI / 180 };
 };
 export const covered = function (state: State, mount: Mount, target: Point): boolean {
 	const { range, center, arc } = coverageFor(state, mount);
@@ -182,8 +238,8 @@ export const invested = function (mount: Mount): number {
 	return mount.weapon ? WEAPONS[mount.weapon].cost + (mount.level >= 2 ? Math.round(WEAPONS[mount.weapon].cost * 0.8) : 0) + (mount.level >= 3 ? Math.round(WEAPONS[mount.weapon].cost * 1.2) : 0) : 0;
 };
 export const sell = function (state: State, index: number): boolean {
-	const mount = state.mounts[index]; if (!canOrder(state) || !mount?.weapon) return false;
-	state.salvage += Math.floor(invested(mount) * 0.7); mount.weapon = undefined; mount.level = 0; delete state.repairs[`mount:${index}`]; return true;
+	const mount = state.mounts[index]; if (!canFit(state, mount) || !mount?.weapon) return false;
+	state.salvage += Math.floor(invested(mount) * (state.convoy ? 1 : 0.7)); mount.weapon = undefined; mount.level = 0; delete state.repairs[`mount:${index}`]; return true;
 };
 export const deploy = function (state: State, kind: EscortKind): boolean {
 	const config = ESCORTS[kind];
@@ -333,7 +389,7 @@ export const subsystemAt = function (state: State, point: Point): string | undef
 	if (Math.abs(point.y) < 39) return undefined;
 	if (Math.abs(point.x) <= 12) return 'generator';
 	if (point.x >= 116 || (point.x > 12 && point.x <= 20)) return 'sensors';
-	const index = state.mounts.findIndex(function (mount) { return !!mount.weapon && Math.sign(mount.y) === Math.sign(point.y) && Math.abs(mount.x - point.x) <= 12; });
+	const index = state.mounts.findIndex(function (mount) { return mount.platform === undefined && !!mount.weapon && Math.sign(mount.y) === Math.sign(point.y) && Math.abs(mount.x - point.x) <= 12; });
 	return index < 0 ? undefined : `mount:${index}`;
 };
 export const subsystemAimPoint = function (state: State, target: string, from?: Point): Point | undefined {
@@ -501,15 +557,16 @@ export const step = function (state: State, dt: number) {
 	const distanceBefore = state.systems.distanceTraveled;
 	state.systems.sensors.repairCooldown = Math.max(0, state.systems.sensors.repairCooldown - dt);
 	state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
-	state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + effectiveOutputs(state.systems).speed * dt);
+	state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + (state.convoy ? state.systems.routeLength / (PASSAGES.length * PASSAGE_SECONDS) : effectiveOutputs(state.systems).speed) * dt);
 	const travel = state.systems.distanceTraveled - distanceBefore;
 	state.ark.speed = travel / dt;
 	state.ark.x += Math.cos(state.ark.angle) * travel; state.ark.y += Math.sin(state.ark.angle) * travel;
 	const carrierVelocity = arkVelocity(state);
 	advanceInterdiction(state, dt);
 	// The reactor provides a modest income even while enemies remain outside firing range.
-	state.salvage += dt * 1.2;
-	if (state.wave < WAVE_COUNT && state.systems.distanceTraveled >= state.nextWave) startWave(state);
+	if (!state.convoy) state.salvage += dt * 1.2;
+	if (state.convoy) state.convoy.elapsed += dt;
+	if (!state.convoy && state.wave < WAVE_COUNT && state.systems.distanceTraveled >= state.nextWave) startWave(state);
 	for (const arrival of state.arrivals.filter(function (a) { return a.at <= state.time; })) {
 		const config = ENEMIES[arrival.kind]; const position = arrivalOutsideField(state, arrival.spawn ? arrival : worldPoint(state, arrival), arrival.kind); state.enemies.push({ id: state.nextId++, ...(arrival.spawn ? { spawn: { ...arrival.spawn, point: { x: position.x, y: position.y } } } : { approaching: true }), kind: arrival.kind, x: position.x, y: position.y, hp: config.hp, maxHp: config.hp, cooldown: 0.8, ...(arrival.kind === 'carrier' ? { hangar: { remaining: arrival.fighters ?? 8, launched: 0, cooldown: 0 } } : {}) });
 	}
@@ -521,7 +578,7 @@ export const step = function (state: State, dt: number) {
 	for (const [mountIndex, mount] of state.mounts.entries()) {
 		const weaponRate = baseWeaponRate * conditionMultiplier(mount.integrity);
 		mount.cooldown = Math.max(0, mount.cooldown - dt * weaponRate);
-		if (!mount.weapon || weaponRate === 0) continue;
+		if (!mount.weapon || weaponRate === 0 || (mount.platform !== undefined && !state.convoy?.platforms.some(function (platform) { return platform.id === mount.platform && platform.hp > 0; }))) continue;
 		const config = WEAPONS[mount.weapon];
 		const origin = mountWorld(state, mount);
 		const target = mountTarget(state, mount);
@@ -597,12 +654,12 @@ export const step = function (state: State, dt: number) {
 		const relative = localPoint(state, enemy);
 		const arkTarget = worldPoint(state, { x: Math.max(-110, Math.min(110, relative.x)), y: Math.max(-30, Math.min(30, relative.y)), z: DECK_ALTITUDE });
 		const destination = escort ?? arkTarget;
-		enemy.flight ??= createFlight(relative, { x: state.ark.x - enemy.x, y: state.ark.y - enemy.y }, spawn ? 0 : config.speed, enemy.id);
+		enemy.flight ??= createFlight(relative, { x: state.ark.x - enemy.x, y: state.ark.y - enemy.y }, spawn || enemy.station ? 0 : config.speed, enemy.id);
 		const flight = enemy.flight;
 		const approaching = enemy.approaching === true && distance(enemy, state.ark) > SENSOR_CONFIG.shortRange;
 		if (!approaching && enemy.approaching) enemy.approaching = false;
 		const flightSpeed = approaching ? APPROACH.cruiseSpeed * (isCapital(enemy) ? CAPITAL_SPEED_SCALE : smallCraft ? SMALL_CRAFT_SPEED_SCALE : 1) : config.speed;
-		const hold = spawn && !spawn.activated ? spawn.point : undefined;
+		const hold = enemy.station ?? (spawn && !spawn.activated ? spawn.point : undefined);
 		const waypoint = navigateField(state, enemy, hold ?? destination, flightSpeed, dt);
 		const desired = waypoint ? arriveCourse(enemy, waypoint, { x: 0, y: 0 }, 2)
 			: hold ? arriveCourse(enemy, hold, { x: 0, y: 0 }, 0.5)
@@ -618,8 +675,10 @@ export const step = function (state: State, dt: number) {
 		const escortSolution = escort ? hostileSolution(enemy, escort, flightVelocity(escort.flight), shotSpeed) : undefined;
 		const firingEscort = escortSolution ? escort : undefined;
 		const componentAim = subsystemAimPoint(state, enemy.subsystemTarget ?? (enemy.kind === 'bomber' ? 'sensors' : ''), enemy);
-		const firingTarget = firingEscort ?? componentAim ?? arkTarget;
-		const solution = escortSolution ?? hostileSolution(enemy, componentAim ?? arkTarget, carrierVelocity, shotSpeed);
+		const exposed = (state.convoy?.platforms ?? []).filter(function (platform) { return platform.hp > 0; }).map(function (platform) { return worldPoint(state, { ...SECTOR_POINTS[platform.slot], z: DECK_ALTITUDE }); }).sort(function (a, b) { return distance(enemy, a) - distance(enemy, b); })[0];
+		const platformTarget = exposed && distance(enemy, exposed) < distance(enemy, arkTarget) ? exposed : undefined;
+		const firingTarget = firingEscort ?? platformTarget ?? componentAim ?? arkTarget;
+		const solution = escortSolution ?? hostileSolution(enemy, platformTarget ?? componentAim ?? arkTarget, carrierVelocity, shotSpeed);
 		if (solution && solution.mount !== undefined) enemy.turretAim = solution;
 		const canFire = solution && distance(enemy, firingTarget) <= config.range && !fieldBlocks(state, solution.muzzle, solution.aim);
 		if (enemy.kind === 'bomber') {
@@ -672,6 +731,13 @@ export const step = function (state: State, dt: number) {
 				}
 				effect(state, blocked, 20, '#d7bf89', shot); shot.life = 0; state.systems.interdiction.blockedShots++; continue;
 			}
+			const platformHit = state.convoy?.platforms.find(function (platform) { const point = worldPoint(state, { ...SECTOR_POINTS[platform.slot], z: DECK_ALTITUDE }); const previous = { ...point, x: point.x + previousArk.x - state.ark.x, y: point.y + previousArk.y - state.ark.y }; return platform.hp > 0 && movingContact(point, previous, before, shot, 48); });
+			if (platformHit) {
+				platformHit.hp = Math.max(0, platformHit.hp - shot.damage); shot.life = 0;
+				effect(state, shot, 30, '#ff897e');
+				if (platformHit.hp === 0) for (const mount of state.mounts) if (mount.platform === platformHit.id) { mount.weapon = undefined; mount.level = 0; mount.integrity = 0; }
+				continue;
+			}
 			const hit = state.escorts.find(function (escort) { return escort.hp > 0 && movingContact(escort, previousEscorts.get(escort.id) ?? escort, before, shot, (escort.kind === 'guardian' ? 20 : 12) * craftScale(escort.kind)); });
 			if (hit) { impactFeedback(state, hit, shot.damage); hit.hp -= shot.damage; shot.life = 0; effect(state, hit, 15, '#ff897e'); }
 			else {
@@ -694,10 +760,21 @@ export const step = function (state: State, dt: number) {
 	for (const wing of state.wings) wing.craft = wing.craft.filter(function (craft) { return craft.hp > 0; });
 	state.effects = state.effects.filter(function (e) { e.life -= dt; return e.life > 0; });
 	clearLostPriority(state);
-	if (state.hull > 0 && state.wave > 0 && !state.cleared && state.enemies.length === 0 && state.arrivals.length === 0) {
+	if (!state.convoy && state.hull > 0 && state.wave > 0 && !state.cleared && state.enemies.length === 0 && state.arrivals.length === 0) {
 		state.cleared = true; state.salvage += 50; state.hull = Math.min(MAX_HULL, state.hull + 60); notify(state, 'Sector secured. +50 salvage · +60 hull. Refit for the next contact.');
 	}
 	advanceRepairs(state, 0);
 	if (state.hull <= 0) { state.status = 'lost'; state.resultReason = 'hull'; state.shots = []; }
-	else if (state.systems.distanceTraveled >= state.systems.routeLength) { state.status = 'won'; state.resultReason = 'arrival'; state.shots = []; }
+	else if (state.convoy && state.convoy.elapsed >= PASSAGE_SECONDS - 1e-8) {
+		state.enemies = []; state.arrivals = []; state.shots = []; state.effects = []; state.priority = undefined; state.ark.speed = 0;
+		if (state.wave === PASSAGES.length) { state.status = 'won'; state.resultReason = 'arrival'; state.systems.distanceTraveled = state.systems.routeLength; }
+		else {
+			state.status = 'fitting'; state.salvage += 200; state.hull = Math.min(MAX_HULL, state.hull + 120);
+			for (const platform of state.convoy.platforms) platform.hp = PLATFORM_HP;
+			for (const mount of state.mounts) mount.integrity = 100;
+			for (const id of ['engines', 'sensors', 'generator'] as const) state.systems[id].integrity = 100;
+			state.repairs = {}; notify(state, 'Passage survived. +200 salvage, +120 hull; equipment and platform chassis restored. Scout and launch when ready.');
+		}
+	}
+	else if (!state.convoy && state.systems.distanceTraveled >= state.systems.routeLength) { state.status = 'won'; state.resultReason = 'arrival'; state.shots = []; }
 };

@@ -27,7 +27,9 @@ export const createEngineeringPanel = function (host: HTMLElement, getState: () 
 	});
 	host.append(outputs);
 	const presets = document.createElement('div'); presets.className = 'engineering-presets'; presets.setAttribute('role', 'group'); presets.setAttribute('aria-label', 'Reactor presets');
-	const presetButtons = Object.entries(POWER_PRESETS).map(function ([key, allocation]) {
+	const convoy = !!getState().convoy;
+	const powerPresets = convoy ? { balanced: { engines: 4, weapons: 4, shields: 2 }, weapons: { engines: 4, weapons: 6, shields: 0 }, shields: { engines: 4, weapons: 0, shields: 6 } } : POWER_PRESETS;
+	const presetButtons = Object.entries(powerPresets).map(function ([key, allocation]) {
 		const name = key === 'balanced' || key === 'engines' || key === 'weapons' || key === 'shields' ? PRESET_NAMES[key] : 'Preset';
 		const control = document.createElement('button'); control.type = 'button'; control.dataset['powerPreset'] = key;
 		const label = document.createElement('span'); label.textContent = name;
@@ -42,14 +44,14 @@ export const createEngineeringPanel = function (host: HTMLElement, getState: () 
 	const channelSelect = function (name: string, id: string, initial: PowerChannel) {
 		const label = document.createElement('label'); label.textContent = name;
 		const control = document.createElement('select'); control.id = id;
-		for (const channel of POWER_CHANNELS) {
+		for (const channel of POWER_CHANNELS.filter(function (channel) { return !convoy || channel !== 'engines'; })) {
 			const option = document.createElement('option'); option.value = channel; option.textContent = CHANNEL_NAMES[channel]; control.append(option);
 		}
 		control.value = initial; control.setAttribute('aria-describedby', 'engineering-reason');
 		control.addEventListener('change', function () { update(); }, { signal });
 		label.append(control); transfer.append(label); return control;
 	};
-	const donor = channelSelect('Donor', 'engineering-donor', 'engines');
+	const donor = channelSelect('Donor', 'engineering-donor', convoy ? 'shields' : 'engines');
 	const recipient = channelSelect('Recipient', 'engineering-recipient', 'weapons');
 	const transferButton = document.createElement('button'); transferButton.type = 'button'; transferButton.id = 'engineering-transfer'; transferButton.textContent = 'Transfer 1';
 	transferButton.setAttribute('aria-describedby', 'engineering-reason');
@@ -79,7 +81,7 @@ export const createEngineeringPanel = function (host: HTMLElement, getState: () 
 		const targets = repairTargets(state); const used = Object.values(state.repairs).reduce(function (sum, crews) { return sum + crews; }, 0);
 		text(crewBudget, `Repair crews: ${REPAIR_CREWS - used} / ${REPAIR_CREWS} free · no salvage cost. ± splits crews. Each crew: hull +12/s, equipment +4/s. Integrity below 50: impaired; zero: offline.`);
 		for (const { id, row, detail, buttons } of repairRows) {
-			const target = targets.find(function (item) { return item.id === id; }); row.hidden = !target;
+			const target = targets.find(function (item) { return item.id === id; }); row.hidden = !target || (convoy && id === 'engines');
 			if (!target) continue;
 			const crews = state.repairs[id] ?? 0;
 			const condition = id === 'hull' ? 'hull' : target.integrity <= 0 ? 'offline' : target.integrity < 50 ? 'impaired' : 'functional';
@@ -92,7 +94,7 @@ export const createEngineeringPanel = function (host: HTMLElement, getState: () 
 		}
 		text(budget, `${allocation.engines + allocation.weapons + allocation.shields} / ${REACTOR_UNITS} units`);
 		for (const { channel, value } of rows) {
-			const effect = channel === 'engines' ? `${output.speed.toFixed(0)} m/s${journey.speed === 0 ? ' set' : ''}` : channel === 'weapons' ? `${output.weaponRate.toFixed(2)}× cadence` : `+${output.shieldRecharge.toFixed(0)} HP/s`;
+			const effect = channel === 'engines' ? state.convoy ? 'Reserved for fixed convoy cruise' : `${output.speed.toFixed(0)} m/s${journey.speed === 0 ? ' set' : ''}` : channel === 'weapons' ? `${output.weaponRate.toFixed(2)}× cadence` : `+${output.shieldRecharge.toFixed(0)} HP/s`;
 			text(value, `${allocation[channel]} units · ${effect}`);
 		}
 		for (const { control, allocation: preset } of presetButtons) {
