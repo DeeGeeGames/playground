@@ -68,3 +68,8 @@
 	.edge-tabs { bottom:calc(var(--bottom) + 54px); }
 }
 .edge-tabs button[aria-pressed="true"]:hover { background:#b5efdb; color:#0c252c; }
+.fleet-list { display:grid; gap:8px; margin-top:12px; }
+.fleet-list button { min-height:56px; width:100%; text-align:left; }
+.fleet-list b,.fleet-list small { display:block; }
+.fleet-list small { margin-top:4px; font-size:12px; line-height:1.4; }
+.fleet-list button[aria-pressed="true"],.fleet-list button[aria-pressed="true"]:hover { background:var(--mint); color:#0c252c; }

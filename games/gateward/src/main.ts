@@ -1,4 +1,6 @@
 import { createShipyardPanel } from './shipyard-panel';
+import { createFleetPanel } from './fleet-panel';
+import type { FleetFocus } from './fleet-focus';
 import { createControllerUI } from './controller-ui';
 import { createRadarCoverage } from './radar-coverage';
 import { tactical } from './combat-scale';
@@ -81,7 +83,7 @@ const shutdown = await mountGame('game', async function (container) {
 		inspector = view; lastInspector = view; element('inspector').hidden = false; container.dataset['inspectorOpen'] = 'true';
 		for (const section of container.querySelectorAll<HTMLElement>('[data-inspector-content]')) section.hidden = section.dataset['inspectorContent'] !== view;
 		for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) { control.setAttribute('aria-pressed', String(control.dataset['inspector'] === view)); control.setAttribute('aria-expanded', String(control.dataset['inspector'] === view)); control.setAttribute('aria-controls', 'inspector'); }
-		label(element('inspector-title'), view === 'coverage' ? 'Escort coverage' : view === 'mounts' ? 'Weapon mounts' : view === 'contact' ? 'Contact' : view === 'field' ? 'Interdiction field' : view === 'reactor' ? 'Reactor allocation' : view === 'escorts' ? 'Escort bay' : 'Sensor array');
+		label(element('inspector-title'), view === 'coverage' ? 'Escort coverage' : view === 'fleet' ? 'Fleet camera' : view === 'mounts' ? 'Weapon mounts' : view === 'contact' ? 'Contact' : view === 'field' ? 'Interdiction field' : view === 'reactor' ? 'Reactor allocation' : view === 'escorts' ? 'Escort bay' : 'Sensor array');
 		button('open-systems').setAttribute('aria-expanded', 'true'); button('open-reactor').setAttribute('aria-expanded', String(view === 'reactor')); button('field-entry').setAttribute('aria-expanded', String(view === 'field'));
 	};
 	const closeInspector = function () {
@@ -103,6 +105,12 @@ const shutdown = await mountGame('game', async function (container) {
 		if (paused) button('resume').focus({ preventScroll: true }); else focusCanvas();
 	};
 	const presentation = await createPresentation(canvas);
+	const focusShip = function (id: FleetFocus) {
+		if (!available()) return;
+		placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
+		presentation.focusShip(id);
+	};
+	const fleetPanel = createFleetPanel(element('fleet-panel'), function () { return state; }, available, presentation.getFocus, focusShip, abort.signal);
 	const audio = createAudio(); const observeSounds = createSoundObserver();
 	let muted = false;
 	const syncAudio = function () {
@@ -183,7 +191,7 @@ const shutdown = await mountGame('game', async function (container) {
 	button('open-systems').addEventListener('click', function () { if (inspector) closeInspector(); else openInspector(lastInspector); }, options);
 	button('open-reactor').addEventListener('click', function () { openInspector('reactor'); }, options);
 	for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) control.addEventListener('click', function () {
-		const view = inspectorName(control.dataset['inspector']); if (view) { if (inspector === view) closeInspector(); else { openInspector(view); element('close-inspector').focus({ preventScroll: true }); } }
+		const view = inspectorName(control.dataset['inspector']); if (view) { if (inspector === view) closeInspector(); else { openInspector(view); if (inspector === view) inspectorReturn = control; element('close-inspector').focus({ preventScroll: true }); } }
 	}, options);
 	button('field-entry').addEventListener('click', function () {
 		if (placement || interdictionReason(state)) openInspector('field'); else aimPlacement(worldPoint(state, { x: tactical(300), y: 0 }));
@@ -217,13 +225,14 @@ const shutdown = await mountGame('game', async function (container) {
 			if (point) { placement = point; notify(state, 'Field preview updated. Enter or Place field confirms; Esc cancels.'); }
 			focusCanvas(); return;
 		}
-		const { mount, enemy, slot } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
+		const { mount, enemy, slot, fleet } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
 		if (slot) { shipyard.select(slot); inspectedContact = undefined; openInspector('mounts'); element('platform-formation').scrollIntoView({ block: 'nearest' }); }
 		else if (mount >= 0) { selectMount(mount); inspectedContact = undefined; openInspector('mounts'); }
 		else if (enemy) {
 			if (setPriority(state, enemy.id)) { inspectedContact = enemy.id; openInspector('contact'); notify(state, `Priority target: ${contactIntel(state, enemy) === 'classified' ? enemy.kind : 'unclassified contact'}. Eligible weapons in range and coverage will focus fire.`); }
 			else notify(state, 'Contact outside sensor range. Nearby defense remains automatic.');
 		}
+		else if (fleet) focusShip(fleet);
 		focusCanvas();
 	};
 	canvas.addEventListener('pointerup', function (event) { releasePointer(event, false); }, options);
@@ -282,7 +291,7 @@ const shutdown = await mountGame('game', async function (container) {
 			const sideTop = `${Math.ceil(Math.max(sensorFeed.getBoundingClientRect().bottom, ui.pause.getBoundingClientRect().bottom) - container.getBoundingClientRect().top) + 8}px`;
 			if (container.style.getPropertyValue('--side-top') !== sideTop) container.style.setProperty('--side-top', sideTop);
 		}
-		drawerCoverage.update(); escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
+		drawerCoverage.update(); fleetPanel(); escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
 		const modal = briefing ? ui.brief : paused ? ui.pausePanel : !ui.result.hidden ? ui.result : radarOpen ? radarHost : undefined;
 		for (const child of container.children) if (child instanceof HTMLElement) child.inert = !!modal && child !== modal;
 		const active = available();
@@ -358,7 +367,7 @@ const shutdown = await mountGame('game', async function (container) {
 			const detail = control.querySelector('small'); if (detail) label(detail, reason || (kind === 'interceptor' ? '3 fighters · start docked' : '1 gunship · draws enemy fire'));
 		}
 		label(ui.escorts, `${craftCount(state)} / 9 CRAFT`);
-		const canvasHelp = `Tactical view. Click a numbered mount to build. Click an enemy for turret priority. Use tactical radar to allocate escort coverage. Left-drag, right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
+		const canvasHelp = `Tactical view. Click a friendly hull or use Fleet to follow any ship. Click a numbered mount to build. Click an enemy for turret priority. Use tactical radar to allocate escort coverage. Left-drag, right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
 		if (canvas.getAttribute('aria-label') !== canvasHelp) canvas.setAttribute('aria-label', canvasHelp);
 		label(ui.depart, 'Launch passage →');
 		ui.depart.setAttribute('aria-label', 'Launch scouted passage');
