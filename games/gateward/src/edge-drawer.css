@@ -73,3 +73,18 @@
 .fleet-list b,.fleet-list small { display:block; }
 .fleet-list small { margin-top:4px; font-size:12px; line-height:1.4; }
 .fleet-list button[aria-pressed="true"],.fleet-list button[aria-pressed="true"]:hover { background:var(--mint); color:#0c252c; }
+
+/* Compact world-selection actions, separate from the advanced systems drawer. */
+#context-actions { position:absolute; z-index:4; width:280px; max-width:calc(100% - 96px); max-height:calc(100% - 220px); overflow:auto; padding:10px; border:1px solid #83c5cf; border-radius:10px; background:var(--panel); box-shadow:0 8px 24px #0009; pointer-events:auto; }
+#context-actions[hidden] { display:none; }
+#context-actions header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+#context-actions header button { min-width:44px; min-height:44px; }
+#context-actions p { font-size:12px; line-height:1.45; margin:6px 0 10px; }
+.context-buttons { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.context-buttons button { min-height:44px; font-size:12px; padding:7px; }
+@media(max-width:600px) {
+	#context-actions { width:260px; max-height:calc(100% - 240px); }
+}
+@media(max-height:500px) {
+	#context-actions { max-height:calc(100% - 120px); }
+}
