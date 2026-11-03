@@ -8,7 +8,7 @@ import { ACESFilmicToneMapping, AdditiveBlending, BufferAttribute, BufferGeometr
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnemy, createEscort, createTurret, disposeObject, type TurretVisual } from './actors-3d';
-import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, offsetView, pickEnemy, pickMount, resizeView, toScreen, toWorld, translateView, TURRET_HEIGHT, viewFor, type View } from './projection';
+import { DECK_HEIGHT, edgeIndicator, FLIGHT_HEIGHT, mountHeight, offsetView, pickEnemy, pickMount, resizeView, toScreen, toWorld, TURRET_HEIGHT, viewFor, type View } from './projection';
 import { beaconFor, CRUISE_SPEED, journeyFor } from './journey';
 import { createConvoyState, coverageFor, ESCORTS, interdictionReason, type Enemy, type Point, type State } from './simulation';
 import { SHIELD_CENTER, SHIELD_RADII } from './ship-config';
@@ -19,14 +19,17 @@ import { enemyVisibility } from './enemy-visibility';
 import { INTERDICTION_CONFIG } from './interdiction';
 import { mountWorld, worldPoint } from './space';
 import { drawTacticalRing } from './tactical-ring';
+import { focusedShip, type FleetFocus } from './fleet-focus';
 
-type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'hull' };
-export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined; slot?: Formation }
+type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'fleet'; id: FleetFocus };
+export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined; slot?: Formation; fleet?: FleetFocus }
 export interface Presentation {
 	render: (state: State, selected: number, reducedMotion: boolean, controlsEnabled: boolean, placement?: Point, screenOffsetY?: number, screenOffsetX?: number, selectedSlot?: Formation) => void;
 	pick: (point: Point, state: State) => PickResult;
 	placementPoint: (point: Point) => Point | undefined;
 	resetCamera: () => void;
+	focusShip: (id: FleetFocus) => void;
+	getFocus: () => FleetFocus;
 	cancelInteraction: () => void;
 	getView: () => View;
 	dispose: () => void;
@@ -117,7 +120,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			targets.set(anchor, { kind: 'mount', index });
 		}
 		ark.traverse(function (object) { if (object instanceof Mesh) { object.castShadow = true; object.receiveShadow = true; } });
-		targets.set(ark, { kind: 'hull' });
+		targets.set(ark, { kind: 'fleet', id: 'ark' });
 	} catch (error: unknown) { cleanup(); throw error; }
 
 	const light = new DirectionalLight('#f6f0e4', 3.2);
@@ -160,7 +163,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		for (const platform of state.convoy?.platforms ?? []) {
 			if (platforms.has(platform.id)) continue;
 			const hull = new Mesh(new IcosahedronGeometry(1, 0), new MeshStandardMaterial({ color: '#6e929c', metalness: 0.4, roughness: 0.6 }));
-			carrier.add(hull); platforms.set(platform.id, hull); targets.set(hull, { kind: 'hull' }); labelsDirty = true;
+			carrier.add(hull); platforms.set(platform.id, hull); targets.set(hull, { kind: 'fleet', id: `platform:${platform.id}` }); labelsDirty = true;
 		}
 	};
 	const drives = [1, 2, 3, 4].map(function (index) { return ark.getObjectByName(`Drive_${String(index).padStart(2, '0')}`); });
@@ -208,13 +211,15 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		course.geometry.dispose(); course.geometry = new BufferGeometry().setFromPoints([new Vector3(-1600, -8, 0), new Vector3(end, -8, 0)]);
 		course.position.set(state.routeOrigin.x, 0, state.routeOrigin.y); course.computeLineDistances();
 	};
-	let cameraAnchor: Point = { x: 0, y: 0 };
+	const cameraAnchor = new Vector3();
+	let focus: FleetFocus = 'ark';
 	let carrierAngle = 0;
-	const followArk = function (state: State) {
-		if (cameraAnchor.x !== state.ark.x || cameraAnchor.y !== state.ark.y) {
-			translateView(view, cameraAnchor, state.ark);
-			controls.target.x += state.ark.x - cameraAnchor.x; controls.target.z += state.ark.y - cameraAnchor.y;
-			cameraAnchor = { x: state.ark.x, y: state.ark.y }; labelsDirty = true;
+	const followFleet = function (state: State) {
+		const ship = focusedShip(state, focus); focus = ship.id;
+		const anchor = new Vector3(ship.point.x, ship.elevation, ship.point.y);
+		if (!cameraAnchor.equals(anchor)) {
+			view.camera.position.add(anchor.clone().sub(cameraAnchor));
+			controls.target.copy(anchor); cameraAnchor.copy(anchor); labelsDirty = true;
 		}
 		if (carrierAngle !== state.ark.angle) { carrierAngle = state.ark.angle; labelsDirty = true; }
 		carrier.position.set(state.ark.x, 0, state.ark.y); carrier.rotation.y = -state.ark.angle;
@@ -330,7 +335,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			if (view.camera.view?.offsetX !== screenOffsetX) {
 				view.camera.setViewOffset(view.width, view.height, screenOffsetX, screenOffsetY - view.height * 0.02, view.width, view.height); labelsDirty = true;
 			}
-			followArk(state); updateRoute(state); controls.enabled = controlsEnabled; controls.update();
+			followFleet(state); updateRoute(state); controls.enabled = controlsEnabled; controls.update();
 			syncFleet(state);
 			formation.visible = !!state.convoy && state.status === 'fitting';
 			for (const { slot, marker } of slotMarkers) {
@@ -391,8 +396,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			}
 			for (const enemy of state.enemies) { let model = enemyModels.get(enemy.id); if (!model) { model = createEnemy(enemy, enemyCarrier); enemyModels.set(enemy.id, model); targets.set(model, { kind: 'enemy', id: enemy.id }); scene.add(model); } model.visible = enemyVisibility(state, enemy) === 'model'; updateCraftTurrets(model, enemy.turretAim); model.position.set(enemy.x, FLIGHT_HEIGHT + (enemy.z ?? 0), enemy.y); model.rotation.y = -(enemy.flight?.angle ?? Math.atan2(state.ark.y - enemy.y, state.ark.x - enemy.x)); model.rotation.z = enemy.flight?.pitch ?? 0; }
 			const liveEscorts = new Set(state.escorts.map(function (escort) { return escort.id; }));
-			for (const [id, model] of escortModels) if (!liveEscorts.has(id)) { scene.remove(model); disposeObject(model); escortModels.delete(id); }
-			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); scene.add(model); } updateCraftTurrets(model, escort.turretAim); model.position.set(escort.x, FLIGHT_HEIGHT + (escort.z ?? 0), escort.y); model.rotation.y = -escort.angle; model.rotation.z = escort.flight?.pitch ?? 0; }
+			for (const [id, model] of escortModels) if (!liveEscorts.has(id)) { scene.remove(model); targets.delete(model); disposeObject(model); escortModels.delete(id); }
+			for (const escort of state.escorts) { let model = escortModels.get(escort.id); if (!model) { model = createEscort(escort); escortModels.set(escort.id, model); targets.set(model, { kind: 'fleet', id: `escort:${escort.id}` }); scene.add(model); } updateCraftTurrets(model, escort.turretAim); model.position.set(escort.x, FLIGHT_HEIGHT + (escort.z ?? 0), escort.y); model.rotation.y = -escort.angle; model.rotation.z = escort.flight?.pitch ?? 0; }
 			if (state.shots.length > shotCapacity) { shotGeometry.dispose(); shotCapacity = state.shots.length * 2; shotPositions = new Float32Array(shotCapacity * 6); shotColors = new Float32Array(shotCapacity * 6); shotGeometry.setAttribute('position', new BufferAttribute(shotPositions, 3)); shotGeometry.setAttribute('color', new BufferAttribute(shotColors, 3)); }
 			const liveShots = new Set(state.shots.map(function (shot) { return shot.id; }));
 			for (const id of trajectories.keys()) if (!liveShots.has(id)) trajectories.delete(id);
@@ -415,23 +420,26 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			scene.updateMatrixWorld(true); updateVisibility(state); renderer.render(scene, view.camera); drawLabels(state, selected, selectedSlot);
 		},
 		pick: function (point, state) {
-			resize(); followArk(state); controls.update(); scene.updateMatrixWorld(true); updateVisibility(state);
-			const roots = [...arkRoots(), ...enemyModels.values(), ...detectedMarkers.values()];
+			resize(); followFleet(state); controls.update(); scene.updateMatrixWorld(true); updateVisibility(state);
+			const roots = [...arkRoots(), ...escortModels.values(), ...enemyModels.values(), ...detectedMarkers.values()];
 			const direct = hit(point, roots);
 			let mount = direct?.kind === 'mount' ? direct.index : -1;
 			let enemy = direct?.kind === 'enemy' ? state.enemies.find(function (candidate) { return candidate.id === direct.id; }) : undefined;
-			if (mount < 0 && !enemy) { const candidate = pickMount(point, view, state.mounts.map(function (mount) { return { ...mount, ...mountWorld(state, mount) }; })); if (candidate >= 0 && mountVisibility[candidate]) mount = candidate; }
-			if (mount < 0 && !enemy) { const candidate = pickEnemy(point, view, state.enemies); if (candidate) { const center = hit(toScreen(candidate, view, FLIGHT_HEIGHT + (candidate.z ?? 0)), roots); if (center?.kind === 'enemy' && center.id === candidate.id) enemy = candidate; } }
-			const slot = mount < 0 && !enemy && state.convoy && state.status === 'fitting' ? FORMATION.filter(function (candidate) {
+			const fleet = direct?.kind === 'fleet' ? direct.id : undefined;
+			if (mount < 0 && !enemy && !fleet?.startsWith('escort:')) { const candidate = pickMount(point, view, state.mounts.map(function (mount) { return { ...mount, ...mountWorld(state, mount) }; })); if (candidate >= 0 && mountVisibility[candidate]) mount = candidate; }
+			if (mount < 0 && !enemy && !fleet) { const candidate = pickEnemy(point, view, state.enemies); if (candidate) { const center = hit(toScreen(candidate, view, FLIGHT_HEIGHT + (candidate.z ?? 0)), roots); if (center?.kind === 'enemy' && center.id === candidate.id) enemy = candidate; } }
+			const slot = mount < 0 && !enemy && !fleet && state.convoy && state.status === 'fitting' ? FORMATION.filter(function (candidate) {
 				return !state.convoy?.platforms.some(function (platform) { return platform.slot === candidate; });
 			}).map(function (candidate) {
 				const screen = toScreen(worldPoint(state, FORMATION_SLOTS[candidate]), view, DECK_HEIGHT);
 				return { slot: candidate, distance: Math.hypot(screen.x - point.x, screen.y - point.y) };
 			}).sort(function (a, b) { return a.distance - b.distance; }).find(function (candidate) { return candidate.distance <= 26; })?.slot : undefined;
-			return { mount, enemy, world: toWorld(point, view), ...(slot === undefined ? {} : { slot }) };
+			return { mount, enemy, world: toWorld(point, view), ...(slot === undefined ? {} : { slot }), ...(fleet === undefined ? {} : { fleet }) };
 		},
 		placementPoint: function (point) { resize(); return toWorld(point, view, FLIGHT_HEIGHT); },
-		resetCamera: function () { controls.reset(); translateView(view, { x: 0, y: 0 }, cameraAnchor); controls.target.set(cameraAnchor.x, 0, cameraAnchor.y); controls.update(); labelsDirty = true; },
+		resetCamera: function () { focus = 'ark'; controls.reset(); cameraAnchor.set(0, 0, 0); labelsDirty = true; },
+		focusShip: function (id) { focus = id; },
+		getFocus: function () { return focus; },
 		cancelInteraction: function () { controls.disconnect(); controls.connect(canvas); },
 		getView: function () { return view; },
 		dispose: cleanup,
