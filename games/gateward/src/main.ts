@@ -1,3 +1,4 @@
+import { createContextActions } from './context-actions';
 import { createShipyardPanel } from './shipyard-panel';
 import { createFleetPanel } from './fleet-panel';
 import type { FleetFocus } from './fleet-focus';
@@ -72,12 +73,13 @@ const shutdown = await mountGame('game', async function (container) {
 		button('open-radar').setAttribute('aria-expanded', String(open));
 		pointers.clear(); multiTouch = false; placement = undefined; presentation.cancelInteraction();
 		for (const child of container.children) if (child instanceof HTMLElement && child !== radarHost && child !== ui.pausePanel && child !== ui.result && child !== ui.brief) child.inert = open;
-		if (open) { closeInspector(); radar.update(); radar.focus(); }
+		if (open) { contextActions.close(); closeInspector(); radar.update(); radar.focus(); }
 		else button('open-radar').focus({ preventScroll: true });
 	};
 	let inspectorReturn: HTMLElement | undefined;
 	const openInspector = function (view: Inspector) {
 		if (!available()) return;
+		contextActions.close();
 		if (!inspector) inspectorReturn = document.activeElement instanceof HTMLElement ? document.activeElement : element('coverage-tab');
 		pointers.clear(); multiTouch = false; presentation.cancelInteraction();
 		inspector = view; lastInspector = view; element('inspector').hidden = false; container.dataset['inspectorOpen'] = 'true';
@@ -98,7 +100,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const setPause = function (value: boolean) {
 		if (briefing || state.status === 'won' || state.status === 'lost') return;
 		if (!value && !contextAvailable) return;
-		if (value) { pointers.clear(); multiTouch = false; presentation.cancelInteraction(); }
+		if (value) { contextActions.close(); pointers.clear(); multiTouch = false; presentation.cancelInteraction(); }
 		audio.setActive(!value && state.focused && !document.hidden && contextAvailable);
 		ui.pausePanel.inert = false; radarHost.inert = value;
 		paused = value; state.paused = value; placement = undefined; accumulator = 0; ui.pausePanel.hidden = !paused;
@@ -131,7 +133,7 @@ const shutdown = await mountGame('game', async function (container) {
 	canvas.addEventListener('webglcontextrestored', function () { contextAvailable = true; notify(state, 'Display restored. Resume when ready.'); }, options);
 	button('reset-camera').addEventListener('click', function () { presentation.resetCamera(); if (!paused) focusCanvas(); }, options);
 	const restart = function () {
-		audio.reset();
+		contextActions.close(); audio.reset();
 		setRadar(false); radar.reset();
 		pointers.clear(); multiTouch = false;
 		placement = undefined; state = newState(); selected = 0; paused = false; briefing = false; speed = 1; accumulator = 0;
@@ -150,6 +152,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (platform) shipyard.select(platform.slot);
 	};
 	const shipyard = createShipyardPanel(element('platform-formation'), function () { return state; }, available, order, function (index) { selectMount(index); inspectedContact = undefined; placement = undefined; openInspector('mounts'); element('mount-title').scrollIntoView({ block: 'nearest' }); }, abort.signal);
+	const contextActions = createContextActions(container, { state: function () { return state; }, active: available, order, mount: selectMount, slot: shipyard.select, inspect: openInspector, follow: focusShip, focus: focusCanvas }, abort.signal);
 	const cancelPlacement = function () { placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction(); };
 	const aimPlacement = function (point: Point) {
 		if (!available()) return;
@@ -176,9 +179,9 @@ const shutdown = await mountGame('game', async function (container) {
 	button('repair-sensors').addEventListener('click', function () { order(function () { return repairSensors(state); }); }, options);
 	ui.depart.addEventListener('click', function () {
 		if (!available() || state.status !== 'fitting') return;
-		if (launchPassage(state)) { closeInspector(); accumulator = 0; focusCanvas(); }
+		if (launchPassage(state)) { contextActions.close(); closeInspector(); accumulator = 0; focusCanvas(); }
 	}, options);
-	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; openInspector('mounts'); focusCanvas(); }, options);
+	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; closeInspector(); focusCanvas(); }, options);
 	button('prepare').disabled = false;
 
 	const radar = createRadar(radarHost, function () { return state; }, available, { close: function () { setRadar(false); }, pause: function () { setPause(true); }, repair: function () { order(function () { return repairSensors(state); }); }, selectedMount: function () { return selected; } }, abort.signal);
@@ -226,13 +229,23 @@ const shutdown = await mountGame('game', async function (container) {
 			focusCanvas(); return;
 		}
 		const { mount, enemy, slot, fleet } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
-		if (slot) { shipyard.select(slot); inspectedContact = undefined; openInspector('mounts'); element('platform-formation').scrollIntoView({ block: 'nearest' }); }
-		else if (mount >= 0) { selectMount(mount); inspectedContact = undefined; openInspector('mounts'); }
+		const x = event.clientX - rect.left; const y = event.clientY - rect.top;
+		const pickedPlatform = state.convoy?.platforms.find(function (p) { return fleet === `platform:${p.id}` || mount >= 0 && state.mounts[mount]?.platform === p.id; });
+		const destination = slot ?? pickedPlatform?.slot;
+		if (destination && contextActions.moveTo(destination)) { focusCanvas(); return; }
+		if (slot) { closeInspector(); inspectedContact = undefined; contextActions.show({ kind: 'slot', slot }, x, y); }
+		else if (mount >= 0) { closeInspector(); inspectedContact = undefined; contextActions.show({ kind: 'mount', index: mount }, x, y); }
 		else if (enemy) {
-			if (setPriority(state, enemy.id)) { inspectedContact = enemy.id; openInspector('contact'); notify(state, `Priority target: ${contactIntel(state, enemy) === 'classified' ? enemy.kind : 'unclassified contact'}. Eligible weapons in range and coverage will focus fire.`); }
-			else notify(state, 'Contact outside sensor range. Nearby defense remains automatic.');
+			if (setPriority(state, enemy.id)) { closeInspector(); inspectedContact = enemy.id; contextActions.show({ kind: 'enemy', id: enemy.id }, x, y); notify(state, `Priority target: ${contactIntel(state, enemy) === 'classified' ? enemy.kind : 'unclassified contact'}. Eligible weapons in range and coverage will focus fire.`); }
+			else { contextActions.close(); notify(state, 'Contact outside sensor range. Nearby defense remains automatic.'); }
 		}
-		else if (fleet) focusShip(fleet);
+		else if (fleet) {
+			closeInspector();
+			const platform = state.convoy?.platforms.find(function (p) { return fleet === `platform:${p.id}`; });
+			if (platform) contextActions.show({ kind: 'slot', slot: platform.slot }, x, y);
+			else contextActions.show({ kind: 'fleet', id: fleet }, x, y);
+		}
+		else contextActions.close();
 		focusCanvas();
 	};
 	canvas.addEventListener('pointerup', function (event) { releasePointer(event, false); }, options);
@@ -257,6 +270,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'Escape' && radarOpen && !paused) { event.preventDefault(); setRadar(false); return; }
 		if (event.code === 'KeyT' && available()) { event.preventDefault(); setRadar(!radarOpen); return; }
 		if (event.code === 'Escape' && placement) { event.preventDefault(); cancelPlacement(); return; }
+		if (event.code === 'Escape' && contextActions.isOpen() && !paused) { event.preventDefault(); contextActions.close(); focusCanvas(); return; }
 		if (event.code === 'Escape' && inspector && !paused) { event.preventDefault(); closeInspector(); return; }
 		if (event.code === 'Escape' || event.code === 'Space') { event.preventDefault(); setPause(!paused); return; }
 		if (!available()) return;
@@ -291,6 +305,7 @@ const shutdown = await mountGame('game', async function (container) {
 			const sideTop = `${Math.ceil(Math.max(sensorFeed.getBoundingClientRect().bottom, ui.pause.getBoundingClientRect().bottom) - container.getBoundingClientRect().top) + 8}px`;
 			if (container.style.getPropertyValue('--side-top') !== sideTop) container.style.setProperty('--side-top', sideTop);
 		}
+		contextActions.update();
 		drawerCoverage.update(); fleetPanel(); escortPanel(); engineeringPanel(); interdictionPanel(); canvas.classList.toggle('placing-field', !!placement);
 		const modal = briefing ? ui.brief : paused ? ui.pausePanel : !ui.result.hidden ? ui.result : radarOpen ? radarHost : undefined;
 		for (const child of container.children) if (child instanceof HTMLElement) child.inert = !!modal && child !== modal;
@@ -367,7 +382,7 @@ const shutdown = await mountGame('game', async function (container) {
 			const detail = control.querySelector('small'); if (detail) label(detail, reason || (kind === 'interceptor' ? '3 fighters · start docked' : '1 gunship · draws enemy fire'));
 		}
 		label(ui.escorts, `${craftCount(state)} / 9 CRAFT`);
-		const canvasHelp = `Tactical view. Click a friendly hull or use Fleet to follow any ship. Click a numbered mount to build. Click an enemy for turret priority. Use tactical radar to allocate escort coverage. Left-drag, right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
+		const canvasHelp = `Tactical view. Click a friendly hull for orders or use Fleet to follow any ship. Click a numbered mount for fitting actions. Click an enemy for turret priority. Use tactical radar to allocate escort coverage. Left-drag, right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
 		if (canvas.getAttribute('aria-label') !== canvasHelp) canvas.setAttribute('aria-label', canvasHelp);
 		label(ui.depart, 'Launch passage →');
 		ui.depart.setAttribute('aria-label', 'Launch scouted passage');
@@ -386,12 +401,12 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.coverage.disabled = !active; label(element('escort-help'), 'Fighters start docked. Scramble all to launch using radar coverage; Recall all to return and hold aboard. Replace losses while docked or rearming.');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
 		label(element('coverage-setting'), 'Convoy passage · 120° outward coverage');
-		label(ui.hint, state.status === 'fitting' ? 'BUILD PHASE · Select a ring position to build · Fit turrets · Launch when ready' : placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Radar for escort coverage · Click hostile to focus');
+		label(ui.hint, state.status === 'fitting' ? 'BUILD · Click a ring to build · Click a mount to fit · Select a ship to move / swap' : placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Radar for escort coverage · Click hostile to focus');
 		label(ui.message, state.messageTime > 0 ? state.message : ''); label(ui.speed, `${speed}×`); ui.speed.disabled = briefing || !contextAvailable || !state.focused || state.status === 'won' || state.status === 'lost';
 		label(ui.pause, paused ? 'Resume' : 'Menu'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
 	};
 	const showResult = function () {
-		setRadar(false);
+		contextActions.close(); setRadar(false);
 		ui.result.hidden = false; placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
 		label(element('result-title'), state.status === 'won' ? 'CONVOY PASSAGE COMPLETE.' : 'CONVOY PASSAGE LOST.');
 		const summary = systemsSummary(state);
@@ -410,7 +425,7 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const controller = createControllerUI(container, {
 		toggleDrawer: function () { if (!available() || radarOpen) return; if (inspector) closeInspector(); else { openInspector(lastInspector); button('close-inspector').focus(); } },
-		back: function () { if (paused) setPause(false); else if (radarOpen) setRadar(false); else if (placement) cancelPlacement(); else if (inspector) closeInspector(); },
+		back: function () { if (paused) setPause(false); else if (radarOpen) setRadar(false); else if (placement) cancelPlacement(); else if (contextActions.isOpen()) { contextActions.close(); focusCanvas(); } else if (inspector) closeInspector(); },
 		nextTab: function (direction) {
 			if (!available() || radarOpen) return;
 			const tabs = [...container.querySelectorAll<HTMLButtonElement>('.edge-tabs button')].filter(function (node) { return !node.hidden; });
