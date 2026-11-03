@@ -66,7 +66,7 @@ choices remain useful. Balance and feel are provisional.
 ## Controls and secondary systems
 
 Mouse/touch: use Fit to select mounts, buy/sell/upgrade, choose formation and
-launch. Right-drag or touch-drag orbits; wheel or pinch zooms. Reset view restores
+launch. Left-drag, right-drag or touch-drag orbits; wheel or pinch zooms. Reset view restores
 the camera. Keyboard: Tab/Shift-Tab and Enter operate every build and formation
 control; 1–8 select ark mounts. All twelve mounts have accessible named buttons.
 Space pauses; Escape cancels placement, closes the drawer, then pauses.
