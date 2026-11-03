@@ -57,9 +57,9 @@ export interface Wing { id: number; phase: 'ready' | 'launching' | 'sortie' | 'r
 export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
 export interface Platform { id: number; slot: Formation; hull: HullKind; hp: number }
 export const PASSAGES = [
-	{ name: 'Port battery', scout: 'Heavy battery to port; fighters pursue from aft. Port railguns and aft flak are one answer.', threats: [{ kind: 'armored', x: 300, y: -1500 }, { kind: 'raider', x: -1600, y: -90 }, { kind: 'raider', x: -1700, y: 90 }, { kind: 'raider', x: -1800, y: 0 }] },
-	{ name: 'Crossfire', scout: 'Starboard armor with port bombers. Cover both flanks or concentrate long-range fire.', threats: [{ kind: 'armored', x: 500, y: 1400 }, { kind: 'armored', x: 750, y: 1500 }, { kind: 'bomber', x: 200, y: -1500 }, { kind: 'bomber', x: -100, y: -1400 }] },
-	{ name: 'Gate approach', scout: 'Heavy defense ahead; fighters close from aft. Survive the final passage to arrive.', threats: [{ kind: 'flagship', x: 2100, y: -300 }, { kind: 'raider', x: -1600, y: 100 }, { kind: 'raider', x: -1700, y: -100 }, { kind: 'bomber', x: 550, y: 1400 }] },
+	{ name: 'Port battery', scout: 'Armor and fighters form ahead along the route. Cover the bow on approach and port as they fall alongside.', threats: [{ kind: 'armored', x: 900, y: -360 }, { kind: 'raider', x: 1100, y: -180 }, { kind: 'raider', x: 1100, y: 180 }, { kind: 'raider', x: 1300, y: 0 }] },
+	{ name: 'Crossfire', scout: 'Paired armor and bombers wait ahead in staggered rows. Cover the bow and both flanks as the convoy closes.', threats: [{ kind: 'armored', x: 900, y: 360 }, { kind: 'armored', x: 1150, y: 420 }, { kind: 'bomber', x: 1000, y: -260 }, { kind: 'bomber', x: 1300, y: -340 }] },
+	{ name: 'Gate approach', scout: 'A flagship leads a forward formation of fighters and a bomber. Cover the approach and sustain fire as they fall alongside.', threats: [{ kind: 'flagship', x: 1400, y: -420 }, { kind: 'raider', x: 950, y: 180 }, { kind: 'raider', x: 1150, y: -180 }, { kind: 'bomber', x: 1300, y: 340 }] },
 ] as const;
 export const PASSAGE_SECONDS = 45;
 export const PLATFORM_HP = 240;
@@ -172,7 +172,7 @@ export const launchPassage = function (state: State): boolean {
 	state.status = 'running'; state.wave++; convoy.elapsed = 0; state.cleared = false;
 	for (const threat of passage.threats) {
 		const config = ENEMIES[threat.kind]; const point = worldPoint(state, threat);
-		state.enemies.push({ ...point, ...(threat.kind === 'armored' || threat.kind === 'flagship' ? { station: { ...point } } : {}), id: state.nextId++, kind: threat.kind, hp: config.hp, maxHp: config.hp, cooldown: 1 });
+		state.enemies.push({ ...point, spawn: { point: { ...point }, side: threat.y < 0 ? -1 : 1, distance: state.systems.distanceTraveled, activated: true }, flight: createFlight(threat, { x: Math.cos(state.ark.angle), y: Math.sin(state.ark.angle) }, 0, state.nextId), id: state.nextId++, kind: threat.kind, hp: config.hp, maxHp: config.hp, cooldown: 1 });
 	}
 	notify(state, `${passage.name}: automatic passage underway. Survive ${PASSAGE_SECONDS}s.`); return true;
 };
@@ -686,6 +686,15 @@ export const step = function (state: State, dt: number) {
 			: approaching ? arriveCourse(enemy, destination, carrierVelocity, 0.5)
 			: isCapital(enemy) ? capitalCourse(state, enemy, flight, config.range, config.speed)
 			: fighterCourse(enemy, escort ?? state.ark, tactical(escort ? 60 : enemy.kind === 'bomber' ? 265 : 195), tactical(escort ? 60 : enemy.kind === 'bomber' ? 225 : 105), config.speed, enemy.id % 2 ? -1 : 1, escort ? flightVelocity(escort.flight) : carrierVelocity, state.enemies);
+		// Let the convoy close on route formations before joining their attack
+		// course. A backwards intercept here would undo the forward deployment.
+		if (state.convoy && spawn?.activated && !hold && !waypoint && !escort && relative.x > tactical(90) && state.ark.speed > 0) {
+			const c = Math.cos(state.ark.angle); const s = Math.sin(state.ark.angle);
+			const forward = Math.max(state.ark.speed * 0.35, desired.x * c + desired.y * s);
+			const lateral = -desired.x * s + desired.y * c;
+			desired.x = forward * c - lateral * s;
+			desired.y = forward * s + lateral * c;
+		}
 		desired.z = (altitudeCourse(enemy.id, state.time, isCapital(enemy), escort ?? (isCapital(enemy) ? state.ark : { ...state.ark, z: -45 })) - (enemy.z ?? 0)) * 0.8;
 		const hull = neighbors.find(function (hull) { return hull.id === enemy.id; });
 		fly(enemy, flight, hull ? avoidTraffic(hull, desired, neighbors, flightSpeed) : desired, flightSpeed, isCapital(enemy) ? 0.7 : 3, dt, !isCapital(enemy), false, isCapital(enemy) ? flightSpeed / CAPITAL_SPEED_SCALE : flightSpeed, smallCraft ? SMALL_CRAFT_SPEED_SCALE : 1);
