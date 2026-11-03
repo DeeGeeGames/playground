@@ -1,3 +1,5 @@
+import { FORMATION, FORMATION_SLOTS, HULLS, type Formation, type HullKind } from './formation';
+export { FORMATION, FORMATION_SLOTS, FORMATION_RADII, HULLS, type Formation, type HullKind } from './formation';
 import { CAPITAL_SPEED_SCALE, ENEMIES } from './enemy-config';
 export { ENEMIES } from './enemy-config';
 import { tactical } from './combat-scale';
@@ -53,9 +55,7 @@ export type Sector = typeof SECTORS[number];
 export const SECTOR_POINTS: Record<Sector, Point> = { port: { x: 0, y: -tactical(230) }, starboard: { x: 0, y: tactical(230) }, ahead: { x: tactical(280), y: 0 }, astern: { x: -tactical(280), y: 0 } };
 export interface Wing { id: number; phase: 'ready' | 'launching' | 'sortie' | 'returning' | 'rearming'; timer: number; craft: Escort[]; assignment: Sector; }
 export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
-export const FORMATION = ['ahead', 'astern', 'port', 'starboard'] as const;
-export type Formation = typeof FORMATION[number];
-export interface Platform { id: number; slot: Formation; hp: number }
+export interface Platform { id: number; slot: Formation; hull: HullKind; hp: number }
 export const PASSAGES = [
 	{ name: 'Port battery', scout: 'Heavy battery to port; fighters pursue from aft. Port railguns and aft flak are one answer.', threats: [{ kind: 'armored', x: 300, y: -1500 }, { kind: 'raider', x: -1600, y: -90 }, { kind: 'raider', x: -1700, y: 90 }, { kind: 'raider', x: -1800, y: 0 }] },
 	{ name: 'Crossfire', scout: 'Starboard armor with port bombers. Cover both flanks or concentrate long-range fire.', threats: [{ kind: 'armored', x: 500, y: 1400 }, { kind: 'armored', x: 750, y: 1500 }, { kind: 'bomber', x: 200, y: -1500 }, { kind: 'bomber', x: -100, y: -1400 }] },
@@ -119,7 +119,7 @@ export const createState = function (): State {
 export const createConvoyState = function (): State {
 	const state = createState();
 	state.salvage = 650;
-	state.convoy = { platforms: [{ id: 0, slot: 'port', hp: PLATFORM_HP }, { id: 1, slot: 'astern', hp: PLATFORM_HP }], elapsed: 0 };
+	state.convoy = { platforms: [{ id: 0, slot: 'port', hull: 'frigate', hp: PLATFORM_HP }, { id: 1, slot: 'astern', hull: 'frigate', hp: PLATFORM_HP }], elapsed: 0 };
 	for (const platform of state.convoy.platforms) {
 		for (const offset of [-20, 20]) state.mounts.push({ platform: platform.id, x: offset, y: 0, integrity: 100, weapon: undefined, level: 0, cooldown: 0, aim: 0 });
 	}
@@ -129,14 +129,34 @@ export const createConvoyState = function (): State {
 };
 const positionPlatforms = function (state: State) {
 	for (const platform of state.convoy?.platforms ?? []) {
-		const station = SECTOR_POINTS[platform.slot];
+		const station = FORMATION_SLOTS[platform.slot];
 		const facing = Math.atan2(station.y, station.x);
 		const mounts = state.mounts.filter(function (mount) { return mount.platform === platform.id; });
 		for (const [index, mount] of mounts.entries()) {
-			mount.x = station.x + (index === 0 ? -20 : 20); mount.y = station.y;
+			const offset = mounts.length === 1 ? 0 : mounts.length === 2 ? (index === 0 ? -20 : 20) : (index % 2 === 0 ? -24 : 24);
+			mount.x = station.x + offset; mount.y = station.y + (mounts.length === 4 ? (index < 2 ? -20 : 20) : 0);
 			mount.facing = facing; mount.aim = facing;
 		}
 	}
+};
+// A hull cannot consume the last funds needed to arm the convoy and launch.
+export const constructionCostRequirement = function (state: State, hull: HullKind): number {
+	const weaponReserve = state.mounts.some(function (mount) { return !!mount.weapon; }) ? 0 : Math.min(...Object.values(WEAPONS).map(function (weapon) { return weapon.cost; }));
+	return HULLS[hull].cost + weaponReserve;
+};
+// Construction appends mounts so existing selections and equipment ownership stay stable.
+export const constructPlatform = function (state: State, slot: Formation, hull: HullKind): boolean {
+	const convoy = state.convoy;
+	if (!convoy || !canOrder(state) || state.status !== 'fitting' || !FORMATION.includes(slot) || !Object.hasOwn(HULLS, hull)) return false;
+	const config = HULLS[hull];
+	if (state.salvage < constructionCostRequirement(state, hull) || convoy.platforms.some(function (platform) { return platform.slot === slot; })) return false;
+	const id = convoy.platforms.reduce(function (next, platform) { return Math.max(next, platform.id + 1); }, 0);
+	convoy.platforms.push({ id, slot, hull, hp: config.hp });
+	for (let mount = 0; mount < config.mounts; mount++) state.mounts.push({ platform: id, x: 0, y: 0, integrity: 100, weapon: undefined, level: 0, cooldown: 0, aim: 0 });
+	state.salvage -= config.cost;
+	positionPlatforms(state);
+	notify(state, `${config.name} constructed. Select its ${config.mounts} turret ${config.mounts === 1 ? 'mount' : 'mounts'} to fit weapons.`);
+	return true;
 };
 export const arrangePlatform = function (state: State, id: number, slot: Formation): boolean {
 	if (!canOrder(state) || state.status !== 'fitting' || !FORMATION.includes(slot)) return false;
@@ -675,7 +695,7 @@ export const step = function (state: State, dt: number) {
 		const escortSolution = escort ? hostileSolution(enemy, escort, flightVelocity(escort.flight), shotSpeed) : undefined;
 		const firingEscort = escortSolution ? escort : undefined;
 		const componentAim = subsystemAimPoint(state, enemy.subsystemTarget ?? (enemy.kind === 'bomber' ? 'sensors' : ''), enemy);
-		const exposed = (state.convoy?.platforms ?? []).filter(function (platform) { return platform.hp > 0; }).map(function (platform) { return worldPoint(state, { ...SECTOR_POINTS[platform.slot], z: DECK_ALTITUDE }); }).sort(function (a, b) { return distance(enemy, a) - distance(enemy, b); })[0];
+		const exposed = (state.convoy?.platforms ?? []).filter(function (platform) { return platform.hp > 0; }).map(function (platform) { return worldPoint(state, { ...FORMATION_SLOTS[platform.slot], z: DECK_ALTITUDE }); }).sort(function (a, b) { return distance(enemy, a) - distance(enemy, b); })[0];
 		const platformTarget = exposed && distance(enemy, exposed) < distance(enemy, arkTarget) ? exposed : undefined;
 		const firingTarget = firingEscort ?? platformTarget ?? componentAim ?? arkTarget;
 		const solution = escortSolution ?? hostileSolution(enemy, platformTarget ?? componentAim ?? arkTarget, carrierVelocity, shotSpeed);
@@ -731,7 +751,7 @@ export const step = function (state: State, dt: number) {
 				}
 				effect(state, blocked, 20, '#d7bf89', shot); shot.life = 0; state.systems.interdiction.blockedShots++; continue;
 			}
-			const platformHit = state.convoy?.platforms.find(function (platform) { const point = worldPoint(state, { ...SECTOR_POINTS[platform.slot], z: DECK_ALTITUDE }); const previous = { ...point, x: point.x + previousArk.x - state.ark.x, y: point.y + previousArk.y - state.ark.y }; return platform.hp > 0 && movingContact(point, previous, before, shot, 48); });
+			const platformHit = state.convoy?.platforms.find(function (platform) { const point = worldPoint(state, { ...FORMATION_SLOTS[platform.slot], z: DECK_ALTITUDE }); const previous = { ...point, x: point.x + previousArk.x - state.ark.x, y: point.y + previousArk.y - state.ark.y }; return platform.hp > 0 && movingContact(point, previous, before, shot, HULLS[platform.hull].radius); });
 			if (platformHit) {
 				platformHit.hp = Math.max(0, platformHit.hp - shot.damage); shot.life = 0;
 				effect(state, shot, 30, '#ff897e');
@@ -770,7 +790,7 @@ export const step = function (state: State, dt: number) {
 		if (state.wave === PASSAGES.length) { state.status = 'won'; state.resultReason = 'arrival'; state.systems.distanceTraveled = state.systems.routeLength; }
 		else {
 			state.status = 'fitting'; state.salvage += 200; state.hull = Math.min(MAX_HULL, state.hull + 120);
-			for (const platform of state.convoy.platforms) platform.hp = PLATFORM_HP;
+			for (const platform of state.convoy.platforms) platform.hp = HULLS[platform.hull].hp;
 			for (const mount of state.mounts) mount.integrity = 100;
 			for (const id of ['engines', 'sensors', 'generator'] as const) state.systems[id].integrity = 100;
 			state.repairs = {}; notify(state, 'Passage survived. +200 salvage, +120 hull; equipment and platform chassis restored. Scout and launch when ready.');

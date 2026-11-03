@@ -1,3 +1,4 @@
+import { createShipyardPanel } from './shipyard-panel';
 import { createControllerUI } from './controller-ui';
 import { createRadarCoverage } from './radar-coverage';
 import { tactical } from './combat-scale';
@@ -7,7 +8,7 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { arrangePlatform, FORMATION, launchPassage, PASSAGES, PASSAGE_SECONDS, createConvoyState, build, contactWarning, craftCount, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, REPAIR_CREWS, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
+import { launchPassage, PASSAGES, PASSAGE_SECONDS, createConvoyState, build, contactWarning, craftCount, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, REPAIR_CREWS, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
 import { worldPoint } from './space';
 import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
@@ -38,18 +39,16 @@ const shutdown = await mountGame('game', async function (container) {
 		pulse: button('pulse'), pulseInfo: element('pulse-info'), pulseState: element('pulse-state'), repair: button('repair'), repairInfo: element('repair-info'),
 		brief: element('brief'), pausePanel: element('pause-panel'), result: element('result'), message: element('message'), hint: element('field-hint'), clear: button('clear-target'),
 	};
-	const mountButtons = Array.from({ length: 12 }, function (_, i) {
-		const control = document.createElement('button'); control.type = 'button'; control.setAttribute('aria-label', `Select mount ${i + 1}`);
-		control.addEventListener('click', function () { if (available()) { selected = i; inspectedContact = undefined; openInspector('mounts'); placement = undefined; } }, options);
-		element('mounts').append(control); return control;
-	});
-	const formationControls = [0, 1].map(function (id) {
-		const row = document.createElement('label'); row.textContent = `Platform ${id + 1} formation `;
-		const select = document.createElement('select'); select.setAttribute('aria-label', `Platform ${id + 1} formation`);
-		for (const slot of FORMATION) { const option = document.createElement('option'); option.value = slot; option.textContent = slot === 'ahead' ? 'Fore' : slot === 'astern' ? 'Aft' : slot; select.append(option); }
-		select.addEventListener('change', function () { const slot = FORMATION.find(function (value) { return value === select.value; }); if (slot) order(function () { return arrangePlatform(state, id, slot); }); }, options);
-		row.append(select); element('platform-formation').append(row); return select;
-	});
+	const mountButtons: HTMLButtonElement[] = [];
+	const syncMountButtons = function () {
+		while (mountButtons.length > state.mounts.length) mountButtons.pop()?.remove();
+		while (mountButtons.length < state.mounts.length) {
+			const i = mountButtons.length;
+			const control = document.createElement('button'); control.type = 'button';
+			control.addEventListener('click', function () { if (available()) { selectMount(i); inspectedContact = undefined; openInspector('mounts'); placement = undefined; } }, options);
+			element('mounts').append(control); mountButtons.push(control);
+		}
+	};
 	const buildButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-build]')];
 	const deployButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-deploy]')];
 	const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
@@ -136,6 +135,13 @@ const shutdown = await mountGame('game', async function (container) {
 		if (!action()) notify(state, 'Order unavailable. Check salvage, capacity, or cooldown.');
 		else { syncAudio(); audio.play('order'); }
 	};
+	const selectMount = function (index: number) {
+		selected = index;
+		const mount = state.mounts[index];
+		const platform = state.convoy?.platforms.find(function (platform) { return platform.id === mount?.platform; });
+		if (platform) shipyard.select(platform.slot);
+	};
+	const shipyard = createShipyardPanel(element('platform-formation'), function () { return state; }, available, order, function (index) { selectMount(index); inspectedContact = undefined; placement = undefined; openInspector('mounts'); element('mount-title').scrollIntoView({ block: 'nearest' }); }, abort.signal);
 	const cancelPlacement = function () { placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction(); };
 	const aimPlacement = function (point: Point) {
 		if (!available()) return;
@@ -211,8 +217,9 @@ const shutdown = await mountGame('game', async function (container) {
 			if (point) { placement = point; notify(state, 'Field preview updated. Enter or Place field confirms; Esc cancels.'); }
 			focusCanvas(); return;
 		}
-		const { mount, enemy } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
-		if (mount >= 0) { selected = mount; inspectedContact = undefined; openInspector('mounts'); }
+		const { mount, enemy, slot } = presentation.pick({ x: event.clientX - rect.left, y: event.clientY - rect.top }, state);
+		if (slot) { shipyard.select(slot); inspectedContact = undefined; openInspector('mounts'); element('platform-formation').scrollIntoView({ block: 'nearest' }); }
+		else if (mount >= 0) { selectMount(mount); inspectedContact = undefined; openInspector('mounts'); }
 		else if (enemy) {
 			if (setPriority(state, enemy.id)) { inspectedContact = enemy.id; openInspector('contact'); notify(state, `Priority target: ${contactIntel(state, enemy) === 'classified' ? enemy.kind : 'unclassified contact'}. Eligible weapons in range and coverage will focus fire.`); }
 			else notify(state, 'Contact outside sensor range. Nearby defense remains automatic.');
@@ -253,7 +260,7 @@ const shutdown = await mountGame('game', async function (container) {
 			if (event.code === 'Enter') { event.preventDefault(); confirmPlacement(); return; }
 		}
 		const index = ['Digit1','Digit2','Digit3','Digit4','Digit5','Digit6','Digit7','Digit8'].indexOf(event.code);
-		if (index >= 0) { selected = index; inspectedContact = undefined; openInspector('mounts'); cancelPlacement(); event.preventDefault(); }
+		if (index >= 0) { selectMount(index); inspectedContact = undefined; openInspector('mounts'); cancelPlacement(); event.preventDefault(); }
 		if (event.code === 'KeyQ') { event.preventDefault(); order(function () { return pulse(state); }); }
 		if (event.code === 'KeyE') { event.preventDefault(); order(function () { return repair(state); }); }
 		if (event.code === 'KeyS') { event.preventDefault(); order(function () { return repairSensors(state); }); }
@@ -324,11 +331,7 @@ const shutdown = await mountGame('game', async function (container) {
 		label(button('prepare'), 'PREPARE CONVOY PASSAGE →');
 		label(ui.wave, `PASSAGE ${Math.min(3, state.wave + (state.status === 'fitting' ? 1 : 0))} / 3 · ${state.status === 'fitting' ? 'BUILD' : 'UNDERWAY'}`);
 		label(element('passage-scout'), state.status === 'fitting' ? (PASSAGES[state.wave]?.scout ?? 'Kepler reached') : `${Math.ceil(PASSAGE_SECONDS - (state.convoy?.elapsed ?? 0))}s to passage exit · ${contactWarning(state)}`);
-		for (const [id, control] of formationControls.entries()) {
-			const platform = state.convoy?.platforms[id]; if (!platform) continue;
-			control.value = platform.slot; control.disabled = !active || state.status !== 'fitting';
-		}
-		label(element('platform-status'), (state.convoy?.platforms ?? []).map(function (platform) { return `P${platform.id + 1} ${platform.slot}: ${Math.ceil(platform.hp)}/240${platform.hp <= 0 ? ' DESTROYED · weapons lost' : ''}`; }).join(' · '));
+		shipyard.update(); syncMountButtons();
 		label(ui.waveInfo, state.status === 'fitting' ? `Scout: ${PASSAGES[state.wave]?.name ?? 'Arrival'}` : `${Math.max(0, Math.ceil(PASSAGE_SECONDS - (state.convoy?.elapsed ?? 0)))}s to exit · ${contactWarning(state)}`);
 		for (const [i, control] of mountButtons.entries()) {
 			const m = state.mounts[i]; if (!m) continue;
@@ -374,7 +377,7 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.coverage.disabled = !active; label(element('escort-help'), 'Fighters start docked. Scramble all to launch using radar coverage; Recall all to return and hold aboard. Replace losses while docked or rearming.');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
 		label(element('coverage-setting'), 'Convoy passage · 120° outward coverage');
-		label(ui.hint, state.status === 'fitting' ? 'BUILD PHASE · Fit ark / P1 / P2 · Formation slots swap occupants · Launch when ready' : placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Radar for escort coverage · Click hostile to focus');
+		label(ui.hint, state.status === 'fitting' ? 'BUILD PHASE · Select a ring position to build · Fit turrets · Launch when ready' : placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Radar for escort coverage · Click hostile to focus');
 		label(ui.message, state.messageTime > 0 ? state.message : ''); label(ui.speed, `${speed}×`); ui.speed.disabled = briefing || !contextAvailable || !state.focused || state.status === 'won' || state.status === 'lost';
 		label(ui.pause, paused ? 'Resume' : 'Menu'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
 	};
@@ -418,7 +421,7 @@ const shutdown = await mountGame('game', async function (container) {
 			accumulator += elapsed * speed;
 			while (accumulator >= 1 / 60 && state.status === 'running') { step(state, 1 / 60); syncAudio(); accumulator -= 1 / 60; if (state.status !== 'running') passageEnded(); }
 		} else accumulator = 0;
-		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, !radarOpen && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, 0, inspector && canvas.clientWidth >= 650 ? 180 : 0);
+		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, !radarOpen && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, 0, inspector && canvas.clientWidth >= 650 ? 180 : 0, shipyard.selected());
 		syncAudio(); hud(); radar.update();
 		frame = requestAnimationFrame(tick);
 	};
