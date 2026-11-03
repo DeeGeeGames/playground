@@ -355,7 +355,7 @@ const shutdown = await mountGame('game', async function (container) {
 			const detail = control.querySelector('small'); if (detail) label(detail, reason || (kind === 'interceptor' ? '3 fighters · start docked' : '1 gunship · draws enemy fire'));
 		}
 		label(ui.escorts, `${craftCount(state)} / 9 CRAFT`);
-		const canvasHelp = `Tactical view. Click a numbered mount to build. Click an enemy for turret priority. Use tactical radar to allocate escort coverage. Right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
+		const canvasHelp = `Tactical view. Click a numbered mount to build. Click an enemy for turret priority. Use tactical radar to allocate escort coverage. Left-drag, right-drag or touch-drag to orbit; wheel or pinch to zoom. Use the command panel for keyboard-accessible orders.`;
 		if (canvas.getAttribute('aria-label') !== canvasHelp) canvas.setAttribute('aria-label', canvasHelp);
 		label(ui.depart, 'Launch passage →');
 		ui.depart.setAttribute('aria-label', 'Launch scouted passage');

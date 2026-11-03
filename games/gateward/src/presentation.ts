@@ -62,7 +62,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	controls.maxPolarAngle = Math.PI / 2 - 0.35;
 	controls.minZoom = MIN_CAMERA_ZOOM;
 	controls.maxZoom = 2;
-	controls.mouseButtons.LEFT = undefined;
+	controls.mouseButtons.LEFT = MOUSE.ROTATE;
 	controls.mouseButtons.MIDDLE = MOUSE.DOLLY;
 	controls.mouseButtons.RIGHT = MOUSE.ROTATE;
 	controls.saveState();
