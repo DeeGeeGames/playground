@@ -11,14 +11,23 @@ describe('convoy build and passage lifecycle', function () {
 		const state = createConvoyState(); build(state, 8, 'rail');
 		expect(subsystemAt(state, { x: -20, y: -40 })).toBeUndefined();
 	});
-	test('heavy defenses stay at their world stations as the convoy passes', function () {
-		const state = createConvoyState(); build(state, 0, 'flak'); launchPassage(state);
-		const battery = state.enemies.find(function (enemy) { return enemy.kind === 'armored'; });
-		if (!battery) throw new Error('Missing battery');
-		const start = { x: battery.x, y: battery.y };
-		advance(state, 20);
-		expect(Math.hypot(battery.x - start.x, battery.y - start.y)).toBeLessThan(1);
-		expect(state.ark.x).toBeGreaterThan(start.x);
+	test('passage formations begin ahead facing forward and enter mobile attack positions', function () {
+		for (let passage = 0; passage < PASSAGES.length; passage++) {
+			const state = createConvoyState(); state.wave = passage; build(state, 0, 'flak'); launchPassage(state);
+			for (const enemy of state.enemies) {
+				expect(enemy.x).toBeGreaterThan(state.ark.x);
+				expect(Math.abs(enemy.y - state.ark.y)).toBeLessThanOrEqual(420);
+				expect(enemy.flight?.angle).toBeCloseTo(state.ark.angle);
+				expect(enemy.station).toBeUndefined();
+			}
+			const battery = state.enemies.find(function (enemy) { return enemy.kind === 'armored' || enemy.kind === 'flagship'; });
+			if (!battery) throw new Error('Missing battery');
+			const start = { x: battery.x, y: battery.y };
+			advance(state, 2);
+			expect(Math.cos(battery.flight?.angle ?? Math.PI)).toBeGreaterThan(0);
+			advance(state, 18);
+			expect(Math.hypot(battery.x - start.x, battery.y - start.y)).toBeGreaterThan(1);
+		}
 	});
 
 	test('build phase freezes every simulation resource and does not spawn the next encounter', function () {
