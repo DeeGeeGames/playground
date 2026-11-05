@@ -110,12 +110,20 @@ describe('convoy build and passage lifecycle', function () {
 		state.enemies = []; advance(state, PASSAGE_SECONDS);
 		expect(platform.hp).toBe(240);
 		expect(gun.weapon).toBeUndefined();
+		const report = state.convoy?.reports?.[0];
+		expect(report?.disabledPlatforms).toEqual([0]);
+		expect(report?.weaponsLost).toBe(1);
+		expect(report?.recoverySalvage).toBe(200);
+		expect(report?.salvageEarned).toBe(0);
+		advance(state, PASSAGE_SECONDS);
+		expect(state.convoy?.reports).toHaveLength(1);
 	});
 	test('hull destruction wins precedence over a passage exit and restart creates fresh blank platforms', function () {
 		const state = createConvoyState(); build(state, 0, 'rail'); launchPassage(state);
 		if (state.convoy) state.convoy.elapsed = PASSAGE_SECONDS;
 		state.hull = 0; step(state, 0.05);
 		expect(state.status).toBe('lost'); expect(state.resultReason).toBe('hull');
+		expect(state.convoy?.reports?.[0]).toMatchObject({ survived: false, hullAfter: 0, recoveryHull: 0, recoverySalvage: 0 });
 		const fresh = createConvoyState(); expect(fresh.wave).toBe(0); expect(fresh.status).toBe('fitting');
 		expect(fresh.mounts.every(function (mount) { return mount.weapon === undefined; })).toBe(true);
 		expect(fresh.salvage).toBe(650);
