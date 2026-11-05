@@ -273,3 +273,11 @@ h2 { font: 800 32px/1.1 'Arial', sans-serif; color: #e5edf5; letter-spacing: -1p
 .modal-utilities button { padding: 9px 12px; font: 10px ui-monospace, monospace; background: #0b1526; }
 .modal-utilities a { color: #9bafc9; font-size: 11px; }
 @media (max-width: 900px) { .route-panel { padding: 22px; } }
+.continue-campaign { margin-bottom: 12px; }
+.continue-campaign p { font: 11px/1.6 ui-monospace, monospace; color: #adc5d9; margin: 10px 0 16px; }
+.continue-campaign:not([hidden]) + #start { background: #142238; color: #b8cada; border-color: var(--line); padding-block: 11px; }
+.save-status { color: var(--muted); font: 11px/1.6 ui-monospace, monospace; }
+.save-status[data-failed='true'], .brief-note[data-failed='true'] { color: var(--gold); }
+.save-notice { position: absolute; top: 72px; right: 28px; max-width: 300px; margin: 0; color: var(--gold); background: #0b1526ed; padding: 8px 10px; font: 10px/1.5 ui-monospace, monospace; pointer-events: none; }
+@media (max-width: 700px) { .save-notice { top: 170px; left: 14px; right: 14px; max-width: none; font-size: 9px; } }
+@media (max-height: 500px) and (min-width: 540px) { .save-notice { top: 110px; left: auto; right: 16px; max-width: 220px; } }

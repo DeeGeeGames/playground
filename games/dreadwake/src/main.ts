@@ -3,6 +3,7 @@ import { createCampaignState, CAMPAIGN_MISSIONS, REFIT_CHOICES, chooseRefit, cyc
 import { createRenderer } from './render';
 import { cameraFor, pickShip, screenToWorld, zoomForWheel } from './projection';
 import { createAudio } from './audio';
+import { readCampaign, writeCampaign, clearCampaign } from './campaign-save';
 
 const element = function (id: string): HTMLElement {
 	const value = document.getElementById(id);
@@ -39,6 +40,27 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	let heading: number | undefined;
 	let state = createCampaignState(); let running = false; let paused = false; let muted = false;
+	let confirmingRestart = false; let restartSource: HTMLElement = element('start');
+	const loadedCampaign = readCampaign();
+	let savedCampaign = loadedCampaign.status === 'saved' ? loadedCampaign.state : undefined;
+	const setSaveStatus = function (message: string, failed = false) {
+		for (const status of container.querySelectorAll<HTMLElement>('[data-save-status]')) { status.textContent = message; status.dataset['failed'] = String(failed); }
+		const notice = element('save-notice'); notice.hidden = !failed; notice.textContent = failed ? message : '';
+	};
+	const saveCheckpoint = function () {
+		if (writeCampaign(state)) {
+			savedCampaign = state;
+			setSaveStatus(state.campaign?.phase === 'refit' ? 'Refit checkpoint saved in this browser. You can return to this choice later.' : 'Mission-start checkpoint saved in this browser. Continue restarts this mission.');
+		} else setSaveStatus('Could not save in this browser. Keep this page open to preserve your run.', true);
+	};
+	if (savedCampaign) {
+		element('continue-campaign').hidden = false;
+		element('start').textContent = 'START A NEW CAMPAIGN ↗';
+		element('continue-summary').textContent = `${CAMPAIGN_MISSIONS[savedCampaign.wave - 1]?.name ?? 'Lyra Passage'} · ${savedCampaign.campaign?.phase === 'refit' ? 'refit checkpoint' : 'mission-start checkpoint'} · ${Math.ceil(savedCampaign.player.hp / savedCampaign.player.maxHp * 100)}% hull`;
+		setSaveStatus('Saved locally in this browser. Mission-start checkpoints replay the mission.');
+	} else if (loadedCampaign.status === 'unavailable') setSaveStatus('Browser storage is unavailable. Your campaign can only last while this page stays open.', true);
+	else if (loadedCampaign.status === 'invalid') setSaveStatus('The previous checkpoint could not be read. Start a new campaign to replace it.', true);
+	else setSaveStatus('Progress saves in this browser at mission starts and field refits.');
 	let frame = 0; let previous = 0; let accumulator = 0; let zoom = 1;
 	const clearInput = function () {
 		heading = undefined; keys.clear(); pending.clear(); state.shield.held = false; state.torpedoes.held = false; state.fireControl.held = false;
@@ -46,7 +68,7 @@ const shutdown = await mountGame('game', async function (container) {
 		pointers.clear();
 	};
 	const active = function (action: string) { return [...keys].some(function (code) { return bindings.get(code) === action; }) || pending.has(action) || [...pointers.values()].includes(action); };
-	const playable = function () { return running && !paused && state.outcome === 'playing' && state.campaign?.phase !== 'refit'; };
+	const playable = function () { return running && !paused && !confirmingRestart && state.outcome === 'playing' && state.campaign?.phase !== 'refit'; };
 	let refitChoice: typeof REFIT_CHOICES[number]['id'] | undefined;
 	const totalShips = CAMPAIGN_MISSIONS.reduce(function (total, mission) { return total + mission.enemies.length; }, 0);
 	const route = element('campaign-route');
@@ -65,8 +87,9 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const syncPanels = function () {
 		container.dataset['mode'] = running ? 'playing' : 'briefing';
-		ui.brief.hidden = running; ui.pausePanel.hidden = !paused; ui.result.hidden = !running || state.outcome === 'playing';
-		element('refit').hidden = !running || state.campaign?.phase !== 'refit' || state.outcome !== 'playing';
+		ui.brief.hidden = running || confirmingRestart; ui.pausePanel.hidden = !paused || confirmingRestart; ui.result.hidden = !running || state.outcome === 'playing' || confirmingRestart;
+		element('confirm-reset').hidden = !confirmingRestart;
+		element('refit').hidden = !running || state.campaign?.phase !== 'refit' || state.outcome !== 'playing' || confirmingRestart;
 		const modal = [...container.querySelectorAll<HTMLElement>('.overlay')].find(function (panel) { return !panel.hidden; });
 		for (const child of container.children) if (child instanceof HTMLElement) child.inert = !!modal && child !== modal;
 		ui.pause.textContent = paused ? 'Resume · Esc' : 'Pause · Esc';
@@ -75,10 +98,10 @@ const shutdown = await mountGame('game', async function (container) {
 		for (const control of [ui.cycle, ui.clear]) if (control instanceof HTMLButtonElement) control.disabled = !playable();
 	};
 	const start = function () {
-		state = createCampaignState(); running = true; paused = false; accumulator = 0; zoom = 1; clearInput(); syncPanels(); canvas.focus({ preventScroll: true }); unlock();
+		state = createCampaignState(); running = true; paused = false; confirmingRestart = false; accumulator = 0; zoom = 1; clearInput(); saveCheckpoint(); syncPanels(); canvas.focus({ preventScroll: true }); unlock();
 	};
 	const pause = function (value: boolean) {
-		if (!running || state.outcome !== 'playing' || state.campaign?.phase === 'refit') return;
+		if (!running || confirmingRestart || state.outcome !== 'playing' || state.campaign?.phase === 'refit') return;
 		paused = value; clearInput(); accumulator = 0; syncPanels();
 		if (paused) { audio.update(0, false, []); element('resume').focus({ preventScroll: true }); }
 		else { canvas.focus({ preventScroll: true }); unlock(); }
@@ -110,11 +133,22 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	element('deploy').addEventListener('click', function () {
 		if (!refitChoice || !chooseRefit(state, refitChoice)) return;
-		clearInput(); accumulator = 0; syncPanels(); canvas.focus({ preventScroll: true }); unlock();
+		clearInput(); accumulator = 0; saveCheckpoint(); syncPanels(); canvas.focus({ preventScroll: true }); unlock();
 	}, options);
-	element('start').addEventListener('click', start, options);
-	element('restart').addEventListener('click', start, options);
-	element('reset').addEventListener('click', start, options);
+	const cancelRestart = function () { confirmingRestart = false; syncPanels(); restartSource.focus({ preventScroll: true }); };
+	for (const id of ['start', 'restart', 'reset']) element(id).addEventListener('click', function () {
+		if (!savedCampaign && !(running && state.outcome === 'playing')) { start(); return; }
+		restartSource = element(id); confirmingRestart = true; clearInput(); syncPanels(); element('cancel-reset').focus({ preventScroll: true });
+	}, options);
+	element('cancel-reset').addEventListener('click', cancelRestart, options);
+	element('confirm-start').addEventListener('click', start, options);
+	element('continue').addEventListener('click', function () {
+		if (!savedCampaign) return;
+		state = savedCampaign; running = true; paused = false; accumulator = 0; zoom = 1; clearInput();
+		if (state.campaign?.phase === 'refit') showRefit();
+		else { syncPanels(); canvas.focus({ preventScroll: true }); unlock(); }
+		setSaveStatus(state.campaign?.phase === 'refit' ? 'Resumed the saved refit. Choose your next upgrade or repair.' : 'Resumed the mission-start checkpoint. Your next checkpoint is after this engagement.');
+	}, options);
 	element('resume').addEventListener('click', function () { pause(false); }, options);
 	ui.pause.addEventListener('click', function () { pause(!paused); }, options);
 	const soundButtons = [ui.sound];
@@ -136,7 +170,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'Tab') {
 			const modal = [...container.querySelectorAll<HTMLElement>('.overlay')].find(function (panel) { return !panel.hidden; });
 			if (modal) {
-				const candidates = [...modal.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled)')];
+				const candidates = [...modal.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled)')].filter(function (candidate) { return !candidate.closest('[hidden]'); });
 				const focusable = candidates.filter(function (candidate) {
 					if (!(candidate instanceof HTMLInputElement) || candidate.type !== 'radio') return true;
 					const group = candidates.filter(function (item): item is HTMLInputElement { return item instanceof HTMLInputElement && item.type === 'radio' && item.name === candidate.name; });
@@ -147,7 +181,7 @@ const shutdown = await mountGame('game', async function (container) {
 				else if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) { event.preventDefault(); first?.focus(); }
 			}
 		}
-		if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) pause(!paused); return; }
+		if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) { if (confirmingRestart) cancelRestart(); else pause(!paused); } return; }
 		if (event.code === 'KeyR' && playable()) { if (!event.repeat) cycleTarget(state); event.preventDefault(); return; }
 		const action = bindings.get(event.code); if (!action || !playable()) return;
 		if (event.code === 'Space' && event.target instanceof HTMLButtonElement) return;
@@ -237,6 +271,9 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.message.textContent = !playable() ? '' : state.intermission > 0 ? state.wave === CAMPAIGN_MISSIONS.length ? 'FINAL CONTACT CLEAR / SECURING THE PASSAGE' : `CONTACT CLEAR / FIELD REFIT IN ${Math.max(0, Math.ceil(6 - state.intermission))} S` : state.shield.active > 0 ? 'AEGIS FIELD ACTIVE / 85% DAMAGE REDUCTION' : p.braced ? 'ARMOR LOCK / NEW SALVOS LOCKED / RELOAD SLOWED' : state.enemies.some(function (enemy) { return enemy.warning > 0; }) ? 'INCOMING VOLLEY / EVADE, LOCK ARMOR OR PULSE SHIELDS' : state.time < 12 ? 'Q/E BROADSIDES · G AUTO CREWS · T BOW TORPEDOES' : '';
 	};
 	const showResult = function () {
+		savedCampaign = undefined;
+		if (clearCampaign()) setSaveStatus('Campaign ended. The saved checkpoint has been cleared.');
+		else setSaveStatus('Campaign ended, but the old checkpoint could not be cleared from this browser.', true);
 		clearInput(); syncPanels(); audio.update(0, false, []);
 		element('result-title').textContent = state.outcome === 'won' ? 'BLOCKADE BROKEN.' : 'SIGNAL LOST.';
 		element('result-copy').textContent = state.outcome === 'won' ? `All ${CAMPAIGN_MISSIONS.length} missions complete. The blockade commander is gone. Your cruiser leaves the Lyra Passage with ${Math.ceil(state.player.hp / state.player.maxHp * 100)}% hull.` : `Lost during ${CAMPAIGN_MISSIONS[state.wave - 1]?.name ?? 'the engagement'}. ${state.campaign?.completedMissions ?? 0} of ${CAMPAIGN_MISSIONS.length} missions secured. Change heading when hostile volleys are marked, and consider repairs before the next engagement.`;
@@ -255,7 +292,7 @@ const shutdown = await mountGame('game', async function (container) {
 				step(state, input, 1 / 60); pending.clear(); accumulator -= 1 / 60;
 				audio.update(Math.hypot(state.player.vx, state.player.vy), true, state.events);
 				if (state.outcome !== 'playing') showResult();
-				else if (state.campaign?.phase === 'refit') showRefit();
+				else if (state.campaign?.phase === 'refit') { saveCheckpoint(); showRefit(); }
 			}
 		}
 		const { width, height } = canvas.getBoundingClientRect(); const dpr = Math.min(devicePixelRatio, 2);
@@ -263,7 +300,7 @@ const shutdown = await mountGame('game', async function (container) {
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0); render(ctx, width, height, state, reducedMotion.matches, !running, zoom, heading); hud();
 		frame = requestAnimationFrame(tick);
 	};
-	syncPanels(); element('start').focus({ preventScroll: true }); frame = requestAnimationFrame(tick);
+	syncPanels(); element(savedCampaign ? 'continue' : 'start').focus({ preventScroll: true }); frame = requestAnimationFrame(tick);
 	return async function () { cancelAnimationFrame(frame); clearInput(); abort.abort(); await audio.dispose(); };
 });
 if (import.meta.hot) import.meta.hot.dispose(shutdown);
