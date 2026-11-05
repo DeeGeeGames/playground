@@ -58,8 +58,8 @@ export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
 export interface Platform { id: number; slot: Formation; hull: HullKind; hp: number }
 export const PASSAGES = [
 	{ name: 'Port battery', scout: 'Armor and fighters form ahead along the route. Cover the bow on approach and port as they fall alongside.', threats: [{ kind: 'armored', x: 900, y: -360 }, { kind: 'raider', x: 1100, y: -180 }, { kind: 'raider', x: 1100, y: 180 }, { kind: 'raider', x: 1300, y: 0 }] },
-	{ name: 'Crossfire', scout: 'Paired armor and bombers wait ahead in staggered rows. Cover the bow and both flanks as the convoy closes.', threats: [{ kind: 'armored', x: 900, y: 360 }, { kind: 'armored', x: 1150, y: 420 }, { kind: 'bomber', x: 1000, y: -260 }, { kind: 'bomber', x: 1300, y: -340 }] },
-	{ name: 'Gate approach', scout: 'A flagship leads a forward formation of fighters and a bomber. Cover the approach and sustain fire as they fall alongside.', threats: [{ kind: 'flagship', x: 1400, y: -420 }, { kind: 'raider', x: 950, y: 180 }, { kind: 'raider', x: 1150, y: -180 }, { kind: 'bomber', x: 1300, y: 340 }] },
+	{ name: 'Crossfire', scout: 'Two armored ships approach on starboard; three bombers attack from port. Protect both flanks and fit forward ships to meet the approach.', threats: [{ kind: 'armored', x: 900, y: 360 }, { kind: 'armored', x: 1150, y: 420 }, { kind: 'bomber', x: 1000, y: -260 }, { kind: 'bomber', x: 1300, y: -340 }, { kind: 'bomber', x: 850, y: -420 }] },
+	{ name: 'Gate approach', scout: 'A flagship and armored escort screen four bombers and two fighters. Bombardment threatens both flanks. Spread your coverage, replace lost guns and survive the final approach.', threats: [{ kind: 'flagship', x: 1400, y: -420 }, { kind: 'raider', x: 950, y: 180 }, { kind: 'raider', x: 1150, y: -180 }, { kind: 'bomber', x: 1300, y: 340 }, { kind: 'bomber', x: 1050, y: -300 }, { kind: 'armored', x: 1100, y: 420 }, { kind: 'bomber', x: 900, y: 260 }, { kind: 'bomber', x: 1200, y: -180 }] },
 ] as const;
 export const PASSAGE_SECONDS = 45;
 export const PLATFORM_HP = 240;

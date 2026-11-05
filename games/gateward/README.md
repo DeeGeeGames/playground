@@ -16,9 +16,9 @@ spawn until explicit launch.
 
 There are three **45-second** combat passages:
 
-1. Port battery: one armored ship to port and three pursuing aft fighters.
-2. Crossfire: two starboard armored ships and two port bombers.
-3. Gate approach: a heavy flagship ahead, two aft fighters and a starboard bomber.
+1. Port battery: one armored ship and three fighters entering ahead.
+2. Crossfire: two starboard armored ships and three port bombers.
+3. Gate approach: a flagship, armored escort, four bombers and two fighters.
 
 Defenders enter in forward formations; capital ships maneuver into attack positions while fighters and bombers intercept the convoy.
 The convoy automatically travels the 5.76 km route at a fixed cruise speed
