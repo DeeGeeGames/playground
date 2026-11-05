@@ -6,7 +6,7 @@ export interface Ship extends Point {
 	length: number; width: number;
 }
 export interface Enemy extends Ship {
-	kind: 'frigate' | 'cruiser'; cooldown: number; warning: number; aim: Point; orbit: number;
+	kind: 'frigate' | 'cruiser'; tactic?: 'flanker' | 'brawler' | 'standoff'; command?: boolean; cooldown: number; warning: number; aim: Point; orbit: number;
 }
 export interface Battery { reload: number; remaining: number; next: number; target: number | undefined }
 export interface Shell extends Point { vx: number; vy: number; life: number; hostile: boolean; damage: number; guidance?: { target: number | undefined } }
@@ -14,11 +14,11 @@ export interface Effect extends Point { kind: 'muzzle' | 'impact' | 'explosion' 
 export interface DefenseTrace { from: Point; to: Point; life: number }
 export interface Wreck extends Point { angle: number; length: number; width: number; life: number }
 export const CAMPAIGN_MISSIONS = [
-	{ name: 'Outer picket', location: 'Lyra outskirts', briefing: 'Break the patrol. Turn your flank toward each contact and learn the rhythm of the arrays.', enemies: ['frigate', 'frigate'], bearings: [-1.55, 1.45] },
-	{ name: 'Crossfire', location: 'The broken relay', briefing: 'Three frigates close from separate bearings. Keep moving and use Aegis when their volleys converge.', enemies: ['frigate', 'frigate', 'frigate'], bearings: [-1.9, 0.9, 2.1] },
-	{ name: 'Heavy escort', location: 'Ash corridor', briefing: 'A cruiser anchors the blockade. Clear its escorts before committing to a sustained broadside exchange.', enemies: ['frigate', 'frigate', 'cruiser'], bearings: [-1.4, 1.5, 3] },
-	{ name: 'The hammer', location: 'Inner passage', briefing: 'Two heavy hulls hold the route. Separate their firing cycles and spend your defenses deliberately.', enemies: ['cruiser', 'cruiser'], bearings: [-1.2, 1.6] },
-	{ name: 'Dreadwake', location: 'Lyra gate', briefing: 'Destroy the command cruiser and its escort to open the passage. There is no refit beyond this point.', enemies: ['frigate', 'frigate', 'cruiser', 'cruiser'], bearings: [-1.7, 1.6, -0.6, 0.6] },
+	{ name: 'Outer picket', location: 'Lyra outskirts', briefing: 'Break the patrol. Turn your flank toward each contact and learn the rhythm of the arrays.', enemies: ['frigate', 'frigate'], bearings: [-1.55, 1.45], tactics: [] },
+	{ name: 'Crossfire', location: 'The broken relay', briefing: 'Flanking frigates hunt your bow and stern blind spots. Turn across their approach to bring the arrays to bear.', enemies: ['frigate', 'frigate', 'frigate'], bearings: [-1.9, 0.9, 2.1], tactics: ['flanker', 'flanker', 'flanker'] },
+	{ name: 'Heavy escort', location: 'Ash corridor', briefing: 'A standoff cruiser holds beyond broadside range while frigates screen it. Use bow torpedoes and close the distance.', enemies: ['frigate', 'frigate', 'cruiser'], bearings: [-1.4, 1.5, 3], tactics: ['flanker', 'flanker', 'standoff'] },
+	{ name: 'The hammer', location: 'Inner passage', briefing: 'Two brawlers drive into close range with rapid volleys. Keep thrust available: a stationary armor lock invites a collision.', enemies: ['cruiser', 'cruiser'], bearings: [-1.2, 1.6], tactics: ['brawler', 'brawler'] },
+	{ name: 'Dreadwake', location: 'Lyra gate', briefing: 'Flankers screen a standoff command cruiser while a brawler advances. Break the screen, then chase down command to open Lyra gate.', enemies: ['frigate', 'frigate', 'cruiser', 'cruiser'], bearings: [-1.7, 1.6, -0.6, 0.6], tactics: ['flanker', 'flanker', 'brawler', 'standoff'] },
 ] as const;
 export type RefitChoice = 'repair' | 'rails' | 'capacitor';
 export const REFIT_CHOICES: readonly { id: RefitChoice; name: string; description: string }[] = [
@@ -95,12 +95,13 @@ const spawnWave = function (state: State) {
 	const bearings = mission?.bearings ?? (state.wave === 1 ? [-1.55, 1.45] : state.wave === 2 ? [-1.9, 0.9, 2.1] : [-1.4, 1.5, 3]);
 	for (const [index, bearing] of bearings.entries()) {
 		const angle = p.angle + bearing;
-		const radius = 460 + index * 70;
+		const tactic = mission?.tactics[index];
+		const radius = tactic === 'standoff' ? 830 : 460 + index * 70;
 		const kind = mission?.enemies[index] ?? (state.wave === 3 && index === 2 ? 'cruiser' : 'frigate');
 		const hp = kind === 'cruiser' ? (state.campaign && state.wave === CAMPAIGN_MISSIONS.length && index === 3 ? 1000 : 600) : 280;
 		const x = p.x + Math.cos(angle) * radius; const y = p.y + Math.sin(angle) * radius;
 		state.enemies.push({ id: state.nextId++, x, y, angle: angle + Math.PI / 2, vx: 0, vy: 0,
-			hp, maxHp: hp, kind, length: kind === 'cruiser' ? 170 : 115, width: kind === 'cruiser' ? 58 : 42,
+			hp, maxHp: hp, kind, ...(tactic ? { tactic } : {}), command: hp === 1000, length: kind === 'cruiser' ? 170 : 115, width: kind === 'cruiser' ? 58 : 42,
 			cooldown: 5 + index * 2, warning: 0, aim: { x: p.x, y: p.y }, orbit: index % 2 === 0 ? 1 : -1 });
 	}
 	state.events.push('wave');
@@ -226,9 +227,14 @@ const updatePointDefense = function (state: State, dt: number) {
 const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 	const p = state.player; const range = distance(enemy, p);
 	const bearing = Math.atan2(p.y - enemy.y, p.x - enemy.x);
-	const desired = bearing + enemy.orbit * (range > 680 ? 0.3 : range < 330 ? 2.2 : 1.4);
-	enemy.angle += clamp(angleDelta(enemy.angle, desired), -dt * 0.42, dt * 0.42);
-	const speed = enemy.kind === 'cruiser' ? 30 : 48;
+	const flank = localPoint(p, enemy.orbit * 320, 0);
+	const desired = enemy.tactic === 'flanker' ? Math.atan2(flank.y - enemy.y, flank.x - enemy.x)
+		: enemy.tactic === 'standoff' ? bearing + enemy.orbit * (range > 850 ? 0.4 : range < 720 ? 2.7 : Math.PI / 2)
+		: enemy.tactic === 'brawler' ? bearing + enemy.orbit * (range > 230 ? 0.15 : 1.3)
+		: bearing + enemy.orbit * (range > 680 ? 0.3 : range < 330 ? 2.2 : 1.4);
+	const turnRate = enemy.tactic === 'flanker' ? 0.65 : 0.42;
+	enemy.angle += clamp(angleDelta(enemy.angle, desired), -dt * turnRate, dt * turnRate);
+	const speed = enemy.tactic === 'flanker' ? 66 : enemy.tactic === 'brawler' ? 44 : enemy.kind === 'cruiser' ? 30 : 48;
 	enemy.vx = Math.cos(enemy.angle) * speed; enemy.vy = Math.sin(enemy.angle) * speed;
 	enemy.x += enemy.vx * dt; enemy.y += enemy.vy * dt;
 	if (enemy.warning > 0) {
@@ -240,7 +246,7 @@ const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 				const spread = angle + (i - (count - 1) / 2) * 0.032;
 				state.shells.push({ x: enemy.x, y: enemy.y, vx: Math.cos(spread) * 240, vy: Math.sin(spread) * 240, life: 4.2, hostile: true, damage: enemy.kind === 'cruiser' ? 38 : 26 });
 			}
-			effect(state, enemy, 'muzzle'); enemy.cooldown = enemy.kind === 'cruiser' ? 8 : 10;
+			effect(state, enemy, 'muzzle'); enemy.cooldown = enemy.tactic === 'brawler' ? 5.5 : enemy.kind === 'cruiser' ? 8 : 10;
 		}
 	} else {
 		enemy.cooldown -= dt;
