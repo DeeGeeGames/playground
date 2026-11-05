@@ -20,7 +20,7 @@ There are three **45-second** combat passages:
 2. Crossfire: two starboard armored ships and two port bombers.
 3. Gate approach: a heavy flagship ahead, two aft fighters and a starboard bomber.
 
-Heavy defenders hold world positions while fighters and bombers intercept the convoy.
+Defenders enter in forward formations; capital ships maneuver into attack positions while fighters and bombers intercept the convoy.
 The convoy automatically travels the 5.76 km route at a fixed cruise speed
 (about 42.67 m/s). Four reactor units are reserved for cruise and cannot be transferred; engine damage cannot stall it. The remaining six units can be split between weapons and shields. Weapons,
 shields and subsystem damage retain their existing combat effects. Passage
@@ -45,17 +45,19 @@ twice with the existing 80% / 120% base-price upgrade costs. Selling during
 fitting refunds **100% of the weapon and upgrades**. Fitting, selling, upgrading
 and formation changes are rejected during combat, pause and loss of focus.
 
-Choose each platform's Fore, Aft, Port or Starboard formation in Fit. Slots hold
+Choose a position on the six-slot inner or eight-slot middle ring in Fit. Slots hold
 one platform each; choosing an occupied slot **swaps the occupants**, preserving
 their identities, weapons and upgrades. The platforms follow fixed ark-relative
-stations automatically: fore/aft 1120 m, port/starboard 920 m. Their guns face
+stations automatically. Inner and middle rings offer different coverage and exposure. Their guns face
 outward from that station with **120° arcs**, while ark guns face their flank.
 Real origins, range, target eligibility and arcs use these positions. Select a
 gun to see coverage; the selected platform chassis is highlighted. Guns turn
 before firing. Rail ignores armor, flak favors fighters, missiles provide splash,
 and beams deal sustained instant damage reduced by armor.
 
-Each platform has **240 hull**, no shield and no combat repair. Hostiles may aim
+Starting frigates have **240 hull**; additional corvettes, frigates and cruisers have
+160, 240 and 400 hull, and one, two and four mounts respectively. New hulls cost
+120, 220 and 380 salvage before weapons. Platforms have no shield or combat repair. Hostiles may aim
 at a platform closer than the ark; nearby escorts retain their existing targeting
 precedence. Incoming rounds collide with platform chassis. At zero hull its two
 guns are destroyed without refund and stop firing; the chassis recovers at the
