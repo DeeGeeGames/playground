@@ -95,7 +95,7 @@ canvas { width: 100%; height: 100%; display: block; outline: none; touch-action:
 .defense { bottom: calc(100% + 64px); }
 footer { position: absolute; bottom: calc(12px + env(safe-area-inset-bottom)); width: 100%; text-align: center; color: #8295ad; font: 8px ui-monospace, monospace; letter-spacing: .3px; pointer-events: none; }
 footer span { margin: 0 10px; color: #40536e; }
-.overlay { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 95px 24px 24px; background: #040914db; backdrop-filter: blur(7px); overflow: auto; }
+.overlay { position: absolute; inset: 0; z-index: 7; display: grid; place-items: center; padding: 95px 24px 24px; background: #040914db; backdrop-filter: blur(7px); overflow: auto; }
 [hidden] { display: none !important; }
 .panel { margin: auto; width: min(540px, 100%); padding: 34px; background: #0d192bf5; border: 1px solid var(--line); border-top: 2px solid var(--cyan); box-shadow: 0 30px 100px #0005; }
 .briefing { display: flex; align-items: center; background: linear-gradient(90deg, #050b19f5 0%, #050b19b5 30%, #050b1920 62%, transparent); backdrop-filter: none; padding: 110px 6.5% 50px; }
@@ -166,3 +166,118 @@ h2 { font: 800 32px/1.1 'Arial', sans-serif; color: #e5edf5; letter-spacing: -1p
 	.point-defense > small { display: none; }
 	.defense { bottom: calc(100% + 50px); }
 }
+
+/* Campaign surfaces share the bridge's chart, brass and phosphor palette. */
+.briefing { gap: clamp(36px, 7vw, 120px); }
+.brief.panel { width: 520px; max-width: 49%; }
+.brief .intro { margin-bottom: 0; }
+.brief-intel { margin-top: 18px; }
+.campaign-premise { border-left: 2px solid var(--gold); padding-left: 14px; margin: 20px 0; }
+.campaign-premise b { color: var(--gold); font: 10px ui-monospace, monospace; letter-spacing: 1px; }
+.campaign-premise p { color: #b1c2d5; font-size: 12px; line-height: 1.65; margin: 8px 0 0; }
+.route-panel { width: min(340px, 36%); align-self: center; padding: 24px 0; text-shadow: 0 2px 8px #050b19; }
+.route-panel h2 { font-size: 23px; letter-spacing: 2px; margin-bottom: 30px; }
+.route-panel > p { font: 11px/1.8 ui-monospace, monospace; color: #9cb2c9; margin-top: 28px; }
+.campaign-route { list-style: none; padding: 0; margin: 0; }
+.campaign-route li { display: flex; align-items: center; gap: 18px; padding: 0 0 26px; position: relative; }
+.campaign-route li:not(:last-child)::after { content: ''; position: absolute; left: 17px; top: 36px; bottom: 0; width: 1px; background: var(--line); }
+.campaign-route li > span { display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid var(--line); background: #0b1526cc; font: 12px ui-monospace, monospace; color: var(--cyan); flex-shrink: 0; }
+.campaign-route li:last-child { padding-bottom: 0; }
+.campaign-route li:last-child > span { border-color: var(--gold); color: var(--gold); }
+.campaign-route strong { font-size: 12px; letter-spacing: 1px; }
+.campaign-route small { font: 10px ui-monospace, monospace; margin-top: 7px; color: #9cb2c9; }
+.refit-panel { width: min(740px, 100%); }
+.refit-panel h2 { margin-bottom: 12px; }
+.next-mission { padding: 18px 20px; background: #16263a; border-left: 2px solid var(--gold); margin: 24px 0; }
+.next-mission .eyebrow { color: var(--gold); }
+.next-mission h3 { font-size: 20px; margin: 10px 0; letter-spacing: .5px; }
+.next-mission p { font-size: 13px; line-height: 1.7; color: #b1c2d5; margin: 0; }
+.refit-options { border: 0; margin: 0; padding: 0; min-width: 0; }
+.refit-options legend { font: 10px/1.6 ui-monospace, monospace; color: var(--muted); margin-bottom: 12px; letter-spacing: .7px; }
+#refit-choices { display: grid; gap: 10px; }
+.refit-choice { display: flex; align-items: start; gap: 12px; padding: 16px; background: #101e31; border: 1px solid var(--line); cursor: pointer; }
+.refit-choice:hover { border-color: var(--cyan); }
+.refit-choice:has(input:checked) { background: #19343e; border-color: var(--cyan); }
+.refit-choice:has(input:focus-visible) { outline: 2px solid var(--gold); outline-offset: 3px; }
+.refit-choice input { accent-color: var(--cyan); width: 17px; height: 17px; margin: 0; flex-shrink: 0; }
+.refit-choice strong { display: block; font-size: 13px; letter-spacing: .5px; }
+.refit-choice small { color: #a9bed3; font-size: 12px; line-height: 1.6; margin-top: 6px; }
+.refit-panel > .refit-warning { color: var(--gold); font-size: 11px; margin: 18px 0; }
+.mission { max-width: 480px; }
+.mission b { line-height: 1.5; }
+.mission-steps i { flex: 1; max-width: 38px; }
+
+@media (min-width: 901px) {
+	.hull { width: 200px; }
+	.hull > span { font-size: 10px; }
+	.hull > span small, .hull div small, .hull p { font-size: 9px; }
+	.hull .shield-readout span, .shield-readout b { font-size: 9px; }
+	.target-panel { width: 190px; }
+	.target-heading, .target-panel p, .target-actions button { font-size: 10px; }
+	.target-actions button { min-height: 32px; }
+	.target-panel strong { font-size: 12px; }
+	.cockpit { width: min(1040px, calc(100% - 40px)); }
+	.battery { min-height: 108px; }
+	.battery-name { font-size: 11px; }
+	.battery-name small, .battery-target { font-size: 9px; letter-spacing: 0; }
+	.battery strong { font-size: 11px; }
+	.armament button, .point-defense { min-height: 56px; }
+	.armament button > span, .point-defense > span, .armament strong { font-size: 11px; }
+	.armament small, .point-defense > small, .point-defense b { font-size: 9px; }
+	.defense { bottom: calc(100% + 74px); }
+	.defense button > span { font-size: 10px; }
+	.defense button small { font-size: 9px; }
+	.helm-title, .engine span, .neutral, footer { font-size: 10px; }
+	.helm-input button small { font-size: 9px; }
+	.field-message { font-size: 11px; }
+	.orders p { font-size: 11px; }
+	.orders b, .orders b span, .brief-note, .brief-intel span { font-size: 9px; }
+}
+@media (max-width: 900px) {
+	.briefing { display: block; background: #050b19dc; }
+	.brief.panel { max-width: 100%; width: 520px; margin: auto; }
+	.route-panel { width: min(520px, 100%); margin: 30px auto 0; padding: 24px 0 0; border-top: 1px solid var(--line); }
+	.route-panel h2 { font-size: 20px; margin: 15px 0 22px; }
+	.campaign-route { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+	.campaign-route li { padding: 0; gap: 10px; }
+	.campaign-route li::after { display: none; }
+	.campaign-route strong { font-size: 11px; }
+	.campaign-route small { font-size: 9px; }
+	.route-panel > p { margin-top: 20px; }
+	.mission b { font-size: 9px; }
+}
+@media (max-width: 540px) {
+	.refit-panel { padding: 22px 18px; }
+	.refit-panel h2 { font-size: 27px; }
+	.next-mission { padding: 14px; margin: 18px 0; }
+	.refit-choice { padding: 14px 12px; }
+	.refit-options legend { font-size: 9px; }
+	.primary { font-size: 10px; letter-spacing: .5px; line-height: 1.6; }
+	.campaign-route { grid-template-columns: 1fr; }
+	.campaign-premise p { font-size: 11px; }
+	.mission { gap: 8px; }
+	.mission-steps { flex: 1; min-width: 45px; }
+	.mission-steps i { min-width: 3px; }
+	.mission b { max-width: 75%; }
+}
+@media (max-height: 500px) and (min-width: 540px) {
+	.brief.panel { max-width: 100%; width: 600px; }
+	.briefing { display: block; }
+	.route-panel { width: 600px; max-width: 100%; margin: 30px auto 0; }
+	.campaign-premise { margin: 14px 0; }
+	.campaign-premise p { font-size: 11px; }
+	.mission b { font-size: 8px; max-width: 230px; }
+}
+.route-panel { padding: 26px; background: #081323eb; border: 1px solid var(--line); box-shadow: 0 20px 60px #0004; }
+.modal-utilities { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 18px; }
+.modal-utilities button { padding: 9px 12px; font: 10px ui-monospace, monospace; background: #0b1526; }
+.modal-utilities a { color: #9bafc9; font-size: 11px; }
+@media (max-width: 900px) { .route-panel { padding: 22px; } }
+.continue-campaign { margin-bottom: 12px; }
+.continue-campaign p { font: 11px/1.6 ui-monospace, monospace; color: #adc5d9; margin: 10px 0 16px; }
+.continue-campaign:not([hidden]) + #start { background: #142238; color: #b8cada; border-color: var(--line); padding-block: 11px; }
+.save-status { color: var(--muted); font: 11px/1.6 ui-monospace, monospace; }
+.save-status[data-failed='true'], .brief-note[data-failed='true'] { color: var(--gold); }
+.save-notice { position: absolute; top: 72px; right: 28px; max-width: 300px; margin: 0; color: var(--gold); background: #0b1526ed; padding: 8px 10px; font: 10px/1.5 ui-monospace, monospace; pointer-events: none; }
+@media (max-width: 700px) { .save-notice { top: 170px; left: 14px; right: 14px; max-width: none; font-size: 9px; } }
+@media (max-height: 500px) and (min-width: 540px) { .save-notice { top: 110px; left: auto; right: 16px; max-width: 220px; } }
