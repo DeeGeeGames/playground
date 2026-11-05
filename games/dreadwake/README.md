@@ -1,9 +1,9 @@
-# Dreadwake · Capital Combat Alpha 01
+# Dreadwake · The Lyra Campaign · Alpha 02
 
 An isometric starship combat game about committing a heavy cruiser to a slow turn,
 coordinating rail broadsides, bow torpedoes, and point defense while timing defenses
 against incoming volleys.
-Break eight hostile ships across three contacts in the Lyra Passage.
+Break fourteen hostile ships across five linked missions in the Lyra Passage. Hull damage carries forward; each victory offers one repair or permanent upgrade.
 
 Open `games/dreadwake/` through the launcher. The alpha replaces the original deck-like
 placeholders with closed pressure hulls, split prows, separate drive nacelles,
@@ -84,11 +84,13 @@ Change course to dodge or time a defense to absorb the volley. Frigates orbit fa
 the final cruiser has more hull and heavier fire. Close hull contact pushes ships
 apart and damages both. The radar and edge indicators reveal distant contacts.
 
-Defeat eight ships over three contacts (2 / 3 / 3). There are six seconds to reposition
-between contacts; advancing restores 20% hull. Lose at zero hull. The after-action
+Defeat fourteen ships over five missions (2 / 3 / 3 / 2 / 4). After six seconds of clearance, combat freezes for refit. Choose one: restore 35% maximum hull, add 15% base broadside damage, or reduce Aegis recharge by three seconds (six-second minimum). Upgrades stack for the campaign. There is no automatic hull repair. Deploying resets movement orders and reloads, preserving hull damage, upgrades, and crew mode. Lose at zero hull. The after-action
 screen reports kills, time, broadside and torpedo salvos, intercepted rounds, and
-damage prevented by armor and shields. Restart resets the encounter, designation, and capacitor. There is no time limit, persistence,
-ammo inventory, equipment progression, or collision with decorative debris.
+damage prevented by armor and shields. Restart resets the campaign, upgrades, designation, and capacitor. The campaign lasts the current browser session; reloading starts over. There is no time limit, ammo inventory, or collision with decorative debris.
+
+Outer picket teaches the weapon rhythm. Crossfire frigates seek bow/stern blind spots. Heavy escort introduces a standoff cruiser outside broadside range: close distance or use bow torpedoes. The hammer sends two aggressive cruisers into close range. The final gate combines those roles around a command cruiser. Tactical role labels identify each behavior.
+
+The route chart previews the campaign. Refit shows the next briefing, current hull and upgrades, and the exact effect of each choice before deployment. Modal focus is contained and combat controls are disabled while choosing. `createState()` retains the original three-contact skirmish for existing simulation callers; the game uses `createCampaignState()`.
 
 ## Runtime and validation
 

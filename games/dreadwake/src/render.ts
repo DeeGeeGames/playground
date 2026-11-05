@@ -107,7 +107,10 @@ export const createRenderer = function () {
 				label(ctx, state.shield.active > 0 ? 'AEGIS FIELD ACTIVE' : p.braced ? 'ARMOR LOCK / −65%' : 'DREADWAKE', at, p.braced ? '#f0c482' : '#89bdce', 9);
 			} else {
 				const priority = ship.id === state.priorityTarget;
-				label(ctx, `${priority ? '◆ ' : ''}${ship.length > 150 ? 'CRUISER' : 'FRIGATE'} ${String(ship.id).padStart(2, '0')}`, at, priority ? '#f3ce8b' : '#e0a2ae', 9);
+				const contact = state.enemies.find(function (enemy) { return enemy.id === ship.id; });
+				const designation = contact?.command ? 'COMMAND CRUISER' : ship.length > 150 ? 'CRUISER' : 'FRIGATE';
+				label(ctx, `${priority ? '◆ ' : ''}${designation} ${String(ship.id).padStart(2, '0')}`, at, contact?.command || priority ? '#f3ce8b' : '#e0a2ae', 11);
+				if (contact?.tactic) label(ctx, contact.tactic.toUpperCase(), { x: at.x, y: at.y - 17 }, '#a5bacb', 10);
 				line(ctx, { x: at.x - 23, y: at.y + 9 }, { x: at.x + 23, y: at.y + 9 }, '#473547', 2);
 				line(ctx, { x: at.x - 23, y: at.y + 9 }, { x: at.x - 23 + ship.hp / ship.maxHp * 46, y: at.y + 9 }, '#f197a5', 2);
 				if (priority) {
