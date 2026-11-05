@@ -1,5 +1,5 @@
 import { effectiveOutputs } from './systems';
-import { ROUTE_LENGTH, ROUTE_SECONDS, PASSAGES, PASSAGE_SECONDS, type State } from './simulation';
+import { ROUTE_LENGTH, ROUTE_SECONDS, passagesFor, PASSAGE_SECONDS, type State } from './simulation';
 
 export { ROUTE_LENGTH } from './simulation';
 export const CRUISE_SPEED = ROUTE_LENGTH / ROUTE_SECONDS;
@@ -23,7 +23,7 @@ export const journeyFor = function (state: State) {
 	const systems = state.systems;
 	const distance = systems.distanceTraveled;
 	const remaining = Math.max(0, systems.routeLength - distance);
-	const configuredSpeed = state.convoy ? systems.routeLength / (PASSAGES.length * PASSAGE_SECONDS) : effectiveOutputs(systems).speed;
+	const configuredSpeed = state.convoy ? systems.routeLength / (passagesFor(state).length * PASSAGE_SECONDS) : effectiveOutputs(systems).speed;
 	const moving = state.status === 'running' && !state.paused && state.focused && remaining > 0;
 	return {
 		distance, remaining,

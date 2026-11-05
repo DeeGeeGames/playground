@@ -1,3 +1,4 @@
+import { KEPLER_PASSAGES, OPERATIONS, type OperationId } from './operations';
 import { FORMATION, FORMATION_SLOTS, HULLS, type Formation, type HullKind } from './formation';
 export { FORMATION, FORMATION_SLOTS, FORMATION_RADII, HULLS, type Formation, type HullKind } from './formation';
 import { CAPITAL_SPEED_SCALE, ENEMIES } from './enemy-config';
@@ -56,15 +57,15 @@ export const SECTOR_POINTS: Record<Sector, Point> = { port: { x: 0, y: -tactical
 export interface Wing { id: number; phase: 'ready' | 'launching' | 'sortie' | 'returning' | 'rearming'; timer: number; craft: Escort[]; assignment: Sector; }
 export const WING_TIMING = { launch: 2, sortie: 18, rearm: 10 };
 export interface Platform { id: number; slot: Formation; hull: HullKind; hp: number }
-export const PASSAGES = [
-	{ name: 'Port battery', scout: 'Armor and fighters form ahead along the route. Cover the bow on approach and port as they fall alongside.', threats: [{ kind: 'armored', x: 900, y: -360 }, { kind: 'raider', x: 1100, y: -180 }, { kind: 'raider', x: 1100, y: 180 }, { kind: 'raider', x: 1300, y: 0 }] },
-	{ name: 'Crossfire', scout: 'Paired armor and bombers wait ahead in staggered rows. Cover the bow and both flanks as the convoy closes.', threats: [{ kind: 'armored', x: 900, y: 360 }, { kind: 'armored', x: 1150, y: 420 }, { kind: 'bomber', x: 1000, y: -260 }, { kind: 'bomber', x: 1300, y: -340 }] },
-	{ name: 'Gate approach', scout: 'A flagship leads a forward formation of fighters and a bomber. Cover the approach and sustain fire as they fall alongside.', threats: [{ kind: 'flagship', x: 1400, y: -420 }, { kind: 'raider', x: 950, y: 180 }, { kind: 'raider', x: 1150, y: -180 }, { kind: 'bomber', x: 1300, y: 340 }] },
-] as const;
+export const PASSAGES = KEPLER_PASSAGES;
 export const PASSAGE_SECONDS = 45;
 export const PLATFORM_HP = 240;
+export interface PassageReport {
+	name: string; survived: boolean; hullBefore: number; hullAfter: number; kills: number; salvageEarned: number;
+	disabledPlatforms: number[]; weaponsLost: number; recoveryHull: number; recoverySalvage: number;
+}
 export interface State {
-	convoy?: { platforms: Platform[]; elapsed: number };
+	convoy?: { operation?: OperationId; platforms: Platform[]; elapsed: number; reports?: PassageReport[]; departure?: { hull: number; kills: number; salvageEarned: number; weapons: number } };
 
 	coverage: EscortCoverage;
 	fightersScrambled: boolean;
@@ -116,10 +117,13 @@ export const createState = function (): State {
 	};
 };
 // The convoy entry point keeps isolated combat fixtures and reusable legacy scenarios intact.
-export const createConvoyState = function (): State {
+export const operationFor = function (state: State) { return OPERATIONS[state.convoy?.operation ?? 'kepler']; };
+export const passagesFor = function (state: State) { return operationFor(state).passages; };
+export const createConvoyState = function (operation: OperationId = 'kepler'): State {
 	const state = createState();
 	state.salvage = 650;
-	state.convoy = { platforms: [{ id: 0, slot: 'port', hull: 'frigate', hp: PLATFORM_HP }, { id: 1, slot: 'astern', hull: 'frigate', hp: PLATFORM_HP }], elapsed: 0 };
+	state.systems.routeLength = ROUTE_LENGTH / PASSAGES.length * OPERATIONS[operation].passages.length;
+	state.convoy = { operation, platforms: [{ id: 0, slot: 'port', hull: 'frigate', hp: PLATFORM_HP }, { id: 1, slot: 'astern', hull: 'frigate', hp: PLATFORM_HP }], elapsed: 0 };
 	for (const platform of state.convoy.platforms) {
 		for (const offset of [-20, 20]) state.mounts.push({ platform: platform.id, x: offset, y: 0, integrity: 100, weapon: undefined, level: 0, cooldown: 0, aim: 0 });
 	}
@@ -167,8 +171,9 @@ export const arrangePlatform = function (state: State, id: number, slot: Formati
 	platform.slot = slot; positionPlatforms(state); return true;
 };
 export const launchPassage = function (state: State): boolean {
-	const convoy = state.convoy; const passage = PASSAGES[state.wave];
+	const convoy = state.convoy; const passage = passagesFor(state)[state.wave];
 	if (!canOrder(state) || state.status !== 'fitting' || !convoy || !passage || !state.mounts.some(function (mount) { return !!mount.weapon; })) return false;
+	convoy.departure = { hull: state.hull, kills: state.kills, salvageEarned: 0, weapons: state.mounts.filter(function (mount) { return !!mount.weapon; }).length };
 	state.status = 'running'; state.wave++; convoy.elapsed = 0; state.cleared = false;
 	for (const threat of passage.threats) {
 		const config = ENEMIES[threat.kind]; const point = worldPoint(state, threat);
@@ -577,7 +582,7 @@ export const step = function (state: State, dt: number) {
 	const distanceBefore = state.systems.distanceTraveled;
 	state.systems.sensors.repairCooldown = Math.max(0, state.systems.sensors.repairCooldown - dt);
 	state.systems.shield.hitFlash = Math.max(0, state.systems.shield.hitFlash - dt);
-	state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + (state.convoy ? state.systems.routeLength / (PASSAGES.length * PASSAGE_SECONDS) : effectiveOutputs(state.systems).speed) * dt);
+	state.systems.distanceTraveled = Math.min(state.systems.routeLength, state.systems.distanceTraveled + (state.convoy ? state.systems.routeLength / (passagesFor(state).length * PASSAGE_SECONDS) : effectiveOutputs(state.systems).speed) * dt);
 	const travel = state.systems.distanceTraveled - distanceBefore;
 	state.ark.speed = travel / dt;
 	state.ark.x += Math.cos(state.ark.angle) * travel; state.ark.y += Math.sin(state.ark.angle) * travel;
@@ -783,7 +788,7 @@ export const step = function (state: State, dt: number) {
 	}
 	advanceSystems(state.systems, dt, arkHit);
 	advanceRepairs(state, dt);
-	for (const enemy of state.enemies) if (enemy.hp <= 0) { state.salvage += ENEMIES[enemy.kind].reward; state.kills += 1; state.effects.push({ x: enemy.x, y: enemy.y, z: enemy.z ?? 0, radius: enemy.kind === 'flagship' ? 95 : enemy.kind === 'armored' ? 38 : 24, life: 0.65, maxLife: 0.65, color: '#ffb87b', feedback: { kind: 'destruction' } }); }
+	for (const enemy of state.enemies) if (enemy.hp <= 0) { state.salvage += ENEMIES[enemy.kind].reward; if (state.convoy?.departure) state.convoy.departure.salvageEarned += ENEMIES[enemy.kind].reward; state.kills += 1; state.effects.push({ x: enemy.x, y: enemy.y, z: enemy.z ?? 0, radius: enemy.kind === 'flagship' ? 95 : enemy.kind === 'armored' ? 38 : 24, life: 0.65, maxLife: 0.65, color: '#ffb87b', feedback: { kind: 'destruction' } }); }
 	for (const escort of state.escorts) if (escort.hp <= 0) { state.escortLosses++; state.effects.push({ x: escort.x, y: escort.y, z: escort.z ?? 0, radius: 22, life: 0.65, maxLife: 0.65, color: '#81cfe7', feedback: { kind: 'destruction' } }); }
 	state.enemies = state.enemies.filter(function (e) { return e.hp > 0; }); state.escorts = state.escorts.filter(function (e) { return e.hp > 0; }); state.shots = state.shots.filter(function (s) { return s.life > 0; });
 	for (const wing of state.wings) wing.craft = wing.craft.filter(function (craft) { return craft.hp > 0; });
@@ -793,10 +798,26 @@ export const step = function (state: State, dt: number) {
 		state.cleared = true; state.salvage += 50; state.hull = Math.min(MAX_HULL, state.hull + 60); notify(state, 'Sector secured. +50 salvage · +60 hull. Refit for the next contact.');
 	}
 	advanceRepairs(state, 0);
+	const convoy = state.convoy;
+	if (convoy?.departure && (state.hull <= 0 || convoy.elapsed >= PASSAGE_SECONDS - 1e-8)) {
+		const departure = convoy.departure;
+		const survived = state.hull > 0;
+		const recovering = survived && state.wave < passagesFor(state).length;
+		const report: PassageReport = {
+			name: passagesFor(state)[state.wave - 1]?.name ?? 'Passage', survived,
+			hullBefore: departure.hull, hullAfter: state.hull,
+			kills: state.kills - departure.kills, salvageEarned: departure.salvageEarned,
+			disabledPlatforms: convoy.platforms.filter(function (platform) { return platform.hp <= 0; }).map(function (platform) { return platform.id; }),
+			weaponsLost: departure.weapons - state.mounts.filter(function (mount) { return !!mount.weapon; }).length,
+			recoveryHull: recovering ? Math.min(120, MAX_HULL - state.hull) : 0, recoverySalvage: recovering ? 200 : 0,
+		};
+		convoy.reports = [...(convoy.reports ?? []), report];
+		delete convoy.departure;
+	}
 	if (state.hull <= 0) { state.status = 'lost'; state.resultReason = 'hull'; state.shots = []; }
 	else if (state.convoy && state.convoy.elapsed >= PASSAGE_SECONDS - 1e-8) {
 		state.enemies = []; state.arrivals = []; state.shots = []; state.effects = []; state.priority = undefined; state.ark.speed = 0;
-		if (state.wave === PASSAGES.length) { state.status = 'won'; state.resultReason = 'arrival'; state.systems.distanceTraveled = state.systems.routeLength; }
+		if (state.wave === passagesFor(state).length) { state.status = 'won'; state.resultReason = 'arrival'; state.systems.distanceTraveled = state.systems.routeLength; }
 		else {
 			state.status = 'fitting'; state.salvage += 200; state.hull = Math.min(MAX_HULL, state.hull + 120);
 			for (const platform of state.convoy.platforms) platform.hp = HULLS[platform.hull].hp;

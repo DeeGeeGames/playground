@@ -138,8 +138,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	const turrets: TurretVisual[] = [];
 	const platforms = new Map<number, Mesh<IcosahedronGeometry, MeshStandardMaterial>>();
 	const formation = new Group(); carrier.add(formation);
-	for (const [ring, radius] of Object.entries(FORMATION_RADII)) {
-		const guide = circle(ring === 'future' ? '#576879' : '#6a9daa', radius, ring === 'future' ? 0.12 : 0.3, 3);
+	for (const radius of [FORMATION_RADII.inner, FORMATION_RADII.middle]) {
+		const guide = circle('#6a9daa', radius, 0.3, 3);
 		guide.position.y = DECK_HEIGHT - 30; formation.add(guide);
 	}
 	const slotMarkers = FORMATION.map(function (slot) {
@@ -284,7 +284,6 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 				text('+', point, slot === selectedSlot ? '#f4d68a' : '#9bc8d3', 22);
 				text(`${index < 6 ? 'INNER' : 'MID'} ${index < 6 ? index + 1 : index - 5}`, { x: point.x, y: point.y + 20 }, slot === selectedSlot ? '#f4d68a' : '#91b1bd', 10);
 			}
-			text('FUTURE EXPANSION', toScreen(worldPoint(state, { x: -FORMATION_RADII.future, y: 0 }), view, DECK_HEIGHT), '#657b89', 10);
 		}
 		for (const platform of state.convoy?.platforms ?? []) {
 			if (platform.hp > 0) text(`P${platform.id + 1} ${HULLS[platform.hull].name} · ${Math.ceil(platform.hp)} HP`, toScreen(worldPoint(state, FORMATION_SLOTS[platform.slot]), view, DECK_HEIGHT + 110), state.mounts[selected]?.platform === platform.id ? '#e1f3c1' : '#b4c8d4', 10);

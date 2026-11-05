@@ -1,4 +1,4 @@
-import { PASSAGES, PASSAGE_SECONDS, WAVE_COUNT, type State } from './simulation';
+import { operationFor, passagesFor, PASSAGE_SECONDS, WAVE_COUNT, type State } from './simulation';
 import { effectiveOutputs } from './systems';
 
 export interface SystemsSummary {
@@ -13,14 +13,14 @@ export interface SystemsSummary {
 export const systemsSummary = function (state: State): SystemsSummary {
 	const systems = state.systems;
 	const remaining = Math.max(0, systems.routeLength - systems.distanceTraveled);
-	const speed = state.convoy ? systems.routeLength / (PASSAGES.length * PASSAGE_SECONDS) : effectiveOutputs(systems).speed;
+	const speed = state.convoy ? systems.routeLength / (passagesFor(state).length * PASSAGE_SECONDS) : effectiveOutputs(systems).speed;
 	return {
 		result: state.status, reason: state.resultReason, elapsed: state.time,
 		distance: systems.distanceTraveled, routeLength: systems.routeLength,
 		eta: remaining === 0 ? 0 : speed > 0 ? remaining / speed : null,
 		hull: state.hull, shield: systems.shield.charge, shieldAbsorbed: systems.shieldAbsorbed,
 		powerChanges: systems.powerChanges, contacts: state.wave,
-		totalContacts: state.convoy ? PASSAGES.length : WAVE_COUNT, kills: state.kills,
+		totalContacts: state.convoy ? passagesFor(state).length : WAVE_COUNT, kills: state.kills,
 		sensorImpairments: systems.sensors.impairments, sensorRepairs: systems.sensors.repairs,
 		fieldPlacements: systems.interdiction.placements, redirected: systems.interdiction.redirected,
 		escortLosses: state.escortLosses, salvage: state.salvage,
@@ -29,5 +29,6 @@ export const systemsSummary = function (state: State): SystemsSummary {
 
 export const systemsResultMessage = function (state: State): string {
 	if (state.status !== 'won' && state.status !== 'lost') return '';
-	return state.status === 'won' ? 'Kepler reached. The ark broke through; surviving hostiles do not block arrival.' : 'Ark destroyed before reaching Kepler. Review shields, coverage and repair timing.';
+	const destination = state.convoy ? operationFor(state).destination : 'Kepler';
+	return state.status === 'won' ? `${destination} reached. The ark broke through; surviving hostiles do not block arrival.` : `Ark destroyed before reaching ${destination}. Review shields, coverage and repair timing.`;
 };

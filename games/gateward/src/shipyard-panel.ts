@@ -38,7 +38,7 @@ export const createShipyardPanel = function (root: HTMLElement, getState: () => 
 		if (target && platform) order(function () { if (!arrangePlatform(getState(), platform.id, target)) return false; selected = target; position.value = target; return true; });
 	}, { signal });
 	position.addEventListener('change', function () { const slot = FORMATION.find(function (slot) { return slot === position.value; }); if (slot) selected = slot; }, { signal });
-	const note = document.createElement('p'); note.className = 'note'; note.textContent = '6 inner + 8 middle positions available now. Any hull fits any position. Outer ring: future expansion. Hull purchases are permanent; weapons receive full refunds. Keep 75 salvage for your first weapon.';
+	const note = document.createElement('p'); note.className = 'note'; note.textContent = 'Six inner and eight middle positions. Any hull fits any position. Hull purchases are permanent; weapons receive full refunds. Keep 75 salvage for your first weapon.';
 	root.append(heading, summary, choices, fit, moveLabel, note);
 	return {
 		select: function (slot: Formation) { selected = slot; position.value = slot; },
