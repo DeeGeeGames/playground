@@ -100,3 +100,12 @@ engine power, purchasing/refunds, formation ownership/coverage, automatic fire,
 platform loss/recovery and defeat precedence. Browser journeys and simulated
 controller input do not establish physical controller/touch feel, hardware
 performance, speaker output, balance or owner acceptance.
+
+## Passage debriefs
+
+The Fit drawer opens on preparation and after each surviving passage. A persistent
+report records ark hull before and after combat, destroyed hostiles, combat salvage,
+disabled platforms and lost weapons before automatic recovery occurs. Refit supply
+and actual hull recovery are listed separately. Combat salvage counts kill rewards,
+independent of spending on escorts during a passage. The final screen retains each
+passage report, with optional ship-system statistics under an expandable section.

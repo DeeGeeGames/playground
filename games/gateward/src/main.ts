@@ -1,3 +1,4 @@
+import { renderPassageReports } from './passage-report';
 import { createContextActions } from './context-actions';
 import { createShipyardPanel } from './shipyard-panel';
 import { createFleetPanel } from './fleet-panel';
@@ -181,7 +182,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (!available() || state.status !== 'fitting') return;
 		if (launchPassage(state)) { contextActions.close(); closeInspector(); accumulator = 0; focusCanvas(); }
 	}, options);
-	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; closeInspector(); focusCanvas(); }, options);
+	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; openInspector('mounts'); focusCanvas(); }, options);
 	button('prepare').disabled = false;
 
 	const radar = createRadar(radarHost, function () { return state; }, available, { close: function () { setRadar(false); }, pause: function () { setPause(true); }, repair: function () { order(function () { return repairSensors(state); }); }, selectedMount: function () { return selected; } }, abort.signal);
@@ -355,6 +356,8 @@ const shutdown = await mountGame('game', async function (container) {
 		label(button('prepare'), 'PREPARE CONVOY PASSAGE →');
 		label(ui.wave, `PASSAGE ${Math.min(3, state.wave + (state.status === 'fitting' ? 1 : 0))} / 3 · ${state.status === 'fitting' ? 'BUILD' : 'UNDERWAY'}`);
 		label(element('passage-scout'), state.status === 'fitting' ? (PASSAGES[state.wave]?.scout ?? 'Kepler reached') : `${Math.ceil(PASSAGE_SECONDS - (state.convoy?.elapsed ?? 0))}s to passage exit · ${contactWarning(state)}`);
+		const reportChanged = renderPassageReports(element('passage-report'), state.status === 'fitting' ? (state.convoy?.reports ?? []).slice(-1) : []);
+		if (reportChanged && state.status === 'fitting' && state.convoy?.reports?.length) element('passage-report').scrollIntoView({ block: 'start' });
 		shipyard.update(); syncMountButtons();
 		label(ui.waveInfo, state.status === 'fitting' ? `Scout: ${PASSAGES[state.wave]?.name ?? 'Arrival'}` : `${Math.max(0, Math.ceil(PASSAGE_SECONDS - (state.convoy?.elapsed ?? 0)))}s to exit · ${contactWarning(state)}`);
 		for (const [i, control] of mountButtons.entries()) {
@@ -409,6 +412,7 @@ const shutdown = await mountGame('game', async function (container) {
 		contextActions.close(); setRadar(false);
 		ui.result.hidden = false; placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
 		label(element('result-title'), state.status === 'won' ? 'CONVOY PASSAGE COMPLETE.' : 'CONVOY PASSAGE LOST.');
+		renderPassageReports(element('convoy-results'), state.convoy?.reports ?? []);
 		const summary = systemsSummary(state);
 		label(element('result-copy'), systemsResultMessage(state));
 		label(element('result-stats'), [

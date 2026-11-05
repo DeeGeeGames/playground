@@ -88,3 +88,9 @@
 @media(max-height:500px) {
 	#context-actions { max-height:calc(100% - 120px); }
 }
+
+.passage-report article,.passage-report:not(:has(article)) { border-left:2px solid var(--mint); padding:8px 12px; margin:0 0 14px; background:#18313b80; }
+.passage-report h3 { margin:0 0 8px; color:var(--mint); font-size:14px; }
+.passage-report p { margin:6px 0; font-size:12px; line-height:1.55; }
+.passage-report .recovery { color:var(--mint); }
+#convoy-results { margin:16px 0; }
