@@ -13,7 +13,22 @@ export interface Shell extends Point { vx: number; vy: number; life: number; hos
 export interface Effect extends Point { kind: 'muzzle' | 'impact' | 'explosion' | 'shield' | 'intercept'; life: number; duration: number }
 export interface DefenseTrace { from: Point; to: Point; life: number }
 export interface Wreck extends Point { angle: number; length: number; width: number; life: number }
+export const CAMPAIGN_MISSIONS = [
+	{ name: 'Outer picket', location: 'Lyra outskirts', briefing: 'Break the patrol. Turn your flank toward each contact and learn the rhythm of the arrays.', enemies: ['frigate', 'frigate'], bearings: [-1.55, 1.45] },
+	{ name: 'Crossfire', location: 'The broken relay', briefing: 'Three frigates close from separate bearings. Keep moving and use Aegis when their volleys converge.', enemies: ['frigate', 'frigate', 'frigate'], bearings: [-1.9, 0.9, 2.1] },
+	{ name: 'Heavy escort', location: 'Ash corridor', briefing: 'A cruiser anchors the blockade. Clear its escorts before committing to a sustained broadside exchange.', enemies: ['frigate', 'frigate', 'cruiser'], bearings: [-1.4, 1.5, 3] },
+	{ name: 'The hammer', location: 'Inner passage', briefing: 'Two heavy hulls hold the route. Separate their firing cycles and spend your defenses deliberately.', enemies: ['cruiser', 'cruiser'], bearings: [-1.2, 1.6] },
+	{ name: 'Dreadwake', location: 'Lyra gate', briefing: 'Destroy the command cruiser and its escort to open the passage. There is no refit beyond this point.', enemies: ['frigate', 'frigate', 'cruiser', 'cruiser'], bearings: [-1.7, 1.6, -0.6, 0.6] },
+] as const;
+export type RefitChoice = 'repair' | 'rails' | 'capacitor';
+export const REFIT_CHOICES: readonly { id: RefitChoice; name: string; description: string }[] = [
+	{ id: 'repair', name: 'Hull restoration', description: 'Restore 35% of maximum hull. Damage otherwise carries into the next mission.' },
+	{ id: 'rails', name: 'Rail calibration', description: 'Increase broadside damage by 15% of base damage for the rest of the campaign.' },
+	{ id: 'capacitor', name: 'Capacitor overhaul', description: 'Reduce Aegis recharge by 3 seconds for the rest of the campaign (minimum 6 seconds).' },
+];
+export interface Campaign { phase: 'combat' | 'refit'; completedMissions: number; upgrades: { rails: number; capacitor: number } }
 export interface State {
+	campaign?: Campaign;
 	player: Ship & { throttle: number; yaw: number; braced: boolean };
 	batteries: Record<Side, Battery>; enemies: Enemy[]; shells: Shell[]; effects: Effect[]; wrecks: Wreck[];
 	time: number; wave: number; intermission: number; kills: number; nextId: number;
@@ -76,12 +91,13 @@ const effect = function (state: State, at: Point, kind: Effect['kind']) {
 };
 const spawnWave = function (state: State) {
 	const p = state.player;
-	const bearings = state.wave === 1 ? [-1.55, 1.45] : state.wave === 2 ? [-1.9, 0.9, 2.1] : [-1.4, 1.5, 3];
+	const mission = state.campaign ? CAMPAIGN_MISSIONS[state.wave - 1] : undefined;
+	const bearings = mission?.bearings ?? (state.wave === 1 ? [-1.55, 1.45] : state.wave === 2 ? [-1.9, 0.9, 2.1] : [-1.4, 1.5, 3]);
 	for (const [index, bearing] of bearings.entries()) {
 		const angle = p.angle + bearing;
 		const radius = 460 + index * 70;
-		const kind = state.wave === 3 && index === 2 ? 'cruiser' : 'frigate';
-		const hp = kind === 'cruiser' ? 600 : 280;
+		const kind = mission?.enemies[index] ?? (state.wave === 3 && index === 2 ? 'cruiser' : 'frigate');
+		const hp = kind === 'cruiser' ? (state.campaign && state.wave === CAMPAIGN_MISSIONS.length && index === 3 ? 1000 : 600) : 280;
 		const x = p.x + Math.cos(angle) * radius; const y = p.y + Math.sin(angle) * radius;
 		state.enemies.push({ id: state.nextId++, x, y, angle: angle + Math.PI / 2, vx: 0, vy: 0,
 			hp, maxHp: hp, kind, length: kind === 'cruiser' ? 170 : 115, width: kind === 'cruiser' ? 58 : 42,
@@ -102,6 +118,31 @@ export const createState = function (): State {
 	};
 	spawnWave(state); state.events = [];
 	return state;
+};
+
+export const createCampaignState = function (): State {
+	const state = createState();
+	state.campaign = { phase: 'combat', completedMissions: 0, upgrades: { rails: 0, capacitor: 0 } };
+	return state;
+};
+export const chooseRefit = function (state: State, choice: RefitChoice): boolean {
+	const campaign = state.campaign;
+	if (!campaign || campaign.phase !== 'refit' || state.outcome !== 'playing' || state.wave >= CAMPAIGN_MISSIONS.length) return false;
+	if (choice === 'repair') state.player.hp = Math.min(state.player.maxHp, state.player.hp + state.player.maxHp * 0.35);
+	else if (choice === 'rails') campaign.upgrades.rails++;
+	else if (choice === 'capacitor') campaign.upgrades.capacitor++;
+	else return false;
+	campaign.phase = 'combat'; state.wave++; state.intermission = 0;
+	state.player.vx = 0; state.player.vy = 0; state.player.yaw = 0; state.player.throttle = 0; state.player.braced = false;
+	state.shells = []; state.effects = []; state.wrecks = []; state.priorityTarget = undefined;
+	for (const battery of [state.batteries.port, state.batteries.starboard, state.torpedoes]) {
+		battery.reload = 0; battery.remaining = 0; battery.next = 0; battery.target = undefined;
+	}
+	state.shield = { active: 0, cooldown: 0, held: false };
+	state.torpedoes.held = false; state.fireControl.held = false;
+	state.pointDefense.reload = 0; state.pointDefense.traces = [];
+	spawnWave(state);
+	return true;
 };
 
 // Sweep against the ship's oriented ellipse; resolve the nearest hull first.
@@ -129,7 +170,7 @@ const fireGun = function (state: State, side: Side, battery: Battery) {
 	const flight = target ? distance(muzzle, target) / 460 : 0;
 	const aim = target ? { x: target.x + target.vx * flight, y: target.y + target.vy * flight } : undefined;
 	const angle = aim ? direction + clamp(angleDelta(direction, Math.atan2(aim.y - muzzle.y, aim.x - muzzle.x)), -ARC, ARC) : direction;
-	state.shells.push({ ...muzzle, vx: Math.cos(angle) * 460, vy: Math.sin(angle) * 460, hostile: false, damage: 58, life: RANGE / 460 });
+	state.shells.push({ ...muzzle, vx: Math.cos(angle) * 460, vy: Math.sin(angle) * 460, hostile: false, damage: 58 * (1 + (state.campaign?.upgrades.rails ?? 0) * 0.15), life: RANGE / 460 });
 	p.vx -= Math.cos(angle) * 1.8; p.vy -= Math.sin(angle) * 1.8;
 	battery.remaining--; battery.next += 0.14;
 	effect(state, muzzle, 'muzzle'); state.events.push('cannon'); state.shake = Math.max(state.shake, 3);
@@ -225,7 +266,7 @@ const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 };
 export const step = function (state: State, input: Controls, elapsed: number) {
 	state.events = [];
-	if (state.outcome !== 'playing' || !Number.isFinite(elapsed) || elapsed <= 0) return;
+	if (state.outcome !== 'playing' || state.campaign?.phase === 'refit' || !Number.isFinite(elapsed) || elapsed <= 0) return;
 	const dt = Math.min(elapsed, 1 / 30); const p = state.player;
 	state.time += dt; state.shake = Math.max(0, state.shake - dt * 12);
 	const cooling = state.shield.cooldown > 0;
@@ -233,7 +274,7 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	state.shield.cooldown = Math.max(0, state.shield.cooldown - dt);
 	if (cooling && state.shield.cooldown === 0) state.events.push('ready');
 	if (input.pulse && !state.shield.held && state.shield.cooldown === 0) {
-		state.shield.active = SHIELD_DURATION; state.shield.cooldown = SHIELD_COOLDOWN; state.events.push('shield');
+		state.shield.active = SHIELD_DURATION; state.shield.cooldown = Math.max(6, SHIELD_COOLDOWN - (state.campaign?.upgrades.capacitor ?? 0) * 3); state.events.push('shield');
 	}
 	state.shield.held = input.pulse;
 	if (input.autoFire && !state.fireControl.held) state.fireControl.automatic = !state.fireControl.automatic;
@@ -295,7 +336,11 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	} else if (state.enemies.length === 0) {
 		state.intermission += dt;
 		if (state.intermission >= 6) {
-			if (state.wave === 3) state.outcome = 'won';
+			if (state.campaign) {
+				state.campaign.completedMissions = state.wave;
+				if (state.wave === CAMPAIGN_MISSIONS.length) state.outcome = 'won';
+				else state.campaign.phase = 'refit';
+			} else if (state.wave === 3) state.outcome = 'won';
 			else {
 				state.wave++; state.intermission = 0; p.hp = Math.min(MAX_HULL, p.hp + 280);
 				state.shells = []; spawnWave(state);
