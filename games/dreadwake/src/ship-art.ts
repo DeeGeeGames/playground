@@ -22,7 +22,8 @@ const mirror = function (outline: Outline): Outline { return outline.map(functio
 
 export const drawStarship = function (ctx: CanvasRenderingContext2D, camera: Camera, ship: Ship, state: State) {
 	const player = ship.id === 0; const heavy = player || ship.length > 150; const alive = ship.hp > 0;
-	const accent = !alive ? '#435064' : player ? '#8bf4ed' : heavy ? '#ffb26a' : '#ff7d8f';
+	const command = state.enemies.some(function (enemy) { return enemy.id === ship.id && enemy.command; });
+	const accent = !alive ? '#435064' : player ? '#8bf4ed' : command ? '#ffe0a0' : heavy ? '#ffb26a' : '#ff7d8f';
 	const dark = player ? '#182b40' : '#352333';
 	const screen = function (f: number, a: number, z = 0) { return worldToScreen(localPoint(ship, f * ship.length, a * ship.width), camera, z); };
 	const points = function (outline: Outline, z: number) { return outline.map(function ([f, a]) { return screen(f, a, z); }); };
@@ -84,6 +85,22 @@ export const drawStarship = function (ctx: CanvasRenderingContext2D, camera: Cam
 	}
 	// Identification stripes and drive-control jets replace nautical superstructure.
 	for (const f of [-0.1, -0.06, -0.02]) line(ctx, screen(f, -0.14, 23), screen(f + 0.03, -0.2, 25), player ? '#f0c582' : '#ec8b91', 2 * camera.scale);
+	// Damage remains attached to armor panels, making campaign attrition visible on the hull.
+	const damage = 1 - ship.hp / ship.maxHp;
+	for (let i = 0; i < 6; i++) {
+		if (damage < (i + 1) / 8) continue;
+		const f = -0.3 + (i % 3) * 0.18;
+		const a = (i < 3 ? -1 : 1) * 0.28;
+		polygon(ctx, [screen(f - 0.045, a - 0.06, 31), screen(f + 0.04, a - 0.03, 31),
+			screen(f + 0.025, a + 0.06, 31), screen(f - 0.03, a + 0.04, 31)], '#131923cc', '#77504a');
+		if (alive && damage > 0.6) line(ctx, screen(f - 0.02, a, 32), screen(f + 0.015, a + 0.02, 32), '#ef976b', Math.max(1, camera.scale));
+	}
+	if (command) {
+		for (const sign of [-1, 1]) {
+			line(ctx, screen(0.1, sign * 0.18, 32), screen(0.24, sign * 0.25, 32), '#ffe0a0', 3 * camera.scale);
+			line(ctx, screen(0.24, sign * 0.25, 32), screen(0.35, sign * 0.14, 32), '#ffe0a0', 3 * camera.scale);
+		}
+	}
 	if (player && Math.abs(state.player.yaw) > 0.025) {
 		const sign = Math.sign(state.player.yaw);
 		line(ctx, screen(0.37, -sign * 0.19, 23), screen(0.37, -sign * 0.43, 23), '#a0edff99', 3 * camera.scale);
