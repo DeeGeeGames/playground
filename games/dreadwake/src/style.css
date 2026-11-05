@@ -95,7 +95,7 @@ canvas { width: 100%; height: 100%; display: block; outline: none; touch-action:
 .defense { bottom: calc(100% + 64px); }
 footer { position: absolute; bottom: calc(12px + env(safe-area-inset-bottom)); width: 100%; text-align: center; color: #8295ad; font: 8px ui-monospace, monospace; letter-spacing: .3px; pointer-events: none; }
 footer span { margin: 0 10px; color: #40536e; }
-.overlay { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 95px 24px 24px; background: #040914db; backdrop-filter: blur(7px); overflow: auto; }
+.overlay { position: absolute; inset: 0; z-index: 7; display: grid; place-items: center; padding: 95px 24px 24px; background: #040914db; backdrop-filter: blur(7px); overflow: auto; }
 [hidden] { display: none !important; }
 .panel { margin: auto; width: min(540px, 100%); padding: 34px; background: #0d192bf5; border: 1px solid var(--line); border-top: 2px solid var(--cyan); box-shadow: 0 30px 100px #0005; }
 .briefing { display: flex; align-items: center; background: linear-gradient(90deg, #050b19f5 0%, #050b19b5 30%, #050b1920 62%, transparent); backdrop-filter: none; padding: 110px 6.5% 50px; }

@@ -86,7 +86,7 @@ apart and damages both. The radar and edge indicators reveal distant contacts.
 
 Defeat fourteen ships over five missions (2 / 3 / 3 / 2 / 4). After six seconds of clearance, combat freezes for refit. Choose one: restore 35% maximum hull, add 15% base broadside damage, or reduce Aegis recharge by three seconds (six-second minimum). Upgrades stack for the campaign. There is no automatic hull repair. Deploying resets movement orders and reloads, preserving hull damage, upgrades, and crew mode. Lose at zero hull. The after-action
 screen reports kills, time, broadside and torpedo salvos, intercepted rounds, and
-damage prevented by armor and shields. Restart resets the campaign, upgrades, designation, and capacitor. The campaign lasts the current browser session; reloading starts over. There is no time limit, ammo inventory, or collision with decorative debris.
+damage prevented by armor and shields. Restart resets the campaign, upgrades, designation, and capacitor. Mission launches and refit screens save a local checkpoint. Continue restores that checkpoint, including hull, upgrades, statistics, and crew orders; leaving mid-battle restarts that mission. Starting over asks before replacing an existing checkpoint. Victory or defeat clears the run. Storage failures are reported and play remains available without saving. There is no time limit, ammo inventory, or collision with decorative debris.
 
 Outer picket teaches the weapon rhythm. Crossfire frigates seek bow/stern blind spots. Heavy escort introduces a standoff cruiser outside broadside range: close distance or use bow torpedoes. The hammer sends two aggressive cruisers into close range. The final gate combines those roles around a command cruiser. Tactical role labels identify each behavior.
 
