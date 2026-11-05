@@ -95,3 +95,9 @@
 .passage-report .recovery { color:var(--mint); }
 #convoy-results { margin:16px 0; }
 .shipyard-heading { margin:24px 0 8px; padding-top:16px; border-top:1px solid var(--line); font-size:16px; color:var(--mint); }
+.operation-picker { padding:14px; margin:18px 0; background:#18313b; border:1px solid var(--line); border-radius:8px; }
+.operation-picker label { display:block; margin-bottom:8px; color:var(--mint); }
+.operation-picker select { width:100%; min-height:48px; color:inherit; background:#101c29; border:1px solid #617785; padding:8px; font:inherit; }
+.operation-picker p { margin:8px 0 0; font-size:13px; }
+.command-guide { margin-top:16px; }
+.command-guide summary { min-height:44px; padding:12px 0; cursor:pointer; color:var(--mint); }

@@ -14,7 +14,7 @@ press **Launch passage**. At least one fitted gun is required. Building freezes
 all simulation time, travel, income, repairs, recharge and cooldowns. No enemies
 spawn until explicit launch.
 
-There are three **45-second** combat passages:
+The default **Kepler** operation has three **45-second** combat passages:
 
 1. Port battery: one armored ship and three fighters entering ahead.
 2. Crossfire: two starboard armored ships and three port bombers.
@@ -29,7 +29,7 @@ hostile. Survivors and projectiles are left behind at the exit. The next defense
 never deploys during fitting. The final passage wins on arrival; zero hull loses,
 including when destruction coincides with an exit.
 
-After the first two passages, gain **200 salvage and 120 hull** (capped at 1200).
+After each non-final passage, gain **200 salvage and 120 hull** (capped at 1200).
 All mounts, engine, sensors and generator regain full integrity; platform chassis
 recover to full hull for free. Destroyed platform weapons remain lost. Existing
 shield charge and cooldowns carry over and freeze during fitting. No passive
@@ -59,7 +59,7 @@ Starting frigates have **240 hull**; additional corvettes, frigates and cruisers
 160, 240 and 400 hull, and one, two and four mounts respectively. New hulls cost
 120, 220 and 380 salvage before weapons. Platforms have no shield or combat repair. Hostiles may aim
 at a platform closer than the ark; nearby escorts retain their existing targeting
-precedence. Incoming rounds collide with platform chassis. At zero hull its two
+precedence. Incoming rounds collide with platform chassis. At zero hull all its
 guns are destroyed without refund and stop firing; the chassis recovers at the
 next build phase but replacement weapons cost salvage. A port rail platform and
 aft flak platform are one plausible first build; ark flank guns and other weapon
@@ -111,3 +111,17 @@ disabled platforms and lost weapons before automatic recovery occurs. Refit supp
 and actual hull recovery are listed separately. Combat salvage counts kill rewards,
 independent of spending on escorts during a passage. The final screen retains each
 passage report, with optional ship-system statistics under an expandable section.
+
+## Operations and local records
+
+Choose an operation before preparing the convoy. Kepler has three passages over
+5.76 km; Long Wake has five over 9.60 km, alternating fighter screens, armored
+columns and bomber corridors; Iron Crossing has six over 11.52 km and ends with
+two flagships. Every operation starts with the same budget and blank fleet.
+Cruise speed, 45-second combat passages and refit rules remain consistent.
+
+All operations are available immediately. Successful crossings and best surviving
+ark hull are stored per operation on the current device using the
+`gateward.operation.v1.*` namespace. These are completion records, not mid-run
+saves. Missing, corrupt or unavailable storage does not prevent play. Retry keeps
+the chosen operation; the results screen also returns to operation selection.

@@ -1,3 +1,5 @@
+import { OPERATION_IDS, OPERATIONS, type OperationId } from './operations';
+import { operationRecord, recordOperation } from './operation-record';
 import { renderPassageReports } from './passage-report';
 import { createContextActions } from './context-actions';
 import { createShipyardPanel } from './shipyard-panel';
@@ -12,7 +14,7 @@ import { createSoundObserver } from './audio-events';
 import { createEscortPanel } from './escort-panel';
 import { attachFullscreen } from './fullscreen';
 import { mountGame } from '../../../shared/lifecycle';
-import { launchPassage, PASSAGES, PASSAGE_SECONDS, createConvoyState, build, contactWarning, craftCount, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, REPAIR_CREWS, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
+import { launchPassage, operationFor, passagesFor, PASSAGE_SECONDS, createConvoyState, build, contactWarning, craftCount, deploy, interdictionReason, placeInterdiction, ESCORTS, invested, MAX_HULL, notify, pulse, REPAIR_CREWS, repair, repairSensors, setPriority, sell, step, upgrade, upgradeCost, WEAPONS, type Point, type Weapon } from './simulation';
 import { worldPoint } from './space';
 import { createPresentation } from './presentation';
 import { journeyFor } from './journey';
@@ -56,7 +58,8 @@ const shutdown = await mountGame('game', async function (container) {
 	const buildButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-build]')];
 	const deployButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-deploy]')];
 	const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-	const newState = createConvoyState;
+	let selectedOperation: OperationId = 'kepler';
+	const newState = function () { return createConvoyState(selectedOperation); };
 	let state = newState(); let selected = 0; let paused = false; let briefing = true; let speed = 1;
 	let placement: Point | undefined;
 	let frame = 0; let previous = 0; let accumulator = 0; let disposed = false; let contextAvailable = true;
@@ -182,7 +185,28 @@ const shutdown = await mountGame('game', async function (container) {
 		if (!available() || state.status !== 'fitting') return;
 		if (launchPassage(state)) { contextActions.close(); closeInspector(); accumulator = 0; focusCanvas(); }
 	}, options);
-	button('prepare').addEventListener('click', function () { briefing = false; ui.brief.hidden = true; openInspector('mounts'); focusCanvas(); }, options);
+	const operationSelect = element('operation-select');
+	if (!(operationSelect instanceof HTMLSelectElement)) throw new Error('Missing operation selector');
+	for (const id of OPERATION_IDS) {
+		const option = document.createElement('option'); option.value = id;
+		option.textContent = `${OPERATIONS[id].name} · ${OPERATIONS[id].passages.length} passages`;
+		operationSelect.append(option);
+	}
+	const describeOperation = function () {
+		label(element('operation-description'), OPERATIONS[selectedOperation].description);
+		label(element('operation-record'), operationRecord(selectedOperation));
+	};
+	operationSelect.addEventListener('change', function () {
+		const id = OPERATION_IDS.find(function (id) { return id === operationSelect.value; });
+		if (!briefing || !id) return;
+		selectedOperation = id; describeOperation();
+	}, options);
+	describeOperation();
+	button('prepare').addEventListener('click', restart, options);
+	button('choose-operation').addEventListener('click', function () {
+		ui.result.hidden = true; briefing = true; ui.brief.hidden = false; ui.brief.inert = false;
+		describeOperation(); ui.brief.scrollTop = 0; operationSelect.focus({ preventScroll: true });
+	}, options);
 	button('prepare').disabled = false;
 
 	const radar = createRadar(radarHost, function () { return state; }, available, { close: function () { setRadar(false); }, pause: function () { setPause(true); }, repair: function () { order(function () { return repairSensors(state); }); }, selectedMount: function () { return selected; } }, abort.signal);
@@ -351,15 +375,15 @@ const shutdown = await mountGame('game', async function (container) {
 		const journey = journeyFor(state);
 		label(ui.salvage, String(Math.floor(state.salvage))); ui.route.style.width = `${journey.progress * 100}%`;
 		label(ui.distance, `${Math.floor(journey.progress * 100)}%`);
-		label(ui.routeLabel, journey.remaining > 0 ? `KEPLER · ${(journey.remaining / 1000).toFixed(2)} KM` : 'KEPLER · ARRIVED');
+		label(ui.routeLabel, journey.remaining > 0 ? `${operationFor(state).destination.toUpperCase()} · ${(journey.remaining / 1000).toFixed(2)} KM` : `${operationFor(state).destination.toUpperCase()} · ARRIVED`);
 		label(element('travel-eta'), journey.eta === Infinity ? 'TRAVEL STALLED' : `Travel ETA ${clockTime(Math.ceil(journey.eta))} · route only`);
-		label(button('prepare'), 'PREPARE CONVOY PASSAGE →');
-		label(ui.wave, `PASSAGE ${Math.min(3, state.wave + (state.status === 'fitting' ? 1 : 0))} / 3 · ${state.status === 'fitting' ? 'BUILD' : 'UNDERWAY'}`);
-		label(element('passage-scout'), state.status === 'fitting' ? (PASSAGES[state.wave]?.scout ?? 'Kepler reached') : `${Math.ceil(PASSAGE_SECONDS - (state.convoy?.elapsed ?? 0))}s to passage exit · ${contactWarning(state)}`);
+		label(button('prepare'), `PREPARE ${OPERATIONS[selectedOperation].name.toUpperCase()} →`);
+		label(ui.wave, `PASSAGE ${Math.min(passagesFor(state).length, state.wave + (state.status === 'fitting' ? 1 : 0))} / ${passagesFor(state).length} · ${state.status === 'fitting' ? 'BUILD' : 'UNDERWAY'}`);
+		label(element('passage-scout'), state.status === 'fitting' ? (passagesFor(state)[state.wave]?.scout ?? 'Destination reached') : `${Math.ceil(PASSAGE_SECONDS - (state.convoy?.elapsed ?? 0))}s to passage exit · ${contactWarning(state)}`);
 		const reportChanged = renderPassageReports(element('passage-report'), state.status === 'fitting' ? (state.convoy?.reports ?? []).slice(-1) : []);
 		if (reportChanged && state.status === 'fitting' && state.convoy?.reports?.length) element('passage-report').scrollIntoView({ block: 'start' });
 		shipyard.update(); syncMountButtons();
-		label(ui.waveInfo, state.status === 'fitting' ? `Scout: ${PASSAGES[state.wave]?.name ?? 'Arrival'}` : `${Math.max(0, Math.ceil(PASSAGE_SECONDS - (state.convoy?.elapsed ?? 0)))}s to exit · ${contactWarning(state)}`);
+		label(ui.waveInfo, state.status === 'fitting' ? `Scout: ${passagesFor(state)[state.wave]?.name ?? 'Arrival'}` : `${Math.max(0, Math.ceil(PASSAGE_SECONDS - (state.convoy?.elapsed ?? 0)))}s to exit · ${contactWarning(state)}`);
 		for (const [i, control] of mountButtons.entries()) {
 			const m = state.mounts[i]; if (!m) continue;
 			label(control, `${i + 1} ${m.weapon ? m.weapon === 'flak' ? 'F' : m.weapon === 'rail' ? 'R' : m.weapon === 'beam' ? 'B' : 'M' : '·'}${m.level > 1 ? ` ${'⁺'.repeat(m.level - 1)}` : ''}${m.weapon && m.integrity < 50 ? m.integrity <= 0 ? ' OFF' : ' IMP' : ''}`);
@@ -413,6 +437,7 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.result.hidden = false; placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
 		label(element('result-title'), state.status === 'won' ? 'CONVOY PASSAGE COMPLETE.' : 'CONVOY PASSAGE LOST.');
 		renderPassageReports(element('convoy-results'), state.convoy?.reports ?? []);
+		if (state.status === 'won') recordOperation(selectedOperation, state.hull);
 		const summary = systemsSummary(state);
 		label(element('result-copy'), systemsResultMessage(state));
 		label(element('result-stats'), [
