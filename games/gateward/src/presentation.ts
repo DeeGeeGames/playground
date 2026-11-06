@@ -1,10 +1,12 @@
 import { createBackdrop } from './backdrop';
+import { createConvoyCraft } from './convoy-craft';
+import { OPERATIONS } from './operations';
 import { MIN_CAMERA_ZOOM } from './combat-scale';
 import { FORMATION, FORMATION_RADII, FORMATION_SLOTS, HULLS, type Formation } from './formation';
 import { COMBAT_EFFECT_LIMIT, createCombatVisual } from './combat-feedback';
 import { bomberCue, placeBomberCue } from './bomber-cue';
 import { updateCraftTurrets } from './craft-3d';
-import { ACESFilmicToneMapping, AdditiveBlending, BufferAttribute, BufferGeometry, Color, ConeGeometry, DirectionalLight, DoubleSide, Group, HemisphereLight, IcosahedronGeometry, InstancedMesh, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshStandardMaterial, MOUSE, Object3D, PCFSoftShadowMap, Raycaster, RingGeometry, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
+import { ACESFilmicToneMapping, AdditiveBlending, BufferAttribute, BufferGeometry, Color, ConeGeometry, DirectionalLight, DoubleSide, Group, HemisphereLight, IcosahedronGeometry, InstancedMesh, Line, LineBasicMaterial, LineDashedMaterial, LineSegments, Mesh, MeshBasicMaterial, MeshStandardMaterial, MOUSE, Object3D, PCFShadowMap, Raycaster, RingGeometry, Scene, SphereGeometry, SRGBColorSpace, TorusGeometry, Vector2, Vector3, WebGLRenderer } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnemy, createEscort, createTurret, disposeObject, type TurretVisual } from './actors-3d';
@@ -24,7 +26,8 @@ import { focusedShip, type FleetFocus } from './fleet-focus';
 type PickTarget = { kind: 'mount'; index: number } | { kind: 'enemy'; id: number } | { kind: 'fleet'; id: FleetFocus };
 export interface PickResult { mount: number; enemy: Enemy | undefined; world: Point | undefined; slot?: Formation; fleet?: FleetFocus }
 export interface Presentation {
-	render: (state: State, selected: number, reducedMotion: boolean, controlsEnabled: boolean, placement?: Point, screenOffsetY?: number, screenOffsetX?: number, selectedSlot?: Formation) => void;
+	render: (state: State, selected: number, reducedMotion: boolean, controlsEnabled: boolean, placement?: Point, screenOffsetY?: number, screenOffsetX?: number, selectedSlot?: Formation, cinematic?: boolean) => void;
+	orbitCamera: (horizontal: number, vertical: number, zoom: number, deltaSeconds: number) => void;
 	pick: (point: Point, state: State) => PickResult;
 	placementPoint: (point: Point) => Point | undefined;
 	resetCamera: () => void;
@@ -51,12 +54,12 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	const scene = new Scene();
 	const carrier = new Group(); scene.add(carrier);
 	const renderer = new WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-	renderer.setClearColor('#080f19');
+	renderer.setClearColor('#070e17');
 	renderer.outputColorSpace = SRGBColorSpace;
 	renderer.toneMapping = ACESFilmicToneMapping;
-	renderer.toneMappingExposure = 1.15;
+	renderer.toneMappingExposure = 1.1;
 	renderer.shadowMap.enabled = true;
-	renderer.shadowMap.type = PCFSoftShadowMap;
+	renderer.shadowMap.type = PCFShadowMap;
 	let view = viewFor(1, 1);
 	view.camera.zoom = 0.28; view.camera.updateProjectionMatrix();
 	const controls = new OrbitControls(view.camera, canvas);
@@ -123,7 +126,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		targets.set(ark, { kind: 'fleet', id: 'ark' });
 	} catch (error: unknown) { cleanup(); throw error; }
 
-	const light = new DirectionalLight('#f6f0e4', 3.2);
+	const light = new DirectionalLight('#fff1d9', 3.5);
 	light.position.set(-240, 540, 320);
 	light.castShadow = true;
 	light.shadow.mapSize.set(1024, 1024);
@@ -132,11 +135,11 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	light.shadow.camera.near = 1; light.shadow.camera.far = 1600;
 	light.shadow.bias = -0.0003;
 	light.shadow.normalBias = 0.3;
-	scene.add(light, light.target, new HemisphereLight('#b8cede', '#192231', 2));
-	const fill = new DirectionalLight('#7295b3', 1.2);
+	scene.add(light, light.target, new HemisphereLight('#a7c7d4', '#172331', 1.7));
+	const fill = new DirectionalLight('#6bcbcf', 1.6);
 	fill.position.set(250, 100, -400); scene.add(fill, fill.target);
 	const turrets: TurretVisual[] = [];
-	const platforms = new Map<number, Mesh<IcosahedronGeometry, MeshStandardMaterial>>();
+	const platforms = new Map<number, ReturnType<typeof createConvoyCraft>>();
 	const formation = new Group(); carrier.add(formation);
 	for (const radius of [FORMATION_RADII.inner, FORMATION_RADII.middle]) {
 		const guide = circle('#6a9daa', radius, 0.3, 3);
@@ -159,11 +162,11 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			carrier.add(turret.root); targets.set(turret.root, { kind: 'mount', index }); labelsDirty = true;
 		}
 		const live = new Set(state.convoy?.platforms.map(function (platform) { return platform.id; }) ?? []);
-		for (const [id, hull] of platforms) if (!live.has(id)) { carrier.remove(hull); targets.delete(hull); disposeObject(hull); platforms.delete(id); labelsDirty = true; }
+		for (const [id, hull] of platforms) if (!live.has(id)) { carrier.remove(hull.root); targets.delete(hull.root); disposeObject(hull.root); platforms.delete(id); labelsDirty = true; }
 		for (const platform of state.convoy?.platforms ?? []) {
 			if (platforms.has(platform.id)) continue;
-			const hull = new Mesh(new IcosahedronGeometry(1, 0), new MeshStandardMaterial({ color: '#6e929c', metalness: 0.4, roughness: 0.6 }));
-			carrier.add(hull); platforms.set(platform.id, hull); targets.set(hull, { kind: 'fleet', id: `platform:${platform.id}` }); labelsDirty = true;
+			const hull = createConvoyCraft(platform.hull);
+			carrier.add(hull.root); platforms.set(platform.id, hull); targets.set(hull.root, { kind: 'fleet', id: `platform:${platform.id}` }); labelsDirty = true;
 		}
 	};
 	const drives = [1, 2, 3, 4].map(function (index) { return ark.getObjectByName(`Drive_${String(index).padStart(2, '0')}`); });
@@ -214,6 +217,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	const cameraAnchor = new Vector3();
 	let focus: FleetFocus = 'ark';
 	let carrierAngle = 0;
+	let cinematicView = false;
 	const followFleet = function (state: State) {
 		const ship = focusedShip(state, focus); focus = ship.id;
 		const anchor = new Vector3(ship.point.x, ship.elevation, ship.point.y);
@@ -257,7 +261,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		}
 		return undefined;
 	};
-	const arkRoots = function (): Object3D[] { return [ark, ...turrets.map(function (turret) { return turret.root; }), ...platforms.values()]; };
+	const arkRoots = function (): Object3D[] { return [ark, ...turrets.map(function (turret) { return turret.root; }), ...Array.from(platforms.values(), function (hull) { return hull.root; })]; };
 	const updateVisibility = function (state: State) {
 		const signature = state.mounts.map(function (mount) { return `${mount.x}/${mount.y}/${mount.integrity}/${mount.weapon ?? ''}`; }).join(',');
 		if (signature !== mountSignature) { mountSignature = signature; labelsDirty = true; }
@@ -286,7 +290,14 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			}
 		}
 		for (const platform of state.convoy?.platforms ?? []) {
-			if (platform.hp > 0) text(`P${platform.id + 1} ${HULLS[platform.hull].name} · ${Math.ceil(platform.hp)} HP`, toScreen(worldPoint(state, FORMATION_SLOTS[platform.slot]), view, DECK_HEIGHT + 110), state.mounts[selected]?.platform === platform.id ? '#e1f3c1' : '#b4c8d4', 10);
+			if (platform.hp <= 0) continue;
+			const at = toScreen(worldPoint(state, FORMATION_SLOTS[platform.slot]), view, DECK_HEIGHT + 110);
+			text(`P${platform.id + 1} / ${HULLS[platform.hull].name.toUpperCase()}`, at, state.mounts[selected]?.platform === platform.id ? '#ebd49b' : '#b4c8d4', 10);
+			if (state.status === 'running' || platform.hp < HULLS[platform.hull].hp) {
+				const health = platform.hp / HULLS[platform.hull].hp;
+				ctx.fillStyle = '#24343e'; ctx.fillRect(at.x - 22, at.y + 5, 44, 3);
+				ctx.fillStyle = health < 0.35 ? '#efaa7b' : '#91ccc4'; ctx.fillRect(at.x - 22, at.y + 5, 44 * health, 3);
+			}
 		}
 		const cuePositions: Point[] = [];
 		const cues: { text: string; progress: number; color: string; point: Point; anchor: Point }[] = [];
@@ -312,8 +323,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 		for (const escort of state.escorts) if (escort.hp < ESCORTS[escort.kind].hp) { const at = toScreen(escort, view, (escort.z ?? 0) + FLIGHT_HEIGHT + 29); ctx.fillStyle = '#89d5de'; ctx.fillRect(at.x - 13, at.y, 26 * Math.max(0, escort.hp / ESCORTS[escort.kind].hp), 3); }
 		const activeField = state.systems.interdiction.field; const position = activeField?.world;
 		if (position && activeField) text(`INTERDICTION · ${Math.ceil(activeField.remaining)}s`, toScreen(position, view, FLIGHT_HEIGHT + 30), '#d7bf89', 10);
-		for (let i = 0; i <= 6; i++) { const point = beaconFor(i, state); if (Math.abs(point.x - state.ark.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'KEPLER APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: point.y + 180 }, view, -5), '#6e939f', 9); }
-		if (journeyFor(state).remaining <= 1100) text('KEPLER GATE', toScreen({ x: state.routeOrigin.x + state.systems.routeLength, y: state.routeOrigin.y }, view, 220), '#83dfcb');
+		for (let i = 0; i <= 6; i++) { const point = beaconFor(i, state); if (Math.abs(point.x - state.ark.x) > 950) continue; text(i === 0 ? 'DEPARTURE' : i === 6 ? 'FINAL APPROACH' : `NAV ${String(i).padStart(2, '0')}`, toScreen({ x: point.x, y: point.y + 180 }, view, -5), '#6e939f', 9); }
+		if (journeyFor(state).remaining <= 1100) text(state.convoy ? OPERATIONS[state.convoy.operation ?? 'kepler'].destination.toUpperCase() : 'KEPLER GATE', toScreen({ x: state.routeOrigin.x + state.systems.routeLength, y: state.routeOrigin.y }, view, 220), '#83dfcb');
 		// Attack cues sit above decorative navigation and other contact labels.
 		for (const cue of cues) {
 			const cueAt = cue.point; const anchor = cue.anchor;
@@ -327,26 +338,36 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 	};
 
 	return {
-		render: function (state, selected, reducedMotion, controlsEnabled, placement, screenOffsetY = 0, screenOffsetX = 0, selectedSlot) {
+		render: function (state, selected, reducedMotion, controlsEnabled, placement, screenOffsetY = 0, screenOffsetX = 0, selectedSlot, cinematic = false) {
 			if (disposed) return;
 			resize(); if (view.width <= 0 || view.height <= 0) return;
+			if (cinematic !== cinematicView) {
+				cinematicView = cinematic;
+				controls.disconnect(); controls.connect(canvas); controls.reset();
+				focus = 'ark'; cameraAnchor.set(0, 0, 0); labelsDirty = true;
+				if (cinematic) { controls.rotateUp(controls.getPolarAngle() - 1.08); controls.update(); }
+			}
+			if (cinematic) {
+				view.camera.zoom = view.width < 650 ? 0.42 : 0.48; view.camera.updateProjectionMatrix();
+				screenOffsetX = view.width < 650 ? 0 : -view.width * 0.07;
+				screenOffsetY = -view.height * 0.12;
+			}
 			if (offsetView(view, screenOffsetY)) labelsDirty = true;
 			if (view.camera.view?.offsetX !== screenOffsetX) {
 				view.camera.setViewOffset(view.width, view.height, screenOffsetX, screenOffsetY - view.height * 0.02, view.width, view.height); labelsDirty = true;
 			}
-			followFleet(state); updateRoute(state); controls.enabled = controlsEnabled; controls.update();
+			followFleet(state); updateRoute(state); controls.enabled = controlsEnabled && !cinematic; controls.update();
 			syncFleet(state);
-			formation.visible = !!state.convoy && state.status === 'fitting';
+			formation.visible = !cinematic && !!state.convoy && state.status === 'fitting';
 			for (const { slot, marker } of slotMarkers) {
 				marker.visible = !state.convoy?.platforms.some(function (platform) { return platform.slot === slot; });
 				if (marker.material instanceof MeshBasicMaterial) marker.material.color.set(slot === selectedSlot ? '#f4d68a' : '#89bac5');
 			}
 			for (const platform of state.convoy?.platforms ?? []) {
 				const hull = platforms.get(platform.id); if (!hull) continue;
-				const station = FORMATION_SLOTS[platform.slot]; const scale = HULLS[platform.hull].scale;
-				hull.visible = platform.hp > 0;
-				hull.position.set(station.x, DECK_HEIGHT - 15, station.y); hull.scale.set(65 * scale, 12 * scale, 38 * scale);
-				hull.material.color.set(state.mounts[selected]?.platform === platform.id ? '#d3d88d' : '#6e929c');
+				const station = FORMATION_SLOTS[platform.slot];
+				hull.root.position.set(station.x, DECK_HEIGHT - 15, station.y);
+				hull.update(platform.hp, state.mounts[selected]?.platform === platform.id, state.status === 'running', state.time, reducedMotion);
 			}
 			for (const [index, turret] of turrets.entries()) {
 				const mount = state.mounts[index]; if (!mount) continue;
@@ -372,7 +393,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			shield.visible = shieldView.aegisVisible; energyShield.visible = shieldView.energyVisible;
 			energyShield.material.opacity = shieldView.energyOpacity; energyShield.material.color.set(shieldView.energyColor);
 			const mount = state.mounts[selected];
-			range.visible = !!mount?.weapon;
+			range.visible = !cinematic && !!mount?.weapon;
 			if (mount?.weapon) {
 				const coverage = coverageFor(state, mount); const signature = `${selected}/${coverage.range}/${coverage.arc}/${coverage.center}`;
 				if (signature !== coverageSignature) {
@@ -414,9 +435,22 @@ export const createPresentation = async function (canvas: HTMLCanvasElement): Pr
 			while (effects.length < activeEffects.length) { const visual = createCombatVisual(); scene.add(visual.root); effects.push(visual); }
 			for (const [index, visual] of effects.entries()) { const effect = activeEffects[index]; visual.root.visible = !!effect; if (effect) visual.update(effect, state, reducedMotion); }
 			gate.visible = journey.remaining <= 1100; gate.position.set(state.routeOrigin.x + state.systems.routeLength, 25, state.routeOrigin.y);
-			for (const [index, beacon] of beacons.entries()) { const at = beaconFor(index, state); beacon.position.set(at.x, 0, at.y); beacon.visible = Math.abs(at.x - state.ark.x) <= 1100; }
-			updateBackdrop(state, view, reducedMotion);
-			scene.updateMatrixWorld(true); updateVisibility(state); renderer.render(scene, view.camera); drawLabels(state, selected, selectedSlot);
+			for (const [index, beacon] of beacons.entries()) { const at = beaconFor(index, state); beacon.position.set(at.x, 0, at.y); beacon.visible = !cinematic && Math.abs(at.x - state.ark.x) <= 1100; }
+			course.visible = !cinematic;
+			updateBackdrop(state, view, reducedMotion, cinematic);
+			overlay.hidden = cinematic;
+			scene.updateMatrixWorld(true); updateVisibility(state); renderer.render(scene, view.camera); if (!cinematic) drawLabels(state, selected, selectedSlot);
+		},
+		orbitCamera: function (horizontal, vertical, zoom, deltaSeconds) {
+			if (disposed || cinematicView) return;
+			const bounded = function (value: number) { return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0; };
+			const dt = Number.isFinite(deltaSeconds) ? Math.max(0, Math.min(0.05, deltaSeconds)) : 0;
+			controls.rotateLeft(bounded(horizontal) * dt * 1.65);
+			controls.rotateUp(bounded(vertical) * dt * 1.35);
+			// OrbitControls handles polar/zoom limits and change notifications for
+			// controller and pointer input through the same public methods.
+			controls.dollyOut(Math.exp(bounded(zoom) * dt * 1.2));
+			controls.update(); labelsDirty = true;
 		},
 		pick: function (point, state) {
 			resize(); followFleet(state); controls.update(); scene.updateMatrixWorld(true); updateVisibility(state);

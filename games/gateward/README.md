@@ -1,6 +1,6 @@
 # Gateward
 
-Gateward is a browser-only reverse tower defense prototype: build a convoy,
+Gateward is a browser-only reverse tower defense demo: build a convoy,
 launch it through a defense, watch the build work, then refit. Open
 `games/gateward/` from the launcher. Query parameters do not choose a mode.
 The browser uses `createConvoyState`; `createState` remains the isolated legacy
@@ -92,8 +92,8 @@ the existing lifecycle behavior. Sound, fullscreen and 2× speed remain in Menu.
 ## Validation and assumptions
 
 Simulation remains browser independent; Three.js and DOM display state and send
-orders. The convoy uses existing procedural turret visuals and simple procedural
-chassis, without new external assets. Legacy combat fixtures retain their original
+orders. The convoy uses procedural turret visuals and distinct convoy
+spacecraft, without new external assets. Legacy combat fixtures retain their original
 rules so existing subsystem and weapon regression tests remain meaningful.
 
 Run `bun install --frozen-lockfile`, then `bun run check`. Convoy tests protect
@@ -125,3 +125,47 @@ ark hull are stored per operation on the current device using the
 `gateward.operation.v1.*` namespace. These are completion records, not mid-run
 saves. Missing, corrupt or unavailable storage does not prevent play. Retry keeps
 the chosen operation; the results screen also returns to operation selection.
+
+## Demo presentation and first crossing
+
+The operation screen offers three optional **starting doctrines**, purchased from
+that operation's normal 650 salvage budget: Balanced screen (505), Iron broadside
+(610), and Forward spearhead (590). Custom starts with the original blank convoy.
+A doctrine is only applied to an untouched initial fitting state; it cannot
+silently replace a customized build. Every purchased weapon retains normal full
+refit refunds. Scouting diagrams show the authored approach and threat counts,
+while readiness and route markers connect fitting to the next engagement.
+
+Each surviving nonfinal passage also offers **one optional support package**:
+up to 100 additional ark hull, 80 additional salvage, or a full shield recharge.
+This is in addition to the existing 200 salvage/120 hull refit supplies. A choice
+is available only during that refit and expires on launch. Full hull/shields
+cannot consume a repair/recharge choice. Reports record the actual additional
+supplies separately. Encounter timings, arrival victory and existing operation
+records remain unchanged.
+
+The demo adds detailed convoy hull silhouettes, a procedural planetary backdrop,
+phase-specific presentation, and an original adaptive Web Audio score. Music and
+effects have separate levels in Menu; mute and reduced-motion preferences persist
+under `gateward.preferences.v1`. Browser audio begins only after user input and
+stops on pause, focus loss, hidden document, or teardown. Sound settings remain
+usable if storage or audio is unavailable. No third-party music/assets are added.
+
+Additional controls: **F** toggles fitting; **L** launches a fitted convoy. Standard
+controllers use the **right stick** to orbit, **RT/LT** to zoom, and D-pad left/right
+to adjust selected volume sliders. Camera input is disabled inside menus, radar,
+inspectors and contextual actions; sticks/triggers must return to neutral before
+camera control resumes. Mouse orbit remains available on the exposed battlefield
+beside a drawer. Restart and returning to operation selection from pause require
+a second activation, with an explicit warning that the current operation is lost.
+
+This remains a browser demo. There is no Steam integration or desktop package.
+Automated simulation and browser checks do not establish controller hardware
+feel, speaker balance, subjective balance, or sustained performance on target PCs.
+
+Passage reports also retain **weapon activity** for every gun fitted at departure,
+including weapons later destroyed. Projectile weapons report actual shots fired;
+beams report seconds firing. Idle guns are called out so the player can inspect
+range, firing arc and platform position. These are engagement measurements, not
+damage or kill attribution. The default Forward spearhead doctrine brings the
+opening guns into action early; Balanced, Broadside and Custom remain available.
