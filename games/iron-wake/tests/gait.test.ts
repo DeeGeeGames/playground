@@ -31,19 +31,29 @@ test('stance feet hold their world position and heading while the hull advances;
 	for (let i = 1; i < touchdowns.length; i++) expect(touchdowns[i]).not.toBe(touchdowns[i - 1]);
 });
 
-test('footfall cadence follows distance traveled, with no stepping while stationary', function () {
-	const countSteps = function (speed: number) {
-		let gait = createGait({ x: 0, y: 0, angle: 0 });
-		let steps = 0;
+test('faster travel lengthens forward and reverse strides without doubling cadence; stationary feet stay planted', function () {
+	const measureSteps = function (speed: number, size = 1) {
+		let gait = createGait({ x: 0, y: 0, angle: 0 }, size);
+		let steps = 0; let travel = 0;
 		for (let i = 1; i <= 600; i++) {
 			const previous = gait;
-			gait = advanceGait(gait, { x: speed * i * dt, y: 0, angle: 0 }, dt);
-			if (previous.swing && !gait.swing) steps++;
+			gait = advanceGait(gait, { x: speed * i * dt, y: 0, angle: 0 }, dt, size);
+			if (i > 120 && previous.swing && !gait.swing) {
+				steps++;
+				travel += Math.abs(gait.feet[previous.swing.index].x - previous.swing.from.x);
+			}
 		}
-		return steps;
+		return { steps, strideLength: steps > 0 ? travel / steps : 0 };
 	};
-	expect(countSteps(0)).toBe(0);
-	expect(countSteps(90)).toBeGreaterThan(countSteps(30) * 2);
+	expect(measureSteps(0).steps).toBe(0);
+	for (const size of [0.8, 1, 1.15]) for (const direction of [-1, 1]) {
+		const walking = measureSteps(direction * 60 * size, size);
+		const running = measureSteps(direction * 120 * size, size);
+		expect(walking.steps).toBeGreaterThan(10);
+		expect(running.strideLength).toBeGreaterThan(walking.strideLength * 1.8);
+		expect(running.steps).toBeGreaterThan(walking.steps * 0.9);
+		expect(running.steps).toBeLessThan(walking.steps * 1.25);
+	}
 });
 
 test('reverse, pivoting, and braking keep articulated legs within reach and settle both feet', function () {
