@@ -14,7 +14,7 @@ export const experiments: readonly Experiment[] = [
 		title: 'Gateward',
 		thumbnail: './games/gateward/preview.png',
 		thumbnailAlt: 'Gateward convoy crossing a defensive line beneath a distant planet, with the ark and its fitted frigates.',
-		href: './games/gateward/',
+		href: 'https://gateward.deegeegames.com/',
 		description: 'Build and refit a moving fortress. Choose an operation, fit your convoy, and adapt between defensive lines to bring the ark home.',
 		controls: 'Mouse + Keyboard · Touch · Controller',
 		category: 'Convoy defense demo',

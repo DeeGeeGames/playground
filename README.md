@@ -94,3 +94,12 @@ is part of this workspace.
 To graduate a game, copy its folder and tests into a new repository, take any
 explicit imports from `shared/`, and copy the root tooling and dependency
 configuration it needs. There is no launcher runtime required to run a game.
+
+## Gateward
+
+Gateward now lives in [DeeGeeGames/gateward](https://github.com/deegeegames/gateward)
+and is hosted at https://gateward.deegeegames.com/. The legacy
+`games/gateward/` page redirects there, preserving query parameters and fragments.
+Its local preview image remains for the launcher. Browser preferences and operation
+records are origin-scoped and do not automatically transfer to the new domain.
+Deploy the standalone site before publishing this redirect.
