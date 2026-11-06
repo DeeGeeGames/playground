@@ -1,130 +1,125 @@
-# Iron Wake · Alpha 01
+# Iron Wake · Last Transmission
 
-An isometric mech defense game about heavy movement, combined firepower, and heat
-management. Defend Relay 09 through three waves in an 80-ton siege frame.
+A browser-only isometric mech-combat demo. Pilot Warden 08, an 80-ton siege
+frame, through a complete relay-defense operation. Heavy persistent throttle
+and independent turret tracking remain the core of the original prototype.
 
-The approved top-down prototype is preserved by Git tag `iron-wake-prototype`
-(commit `dab35a7`). This alpha builds on its persistent throttle and independent
-turret. There are no licensed assets, characters, or audio samples.
+## The operation
+
+Defend Relay 09 against 39 hostiles across five assaults: **First contact**,
+**Crossfire**, **Hammerfall**, **Breaking point**, and **Iron crown**. The final
+assault includes a command frame with heavier armor and faster artillery below
+half health. Scouts close rapidly; strikers establish firing lines; siege
+frames shell the relay from outside the central yard.
+
+Orange ground circles mark committed artillery strikes. The impact point does
+not chase the player, giving a frame starting from neutral time to accelerate
+out. Radar, edge arrows, target brackets, range labels, health bars, impact
+flashes, recoil, and differentiated silhouettes communicate the fight.
+
+After each of the first four assaults, the simulation stops for field service.
+Choose one stacking upgrade to continue:
+
+- **Overpressure kit:** +15% cannon, laser, and missile damage.
+- **Cryogenic loop:** +18% heat dissipation and an extra coolant charge.
+- **Bastion plating:** −10% incoming frame damage and 12 relay integrity.
+
+Every refit restores 25 frame integrity, purges heat, adds one coolant charge,
+and returns the drive to neutral. Incoming hostile rounds and artillery finish
+resolving before the yard is declared secure. A destroyed frame or relay loses
+the operation, including during the final clearance period.
+
+Story, Standard, and Veteran change hostile armor/damage and score multipliers.
+The report records rank, score, kills, field time, relay integrity, projectile
+hit rate, and installed refits. The latest eight reports and permanent best
+result per difficulty are saved locally under `iron-wake:profile:v1`. A run in
+progress is not saved across reloads. Invalid or unavailable storage does not
+prevent play.
 
 ## Controls
 
-| Action | Keyboard / mouse | Touch |
-| --- | --- | --- |
-| Raise/lower persistent throttle | W/S or up/down | Hold +/− |
-| Neutral (slow with inertia) | X | Neutral |
-| Turn hull | A/D or left/right | Turn arrows |
-| Aim turret | Mouse | Tap battlefield |
-| Select mouse weapon | Wheel down: next / up: previous (wraps) | — |
-| Fire selected weapon | Hold left click | — |
-| Cannon | Space | Hold Cannon |
-| Laser | Hold E | Hold Laser |
-| Homing missile salvo | Q | Missiles |
-| Coolant purge | V | Coolant |
-| Pause / controls | Esc / Pause | Pause |
+| Action | Keyboard / mouse | Standard gamepad | Touch |
+| --- | --- | --- | --- |
+| Raise/lower persistent throttle | W/S or up/down | Left stick up/down | Hold +/− |
+| Neutral; momentum decays | X | X / square | STOP |
+| Turn hull | A/D or left/right | Left stick left/right | Turn arrows |
+| Aim independent turret | Mouse | Right stick, in screen direction | Tap battlefield |
+| Fire cannon | Space | RT | Hold AC/38 |
+| Fire laser | Hold E | LT | Hold ARC |
+| Homing missile salvo | Q | RB | Hold TRIDENT |
+| Coolant purge | V | LB | Vent coolant |
+| Select mouse weapon | Wheel or 1–3 | Dedicated weapon triggers | Weapon button |
+| Fire selected mouse weapon | Hold left click | — | Weapon button |
+| Pause / resume | Escape | Menu | Pause |
+| Menus | Tab / Shift+Tab / Enter | D-pad or stick, A/cross confirm, B/circle back | Tap |
 
-Mouse selection starts on cannon each deployment and is outlined in cyan. Wheel
-selection applies over the battlefield during play. Weapons can also be operated by holding their cockpit buttons on desktop.
-Throttle stays set when released. The HUD distinguishes commanded throttle from
-actual signed speed; reverse is slower. Pause and focus loss freeze movement
-without discarding throttle. Deployments start in neutral.
+Controller left/right adjusts volume when a slider is focused; up/down moves
+between settings. Touch controls are automatic for touch-first devices and can
+also be enabled in Settings. Commanded throttle and actual signed speed remain
+visible. Releasing the throttle control keeps the engine setting. Ordinary
+pause preserves throttle and clears held inputs; deployment/refits start in
+neutral. Controller disconnection pauses combat. Focus loss, hidden pages, and
+WebGL context loss pause and silence the game; recovery requires explicit resume.
 
-## Combat rules
+## Weapons and supplies
 
-- Cannon: 38 damage, 0.65-second reload. Swept hits stop at the nearest target.
-- Laser: 48 damage/second, first target along its 620-unit beam.
-- Missiles: three homing rounds, 27 damage each, 4.5-second reload. Locks to the
-  enemy closest to the aim point when fired; a lost target leaves a straight shot.
-- Weapons share heat. At 100%, they lock until cooling to 35%.
-- Coolant: two charges initially, maximum three. One press purges 55 heat; holding
-  the button consumes only one charge. Vents at zero heat do not consume supplies.
-- Scouts are fast and fragile; strikers hold medium range; siege frames have more
-  armor and attack the relay from farther away. Inbound rings give two seconds
-  of warning. Radar and screen-edge markers reveal distant live threats.
-- Every second elimination drops alternating repair (+22 armor) or coolant (+1)
-  salvage. Drive within 55 units to collect it. Full supplies leave it in place;
-  salvage expires after 45 seconds.
-- Wave clears repair 20 armor and return one coolant charge. Defeat all 21 enemies
-  to win; lose if either the mech or the relay reaches zero armor.
-- The industrial apron and terrain marks are decorative, with no hidden cover or
-  collision. The ground boundary contains the mech. Turret tracking is limited.
+Cannon shells deal 38 base damage every 0.65 seconds, using nearest swept hits
+and a roughly 845-unit flight range. The laser deals 48 base damage per second
+to the first target within 620 units. Trident launches three 27-damage homing
+missiles every 4.5 seconds, locking the enemy nearest the aim point within 900
+units. Losing a target leaves the missile travelling straight.
 
-## Rendering and lifecycle
+Weapons share reactor heat. At 100%, weapons lock until heat falls to 35%.
+Cooling normally removes 12 heat per second. A coolant charge purges 55 heat;
+holding the button spends only one charge, and a cold reactor consumes none.
+Every second elimination drops alternating repair or coolant salvage. Drive
+within 55 units to recover it; full supplies leave it available, and salvage
+expires after 45 seconds.
 
-ECSpresso 0.24.1's `renderer3D` plugin draws the world with the workspace's
-Three.js dependency. Player and enemy frames, relay, apron, salvage, wrecks,
-projectiles and effects share a depth buffer. Solid faces occlude naturally;
-missile ports are front-facing surface details. Mech parts use instanced
-material batches and a combined edge buffer. The decorative apron uses unlit
-vertex colors to avoid a full-screen physical lighting shader.
+The industrial yard is deliberately open: painted routes, maintenance pads,
+and scenery are visual landmarks, not hidden cover. Tall industry sits outside
+the navigation bounds. Mechs and projectiles use the deterministic 2D ground
+simulation; Three.js and ECSpresso's renderer3D plugin provide the presentation.
 
-`src/presentation.ts` owns the scene and renderer. `src/projection-3d.ts` matches
-the recorded isometric framing and raycasts the ground for aiming. Screen-space
-labels, radar and target markers use that same camera; the HTML cockpit stays
-in place. Simulation, combat, AI and planted-foot gait remain on the original
-2D ground plane at a fixed 60 Hz. Touch aiming supports a second finger while a
-control is held. Reduced motion suppresses shake, decorative bobbing and CSS
-transitions. Pause and focus loss freeze the simulation and silence audio.
+## Presentation and audio
 
-WebGL context loss pauses the mission; recovery leaves it paused for explicit
-resume. Final page teardown cancels frames, aborts listeners, disposes the ECS
-world, releases shared and model GPU assets, removes the overlay canvas and
-closes audio. Cached pages retain the world for browser Back. WebGL-unavailable
-startup displays an error. Everything specific to the game lives here; only
-the workspace lifecycle helper is imported.
+The game includes an authored industrial yard, procedural surface textures,
+layered frame geometry, dynamic lighting/shadows, animated planted-foot gait,
+artillery warnings, weapon trails, and pooled effects. The briefing stages the
+same playable model in a closer camera; deployment restores normal projection.
 
-Synthesized Web Audio provides engine/footsteps, weapons, impacts, cooling,
-pickups and alerts. Audio unlocks on deployment, supports mute and leaves the
-game playable when audio is unavailable.
+An original locally synthesized 96-BPM score changes its layers with combat
+intensity and uses quieter briefing/refit arrangements. Layered weapon,
+mechanical, impact, coolant, artillery, and outcome effects have separate mix
+controls. Audio starts only after a gesture and degrades gracefully if the
+audio device is unavailable. Settings include master/music/effects levels and
+reduced motion, in addition to the operating system's motion preference.
 
-## Prototype review for issue 15
+All gameplay geometry, surface graphics, and music are original to this demo.
+The bundled [Barlow Condensed](https://github.com/google/fonts/tree/main/ofl/barlowcondensed)
+typeface is by the Barlow Project Authors, distributed under the
+[SIL Open Font License](./public/licenses/Barlow-OFL.txt). There are no licensed
+Battletech characters, names, graphics, music, or samples.
 
-The initial walking/turning comparison was delivered before the remaining
-world migration. Owner feedback was: “There seems to be some artifacting going
-on at the head of the mech. Otherwise looks good”. The visor and cockpit shell
-had coincident front faces; a small physical separation fixes the artifact
-without changing the silhouette or using camera-angle ordering rules.
+## Development and verification
 
-![Canvas reference and repaired 3D mech with independent hull and turret headings](./docs/mech-comparison.png)
+From the workspace root: `bun install --frozen-lockfile`, then `bun run dev`.
+For production validation, `bun run build` followed by `bun run preview` and
+open `games/iron-wake/`. No game-specific build routes or desktop setup are
+required. Run `bun run check` for tests, strict TypeScript, lint, and build.
 
-The completed migration removes the superseded Canvas world renderer and
-comparison route. The comparison image and first-stage commit in PR #26 retain
-review evidence. The normal `games/iron-wake/` page now runs the 3D world.
+Meaningful regression coverage includes persistent throttle, swept hits,
+heat/salvage, deterministic complete operations, artillery escape/failure,
+refit freeze/one-time application, upgrade effects, difficulty, projection and
+aiming, gait, model depth, pooled resource disposal, storage corruption and
+record retention, and controller edge/disconnect behavior.
 
-## Validation
+Browser verification and screenshots are recorded with the delivery PR.
+Automated controls and audio signal checks do not establish physical gamepad
+or touch feel, speaker/headphone quality, or owner acceptance of combat balance.
+This remains a browser demo; no Steam integration or desktop distribution is
+included.
 
-From the workspace root: `bun run dev`, or `bun run build` then `bun run preview`.
-Open `games/iron-wake/`. Run `bun run check` for the whole workspace, or
-`bun test games/iron-wake/tests` for this game.
+![Production briefing with the staged Warden frame](./docs/demo-briefing.png)
 
-Deterministic coverage includes combat and a winning full mission, projection
-agreement with recorded Canvas framing, ground picking after camera shake and
-resize, missile-port visibility, visor depth separation, world-space foot
-planting, instanced poses across the renderer's transform phase, overlay
-bounds, transient resets, reduced motion and GPU asset ownership.
-
-Production Chromium checks keyboard/mouse weapons, persistent throttle,
-coolant, sound/silence, pause/focus loss, simulated multitouch, portrait and
-landscape layouts, context loss/recovery, cached/final page teardown and
-fractional-DPR drawing-buffer stability. A separate presentation fixture
-renders eight mechs, all combat-object types and a simulated mission ending
-with 21 kills and 93% relay integrity. Independent reviews have no unresolved
-findings. Physical touch hardware, GPU performance, speaker quality and owner
-acceptance of the completed world remain separate from these browser checks.
-
-![Synthetic presentation fixture with all three enemy types and combat objects](./docs/world.png)
-
-The following are sequential, 120-frame samples at DPR 1 in headless Chromium
-using software rendering. The baseline was captured before migration. The
-desktop software path remains slower than Canvas; these are not hardware-GPU
-or physical-phone performance claims.
-
-| Viewport | Canvas median / p95 frame time | 3D median / p95 frame time |
-| --- | --- | --- |
-| 1440 × 900 | 16.7 / 16.8 ms | 33.3 / 33.4 ms |
-| 390 × 844 | 16.7 / 16.7 ms | 16.7 / 16.8 ms |
-
-The synthetic eight-mech desktop scene records 33.4 / 50.0 ms with 112 draw
-calls. Batching reduced it from 634 calls before optimization. Repeated scene
-resets return GPU geometry counts to the same plateau; final teardown releases
-the WebGL context and removes the labels canvas. `bun run check` passes.
+![320-pixel touch layout with separate readouts, driving, and weapon controls](./docs/demo-phone.png)

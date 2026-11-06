@@ -3,27 +3,52 @@ import { mechScale, type Gaits } from './gait';
 import { toScreen } from './projection-3d';
 import { ARENA, distance, type Point, type State } from './simulation';
 
+export interface ScreenRect { left: number; right: number; top: number; bottom: number }
 export interface OverlayOptions {
+	obstructions?: readonly ScreenRect[];
 	reducedMotion: boolean;
 	showRadar: boolean;
 	gaits: Gaits;
 	camera: OrthographicCamera;
 }
 
-export const edgeMarker = function (point: Point, width: number, height: number): { point: Point; angle: number } | undefined {
+export const edgeMarker = function (point: Point, width: number, height: number, obstructions: readonly ScreenRect[] = []): { point: Point; angle: number } | undefined {
 	const left = Math.min(45, width / 2); const right = width - left;
 	const top = Math.min(80, height / 2); const bottom = Math.max(top, height - 130);
-	if (point.x >= left && point.x <= right && point.y >= top && point.y <= bottom) return undefined;
-	const origin = { x: width / 2, y: Math.max(top, Math.min(bottom, height * 0.52)) };
+	const padded = obstructions.map(function (rect) { return { left: rect.left - 18, right: rect.right + 18, top: rect.top - 32, bottom: rect.bottom + 18 }; });
+	if (point.x >= left && point.x <= right && point.y >= top && point.y <= bottom && !padded.some(function (rect) { return point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom; })) return undefined;
+	const preferred = { x: width / 2, y: Math.max(top, Math.min(bottom, height * 0.52)) };
+	const blocked = function (candidate: Point) { return padded.some(function (rect) { return candidate.x >= rect.left && candidate.x <= rect.right && candidate.y >= rect.top && candidate.y <= rect.bottom; }); };
+	const origins = [preferred, ...padded.map(function (rect) { return { x: preferred.x, y: Math.max(top, Math.min(bottom, rect.top - 1)) }; }), { x: preferred.x, y: top }];
+	const origin = origins.find(function (candidate) { return !blocked(candidate); });
+	if (!origin) return undefined;
 	const dx = point.x - origin.x; const dy = point.y - origin.y;
+	if (dx === 0 && dy === 0) return undefined;
 	const horizontal = dx > 0 ? (right - origin.x) / dx : dx < 0 ? (left - origin.x) / dx : Infinity;
 	const vertical = dy > 0 ? (bottom - origin.y) / dy : dy < 0 ? (top - origin.y) / dy : Infinity;
-	const factor = Math.max(0, Math.min(horizontal, vertical));
+	let factor = Math.max(0, Math.min(horizontal, vertical));
+	for (const rect of padded) {
+		if ((dx === 0 && (origin.x < rect.left || origin.x > rect.right)) || (dy === 0 && (origin.y < rect.top || origin.y > rect.bottom))) continue;
+		const tx = dx === 0 ? [-Infinity, Infinity] : [(rect.left - origin.x) / dx, (rect.right - origin.x) / dx];
+		const ty = dy === 0 ? [-Infinity, Infinity] : [(rect.top - origin.y) / dy, (rect.bottom - origin.y) / dy];
+		const entry = Math.max(Math.min(...tx), Math.min(...ty));
+		const exit = Math.min(Math.max(...tx), Math.max(...ty));
+		if (entry > 0 && entry <= exit) factor = Math.min(factor, entry);
+	}
 	return { point: { x: origin.x + dx * factor, y: origin.y + dy * factor }, angle: Math.atan2(dy, dx) };
 };
 
-// This canvas carries labels and tactical UI only. World surfaces and effects
-// use the scene's depth buffer; labels follow the exact active camera matrix.
+const bracket = function (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, length: number) {
+	ctx.beginPath();
+	for (const horizontal of [-1, 1]) for (const vertical of [-1, 1]) {
+		const px = x + horizontal * width / 2; const py = y + vertical * height / 2;
+		ctx.moveTo(px - horizontal * length, py); ctx.lineTo(px, py); ctx.lineTo(px, py - vertical * length);
+	}
+	ctx.stroke();
+};
+
+// World labels use the same projection as ground picking and the 3D scene.
+// Tactical diagrams remain screen-space, so they stay legible while moving.
 export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: number, height: number, state: State, aim: Point, options: OverlayOptions) {
 	ctx.clearRect(0, 0, width, height);
 	if (width <= 0 || height <= 0) return;
@@ -31,50 +56,90 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 	const at = function (point: Point, elevation = 0) { return toScreen(point, options.camera, width, height, elevation); };
 	const ground = at(state.player); const above = at(state.player, 1);
 	const scale = Math.hypot(above.x - ground.x, above.y - ground.y);
+	const vignette = ctx.createRadialGradient(width / 2, height / 2, height * 0.3, width / 2, height / 2, Math.max(width, height) * 0.7);
+	vignette.addColorStop(0, '#07141900'); vignette.addColorStop(1, '#0714198c'); ctx.fillStyle = vignette; ctx.fillRect(0, 0, width, height);
 	const text = function (content: string, point: Point, elevation: number, color: string, size = 10, offsetY = 0) {
 		const anchor = at(point, elevation);
-		ctx.font = `${size * scale}px monospace`; ctx.textAlign = 'center'; ctx.fillStyle = color;
-		ctx.fillText(content, anchor.x, anchor.y + offsetY * scale);
+		ctx.font = `600 ${Math.max(10, size * scale)}px monospace`; ctx.textAlign = 'center';
+		ctx.fillStyle = '#0b171c'; ctx.fillText(content, anchor.x + 1, anchor.y + offsetY * scale + 1);
+		ctx.fillStyle = color; ctx.fillText(content, anchor.x, anchor.y + offsetY * scale);
 	};
 	const relay = { x: ARENA.relayX, y: ARENA.relayY };
-	text('RELAY 09', relay, 165, '#b6d6d2');
-	for (const warning of state.warnings) text('INBOUND', warning, 10, '#f3ae7f', 10, -20);
+	text('UPLINK / 09', relay, 206, state.relay < 30 ? '#ffac83' : '#aee2d5', 10);
+	const relayLabel = at(relay, 196);
+	ctx.fillStyle = '#112329dd'; ctx.fillRect(relayLabel.x - 31, relayLabel.y, 62, 3);
+	ctx.fillStyle = state.relay < 30 ? '#f49769' : '#9bccbc'; ctx.fillRect(relayLabel.x - 31, relayLabel.y, 62 * state.relay / 100, 3);
+	for (const warning of state.warnings) text(warning.commander ? 'COMMAND SIGNAL' : 'INBOUND', warning, 10, '#f3bd80', 10, -20);
+	for (const strike of state.strikes) text(`IMPACT ${strike.life.toFixed(1)}`, strike, 8, '#ffd2a6', 11, -14);
 	for (const salvage of state.salvage) {
 		const bob = options.reducedMotion ? 0 : Math.sin(state.time * 2) * 2;
-		text(salvage.kind === 'repair' ? '+' : '❄', salvage, 30 + bob, salvage.kind === 'repair' ? '#82dfbb' : '#8bdcec');
-	}
-	for (const enemy of state.enemies) {
-		if (enemy.hp >= enemy.maxHp) continue;
-		const anchor = at(enemy, 105 * mechScale(enemy.kind));
-		ctx.fillStyle = '#0a151b'; ctx.fillRect(anchor.x - 22 * scale, anchor.y, 44 * scale, 4 * scale);
-		ctx.fillStyle = '#df9d7b'; ctx.fillRect(anchor.x - 22 * scale, anchor.y, 44 * Math.max(0, enemy.hp) / enemy.maxHp * scale, 4 * scale);
+		text(salvage.kind === 'repair' ? '+ REPAIR' : 'COOLANT', salvage, 38 + bob, salvage.kind === 'repair' ? '#b2f4c9' : '#a2e8f2', 9);
 	}
 	const target = state.enemies.reduce<State['enemies'][number] | undefined>(function (nearest, enemy) {
 		return !nearest || distance(enemy, aim) < distance(nearest, aim) ? enemy : nearest;
 	}, undefined);
-	if (target && distance(target, aim) < 80) {
-		const anchor = at(target, 42);
-		ctx.strokeStyle = '#f6b574'; ctx.lineWidth = 1.5 * scale;
-		ctx.strokeRect(anchor.x - 30 * scale, anchor.y - 40 * scale, 60 * scale, 65 * scale);
-		text(target.kind.toUpperCase(), target, 42, '#ffcb93', 9, -49);
-	}
+	const selected = target && distance(target, aim) < 80 ? target : undefined;
 	for (const enemy of state.enemies) {
-		const marker = edgeMarker(at(enemy, 40), width, height); if (!marker) continue;
-		ctx.save(); ctx.translate(marker.point.x, marker.point.y); ctx.rotate(marker.angle);
-		ctx.fillStyle = '#eead7c'; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-4, -4); ctx.lineTo(-4, 4); ctx.closePath(); ctx.fill(); ctx.restore();
+		if (enemy.hp >= enemy.maxHp && enemy !== selected && !enemy.commander) continue;
+		const anchor = at(enemy, (enemy.commander ? 140 : 112) * mechScale(enemy.kind));
+		const barWidth = enemy.commander ? 76 : 42;
+		ctx.fillStyle = '#0a151be6'; ctx.fillRect(anchor.x - barWidth / 2 - 1, anchor.y - 1, barWidth + 2, 5);
+		ctx.fillStyle = enemy.commander ? '#f3ad7e' : '#dfaa82'; ctx.fillRect(anchor.x - barWidth / 2, anchor.y, barWidth * Math.max(0, enemy.hp) / enemy.maxHp, 3);
+		if (enemy.commander) text('IRON CROWN', enemy, 150 * mechScale(enemy.kind), '#ffd5a5', 11);
 	}
+	if (selected) {
+		const anchor = at(selected, 50 * mechScale(selected.kind));
+		const size = (selected.commander ? 90 : 74) * scale;
+		ctx.strokeStyle = '#f3c37d'; ctx.lineWidth = 1.5;
+		bracket(ctx, anchor.x, anchor.y, size, size, 10);
+		const inRange = distance(selected, state.player) <= 900;
+		text(selected.commander ? 'COMMAND FRAME' : selected.kind === 'siege' ? 'SIEGE / ARTILLERY' : selected.kind.toUpperCase(), selected, 42, '#ffe1aa', 10, 45);
+		text(`${Math.round(distance(selected, state.player))} M / ${inRange ? 'MISSILE LOCK' : 'NO LOCK'}`, selected, 42, inRange ? '#ebc184' : '#98a8a7', 8, 60);
+	}
+	// A precise sight remains useful when aiming ahead of a moving contact.
+	const cursor = at(aim, 0);
+	ctx.strokeStyle = selected ? '#f6c77c' : '#d9e5d1'; ctx.lineWidth = 1;
+	bracket(ctx, cursor.x, cursor.y, 15, 15, 4);
+	ctx.fillStyle = '#f1e9c7'; ctx.fillRect(cursor.x - 1, cursor.y - 1, 2, 2);
+	const marker = function (point: Point, color: string, label?: string) {
+		const edge = edgeMarker(at(point, 40), width, height, options.obstructions); if (!edge) return;
+		ctx.save(); ctx.translate(edge.point.x, edge.point.y); ctx.rotate(edge.angle);
+		ctx.fillStyle = '#0b1c23dd'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+		ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-4, -4); ctx.lineTo(-2, 0); ctx.lineTo(-4, 4); ctx.closePath(); ctx.fill(); ctx.restore();
+		if (label) { ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.fillStyle = color; ctx.fillText(label, edge.point.x, edge.point.y + 22); }
+	};
+	for (const enemy of state.enemies) marker(enemy, enemy.commander ? '#ffd3a3' : '#eead7c');
+	for (const warning of state.warnings) marker(warning, '#d29b66');
+	marker(relay, '#a3ddd0', 'UPLINK');
 	if (options.showRadar) {
-		const w = 144; const h = 96; const x = width - w - 24; const y = 92;
-		ctx.fillStyle = '#081721bb'; ctx.fillRect(x, y, w, h); ctx.strokeStyle = '#6c929355'; ctx.lineWidth = 1; ctx.strokeRect(x, y, w, h);
-		const dot = function (point: Point, color: string, radius: number) {
-			ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x + point.x / ARENA.width * w, y + point.y / ARENA.height * h, radius, 0, Math.PI * 2); ctx.fill();
+		const w = 174; const h = 116; const x = width - w - 26; const y = 93;
+		ctx.fillStyle = '#0c1c22e6'; ctx.fillRect(x - 1, y - 24, w + 2, h + 49);
+		ctx.strokeStyle = '#91ada445'; ctx.lineWidth = 1; ctx.strokeRect(x - 1, y - 24, w + 2, h + 49);
+		ctx.strokeStyle = '#8fa39c30'; ctx.strokeRect(x + 6, y + 4, w - 12, h - 8);
+		ctx.font = '600 9px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#c5d0bc'; ctx.fillText('T A C T I C A L', x + 9, y - 8);
+		ctx.textAlign = 'right'; ctx.fillStyle = '#829c99'; ctx.fillText('N ↑', x + w - 8, y - 8);
+		ctx.strokeStyle = '#64847e22'; ctx.lineWidth = 7;
+		ctx.beginPath(); ctx.moveTo(x, y + h / 2); ctx.lineTo(x + w, y + h / 2); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + h); ctx.stroke();
+		ctx.strokeStyle = '#6c8b8433'; ctx.lineWidth = 1;
+		ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, 20, 0, Math.PI * 2); ctx.stroke();
+		const point = function (value: Point) { return { x: x + value.x / ARENA.width * w, y: y + value.y / ARENA.height * h }; };
+		const dot = function (value: Point, color: string, radius: number, outline = false) {
+			const at = point(value); ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 1;
+			ctx.beginPath(); ctx.arc(at.x, at.y, radius, 0, Math.PI * 2); if (outline) ctx.stroke(); else ctx.fill();
 		};
-		dot(relay, '#83dad7', 3); dot(state.player, '#edf1dd', 3);
-		for (const enemy of state.enemies) dot(enemy, '#f0a273', enemy.kind === 'siege' ? 3 : 2);
-		for (const warning of state.warnings) dot(warning, '#f0a27388', 4);
-		ctx.font = '8px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#94b1b8'; ctx.fillText('TACTICAL / 1.8 × 1.2 KM', x + 8, y + h + 15);
+		ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, w - 2, h - 2); ctx.clip();
+		dot(relay, '#91c5b8', 4, true);
+		const p = point(state.player); const a = point(aim);
+		ctx.strokeStyle = '#c9d9c04d'; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(a.x, a.y); ctx.stroke();
+		ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(state.player.angle);
+		ctx.fillStyle = '#f1e4b9'; ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-3, -3); ctx.lineTo(-1, 0); ctx.lineTo(-3, 3); ctx.closePath(); ctx.fill(); ctx.restore();
+		for (const enemy of state.enemies) dot(enemy, enemy.commander ? '#ffd6a7' : '#f2a571', enemy.commander ? 4 : enemy.kind === 'siege' ? 3 : 2);
+		for (const warning of state.warnings) dot(warning, '#e5a46f', 4, true);
+		for (const salvage of state.salvage) dot(salvage, salvage.kind === 'repair' ? '#83bba2' : '#86b6c1', 1.5);
+		for (const strike of state.strikes) dot(strike, '#ff8154', strike.radius / ARENA.width * w, true);
+		ctx.restore();
+		ctx.font = '9px monospace'; ctx.textAlign = 'left'; ctx.fillStyle = '#91a9a3'; ctx.fillText(`${state.enemies.length.toString().padStart(2, '0')} CONTACTS`, x + 9, y + h + 15);
+		ctx.textAlign = 'right'; ctx.fillStyle = '#bdac84'; ctx.fillText('1.8 × 1.2 KM', x + w - 8, y + h + 15);
 	}
-	const vignette = ctx.createRadialGradient(width / 2, height / 2, height * 0.2, width / 2, height / 2, Math.max(width, height) * 0.7);
-	vignette.addColorStop(0, '#03101a00'); vignette.addColorStop(1, '#03101a99'); ctx.fillStyle = vignette; ctx.fillRect(0, 0, width, height);
 	ctx.restore();
 };

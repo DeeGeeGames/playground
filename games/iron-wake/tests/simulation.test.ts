@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { angleDelta, createState, distance, ENEMY_STATS, step, type Controls, type EnemyKind, type State } from '../src/simulation';
+import { applyRefit, getOperationReport, angleDelta, createState, distance, ENEMY_STATS, step, type Controls, type EnemyKind, type State } from '../src/simulation';
+import { getWaveDefinition, TOTAL_HOSTILES, WAVES } from '../src/operation';
 const idle: Controls = { drive: 0, stop: false, turn: 0, aim: { x: 900, y: 200 }, cannon: false, laser: false, missile: false, coolant: false };
 const run = function (state: State, seconds: number, input = idle) { for (let i = 0; i < seconds * 60; i++) step(state, input, 1 / 60); };
 const target = function (state: State, x = 900, y = 580) { state.enemies.push({ id: state.nextId++, x, y, angle: 0, cooldown: 100, hp: 100, maxHp: 100, heavy: false, kind: 'striker' }); };
@@ -49,10 +50,12 @@ describe('Iron Wake combat', function () {
 		const state = createState(); state.relay = 0; step(state, idle, 1 / 60);
 		expect(state.outcome).toBe('lost'); const time = state.time; run(state, 1); expect(state.time).toBe(time);
 	});
-	test('clear waves repair armor and final wave wins', function () {
+	test('clear waves stop for refit and the final clear wins', function () {
 		const state = createState(); state.player.hp = 50; state.spawned = 5; run(state, 4.1);
-		expect(state.wave).toBe(2); expect(state.player.hp).toBe(70);
-		state.wave = 3; state.spawned = 9; state.enemies = []; state.shots = []; state.intermission = 0; run(state, 4.1);
+		expect(state.phase).toBe('refit'); expect(state.wave).toBe(1); expect(state.player.hp).toBe(50);
+		expect(applyRefit(state, 'arsenal')).toBe(true);
+		expect(state.wave).toBe(2); expect(state.player.hp).toBe(75);
+		state.wave = WAVES.length; state.spawned = getWaveDefinition(state.wave).enemies.length; state.enemies = []; state.shots = []; state.intermission = 0; run(state, 4.1);
 		expect(state.outcome).toBe('won');
 	});
 	test('ignoring the assault eventually loses the relay', function () {
@@ -111,13 +114,80 @@ describe('Iron Wake combat', function () {
 		step(state, { ...idle, cannon: true }, 0.04);
 		expect(state.enemies[0]?.hp).toBe(100); expect(state.enemies[1]?.hp).toBe(62); expect(state.player.speed).toBe(0);
 	});
-	test('a simple aim-and-manage-heat strategy can clear all three waves', function () {
+	test('a heat-managed operation can complete all five waves and destroy the commander', function () {
 		const state = createState();
-		for (let tick = 0; tick < 60 * 180 && state.outcome === 'playing'; tick++) {
+		for (let tick = 0; tick < 60 * 600 && state.outcome === 'playing'; tick++) {
+			if (state.phase === 'refit') expect(applyRefit(state, 'arsenal')).toBe(true);
 			const target = [...state.enemies].sort(function (a, b) { return distance(a, state.player) - distance(b, state.player); })[0];
 			step(state, { ...idle, aim: target ?? idle.aim, cannon: Boolean(target), laser: Boolean(target) && state.player.heat < 75, missile: Boolean(target), coolant: state.player.heat > 85 }, 1 / 60);
 		}
-		expect(state.outcome).toBe('won'); expect(state.kills).toBe(21); expect(state.relay).toBeGreaterThan(0);
+		expect(state.outcome).toBe('won'); expect(state.kills).toBe(TOTAL_HOSTILES); expect(state.relay).toBeGreaterThan(0);
+		const report = getOperationReport(state);
+		expect(report.commanderDestroyed).toBe(true); expect(report.score).toBeGreaterThan(10000);
+		expect(report.damageDealt).toBeGreaterThan(3000); expect(report.accuracy).toBeGreaterThan(0); expect(report.accuracy).toBeLessThanOrEqual(100);
+	});
+
+	test('refit freezes the entire fight until a single explicit upgrade is applied', function () {
+		const state = createState(); state.spawned = 5; state.player.throttle = 0.8; run(state, 4.1);
+		expect(state.phase).toBe('refit'); expect(state.player.throttle).toBe(0);
+		state.events = [];
+		const snapshot = structuredClone(state);
+		run(state, 30, { ...idle, drive: 1, cannon: true, laser: true, missile: true, coolant: true });
+		expect(state).toEqual(snapshot);
+		expect(applyRefit(state, 'cooling')).toBe(true);
+		expect(state.upgrades.cooling).toBe(1); expect(state.phase).toBe('combat'); expect(state.wave).toBe(2);
+		expect(applyRefit(state, 'bastion')).toBe(false); expect(state.upgrades.bastion).toBe(0); expect(state.wave).toBe(2);
+		state.outcome = 'lost'; state.phase = 'refit';
+		expect(applyRefit(state, 'arsenal')).toBe(false);
+	});
+
+	test('refit choices affect sustained fire, damage and survival rather than just labels', function () {
+		const arsenal = createState(); arsenal.phase = 'refit'; applyRefit(arsenal, 'arsenal'); arsenal.spawnIn = 100;
+		target(arsenal); run(arsenal, 0.4, { ...idle, cannon: true });
+		expect(arsenal.enemies[0]?.hp).toBeCloseTo(100 - 38 * 1.15);
+		const cooling = createState(); cooling.phase = 'refit'; applyRefit(cooling, 'cooling'); cooling.spawnIn = 100;
+		cooling.player.heat = 50; run(cooling, 1);
+		expect(cooling.player.heat).toBeCloseTo(50 - 12 * 1.18); expect(cooling.coolantCharges).toBe(3);
+		const bastion = createState(); bastion.phase = 'refit'; bastion.relay = 50; applyRefit(bastion, 'bastion'); bastion.spawnIn = 100;
+		bastion.shots.push({ x: 900, y: 780, vx: 0, vy: 0, life: 1, kind: 'enemy', target: undefined, damage: 20 });
+		step(bastion, idle, 1 / 60);
+		expect(bastion.player.hp).toBe(82); expect(bastion.relay).toBe(62);
+	});
+
+	test('artillery announces a fixed impact point and gives a neutral mech time to escape', function () {
+		const state = createState(); state.spawnIn = 100;
+		state.enemies.push({ id: 1, x: 850, y: 800, hp: 125, maxHp: 125, angle: 0, cooldown: 0, heavy: true, kind: 'siege' });
+		step(state, idle, 1 / 60);
+		const strike = state.strikes[0]; if (!strike) throw new Error('Missing artillery warning');
+		expect(strike.x).toBe(900); expect(strike.y).toBe(780); expect(state.player.hp).toBe(100);
+		run(state, 0.3); // Reaction time before raising throttle.
+		run(state, 2.6, { ...idle, drive: 1 });
+		expect(state.strikes).toHaveLength(0); expect(state.player.hp).toBe(100);
+		const stationary = createState(); stationary.spawnIn = 100;
+		stationary.enemies.push({ id: 1, x: 850, y: 800, hp: 125, maxHp: 125, angle: 0, cooldown: 0, heavy: true, kind: 'siege' });
+		run(stationary, 2.9);
+		expect(stationary.player.hp).toBe(90); expect(stationary.stats.damageTaken).toBe(10);
+	});
+
+	test('incoming artillery resolves before the refit can open and can still lose the relay', function () {
+		const state = createState(); state.spawned = 5; state.intermission = 3.9; state.relay = 5;
+		state.strikes.push({ id: 1, x: 900, y: 600, life: 0.5, duration: 2.8, radius: 62, damage: 10 });
+		run(state, 0.3); expect(state.phase).toBe('combat'); expect(state.outcome).toBe('playing');
+		run(state, 0.3); expect(state.outcome).toBe('lost'); expect(state.phase).toBe('combat');
+	});
+
+	test('difficulty changes actual hostile armor and damage while keeping the same operation', function () {
+		const story = createState({ difficulty: 'story' }); const veteran = createState({ difficulty: 'veteran' });
+		for (const state of [story, veteran]) {
+			state.spawnIn = 100;
+			state.warnings.push({ kind: 'siege', x: 850, y: 800, life: 0.01 });
+			step(state, idle, 1 / 60);
+			const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing hostile'); enemy.cooldown = 0;
+			run(state, 2.9);
+		}
+		expect(story.enemies[0]?.hp).toBeLessThan(veteran.enemies[0]?.hp ?? 0);
+		expect(story.player.hp).toBeGreaterThan(veteran.player.hp);
+		expect(story.stats.damageTaken).toBeCloseTo(5.5); expect(veteran.stats.damageTaken).toBeCloseTo(13);
 	});
 
 });

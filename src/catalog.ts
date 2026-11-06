@@ -30,12 +30,12 @@ export const experiments: readonly Experiment[] = [
 	},
 	{
 		title: 'Iron Wake',
-		thumbnail: './images/iron-wake.webp',
-		thumbnailAlt: 'Iron Wake gameplay: an armored mech defending a relay on an isometric battlefield.',
+		thumbnail: './games/iron-wake/preview.png',
+		thumbnailAlt: 'Iron Wake demo: the Warden siege frame staged in front of Relay 09 in the industrial yard.',
 		href: './games/iron-wake/',
-		description: 'An isometric siege frame, persistent throttle, and three weapon systems. Manage heat, recover salvage, and hold the relay against three assault waves.',
-		controls: 'Keyboard + Mouse · Touch',
-		category: 'Isometric mech defense',
+		description: 'Pilot an 80-ton siege frame through five assaults. Manage three weapon systems, evade artillery, and refit your frame to keep the last relay transmitting.',
+		controls: 'Keyboard + Mouse · Gamepad · Touch',
+		category: 'Isometric mech combat demo',
 	},
 	{
 		title: 'Power Up',

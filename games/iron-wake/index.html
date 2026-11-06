@@ -1,193 +1,73 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#101e29">
-<title>Iron Wake · Relay Defense</title>
-<link rel="stylesheet" href="./src/style.css">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<meta name="theme-color" content="#10191d">
+	<meta name="description" content="Pilot an 80-ton siege frame through Last Transmission, a five-wave isometric mech defense operation.">
+	<title>Iron Wake · Last Transmission</title>
+	<link rel="stylesheet" href="./src/style.css">
 </head>
 <body>
-<main id="game">
-<canvas aria-label="Isometric mech battlefield. W/S adjusts persistent throttle, A/D turns, mouse aims, click fires cannons, E laser, Q missiles, V coolant, X neutral.">
-</canvas>
-<header class="mission-bar">
-<a class="wordmark" href="../../" aria-label="Return to experiments">IW<span>IRON WAKE<small>RELAY DEFENSE / ALPHA 01</small>
-</span>
-</a>
-<div class="objective">
-<span class="live-dot">
-</span>
-<div>
-<b id="phase">SECTOR 09</b>
-<span id="status" role="status">Hold the uplink. Survive three waves.</span>
-</div>
-</div>
-<div class="system-buttons">
-<button id="sound" aria-pressed="false">Sound on</button>
-<button id="pause">Pause <kbd>Esc</kbd>
-</button>
-</div>
-</header>
-<aside class="hull-cluster">
-<div class="readout">
-<span>MECH INTEGRITY</span>
-<strong id="armor-value">100<small>%</small>
-</strong>
-<div class="track">
-<i id="armor-fill">
-</i>
-</div>
-</div>
-<div class="relay-readout">
-<span>RELAY</span>
-<b id="relay-value">100%</b>
-<div class="track">
-<i id="relay-fill">
-</i>
-</div>
-</div>
-</aside>
-<div id="message" class="field-message" role="status">
-</div>
-<div class="cockpit">
-<div class="drive-module">
-<div class="module-heading">
-<span>DRIVE / 80T</span>
-<b id="drive-value">NEUTRAL</b>
-</div>
-<div class="throttle-track">
-<span class="neutral-line">
-</span>
-<i id="throttle-fill">
-</i>
-</div>
-<div class="module-foot">
-<span id="speed-value">SPEED 0%</span>
-<span>W/S <b>THROTTLE</b> · X <b>NEUTRAL</b>
-</span>
-</div>
-</div>
-<div class="weapon-bank">
-<button class="weapon" data-weapon="cannon">
-<span class="weapon-number">01</span>
-<span>
-<b>AC/38 CANNON</b>
-<small>SPACE / MOUSE WHEEL</small>
-</span>
-<em id="cannon-status">READY</em>
-<i id="cannon-fill">
-</i>
-</button>
-<button class="weapon" data-weapon="laser">
-<span class="weapon-number">02</span>
-<span>
-<b>ARC LASER</b>
-<small>HOLD E</small>
-</span>
-<em id="laser-status">READY</em>
-<i id="laser-fill">
-</i>
-</button>
-<button class="weapon" data-weapon="missile">
-<span class="weapon-number">03</span>
-<span>
-<b>TRIDENT MISSILES</b>
-<small>Q / HOMING SALVO</small>
-</span>
-<em id="missile-status">READY</em>
-<i id="missile-fill">
-</i>
-</button>
-</div>
-<div class="heat-module">
-<div class="module-heading">
-<span>REACTOR HEAT</span>
-<b id="heat-value">0%</b>
-</div>
-<div class="track">
-<i id="heat-fill">
-</i>
-</div>
-<button id="coolant" data-weapon="coolant">VENT COOLANT <kbd>V</kbd>
-<b id="coolant-value">2</b>
-</button>
-</div>
-</div>
-<div class="pilot-hint">A/D turn hull <span>·</span> Mouse aims · Wheel selects · Click fires <span>·</span> Drive over salvage to recover armor &amp; coolant</div>
-<nav id="touch" aria-label="Touch cockpit controls">
-<div class="touch-drive">
-<button data-control="left" aria-label="Turn left">↶</button>
-<button data-control="forward" aria-label="Raise throttle">＋</button>
-<button data-control="right" aria-label="Turn right">↷</button>
-<button data-control="back" aria-label="Lower throttle">−</button>
-<button data-control="stop">Neutral</button>
-</div>
-<div class="touch-weapons">
-<button data-control="cannon">Cannon</button>
-<button data-control="laser">Laser</button>
-<button data-control="missile">Missiles</button>
-<button data-control="coolant">Coolant</button>
-</div>
-</nav>
-<section id="brief" class="modal">
-<div class="brief-title">
-<span class="eyebrow">NORTHLINE DEFENSE DIVISION / FIELD TRIAL 01</span>
-<h1>IRON<span>WAKE</span>
-</h1>
-<p class="tagline">Heavy metal. Unbroken signal.</p>
-</div>
-<div class="brief-body">
-<span class="eyebrow">YOUR ORDERS</span>
-<h2>Keep Relay 09 alive.</h2>
-<p>Three waves are converging on the uplink. Take your 80-ton siege frame into the yard and stop them.</p>
-<div class="brief-grid">
-<div>
-<span class="step">01 / DRIVE</span>
-<p>
-<kbd>W</kbd> <kbd>S</kbd> Set throttle. Release to cruise.<br>
-<kbd>A</kbd> <kbd>D</kbd> Turn hull. <kbd>X</kbd> Neutral.</p>
-</div>
-<div>
-<span class="step">02 / ENGAGE</span>
-<p>Mouse aims. Wheel selects. <kbd>Click</kbd> fires.<br>
-<kbd>E</kbd> Laser. <kbd>Q</kbd> Homing missiles.</p>
-</div>
-<div>
-<span class="step">03 / MANAGE</span>
-<p>
-<kbd>V</kbd> Purge heat with limited coolant.<br>Collect glowing salvage to stay in the fight.</p>
-</div>
-</div>
-<button id="start" class="primary">DEPLOY SIEGE FRAME <span>→</span>
-</button>
-<small class="brief-note">Sound starts on deployment. Keyboard + mouse recommended. Touch controls supported.</small>
-</div>
-</section>
-<section id="pause-panel" class="modal compact" hidden>
-<span class="eyebrow">SYSTEMS ON HOLD</span>
-<h2>Standing by.</h2>
-<p>Throttle is preserved. Resume when ready.</p>
-<div class="pause-controls">W/S throttle · A/D hull · X neutral<br>Wheel selects · Click fires · Space cannon<br>E laser · Q missiles · V coolant<br>Tap the field to aim on touch devices.</div>
-<button id="resume" class="primary">RESUME OPERATION →</button>
-<button id="reset" class="secondary">Restart mission</button>
-</section>
-<section id="result" class="modal compact" hidden>
-<span class="eyebrow" id="result-label">AFTER ACTION REPORT</span>
-<h2 id="result-title">
-</h2>
-<p id="result-copy">
-</p>
-<div id="result-stats" class="result-stats">
-</div>
-<button id="restart" class="primary">DEPLOY AGAIN →</button>
-</section>
-<p id="error" hidden>
-</p>
-<div class="version-stamp">NLD / SIEGE FRAME 08 <span>ISOMETRIC COMBAT ALPHA</span>
-</div>
+<main id="game" class="menu-open">
+	<canvas id="battlefield" aria-label="Iron Wake battlefield. W and S set throttle, A and D steer, X stops. Mouse aims, click fires. E laser, Q missiles, V coolant. Escape pauses."></canvas>
+	<div class="screen-grain" aria-hidden="true"></div>
+	<div id="hud" inert>
+		<header class="mission-bar">
+			<div class="mission-heading"><span class="insignia" aria-hidden="true">IW</span><div><span class="eyebrow">LAST TRANSMISSION</span><b id="phase">01 / FIRST CONTACT</b><span id="status">Protect Relay 09</span></div></div>
+			<div class="system-buttons"><span id="input-mode">KB / MOUSE</span><button id="sound" aria-label="Mute sound" aria-pressed="false">SOUND ON</button><button id="pause">PAUSE <kbd>Esc</kbd></button></div>
+		</header>
+		<div id="message" class="field-message" role="status" aria-live="polite"></div>
+		<div class="left-instruments">
+			<div class="relay-readout"><span class="signal-icon" aria-hidden="true">◈</span><div><span class="eyebrow">RELAY 09</span><b id="relay-value">100%</b><div class="track"><i id="relay-fill"></i></div></div></div>
+			<div class="frame-readout"><div class="readout-heading"><span class="eyebrow">FRAME INTEGRITY</span><strong id="armor-value">100%</strong></div><div class="track armor-track"><i id="armor-fill"></i></div>
+				<div class="heat-heading"><span>REACTOR</span><b id="heat-value">0%</b></div><div class="track heat-track"><i id="heat-fill"></i></div>
+				<div class="drive-heading"><span>DRIVE <b id="drive-value">NEUTRAL</b></span><span id="speed-value">SPD 0%</span></div><div class="throttle-track"><span></span><i id="throttle-fill"></i></div>
+			</div>
+		</div>
+		<div class="weapon-console">
+			<div class="weapon-console-heading"><span class="eyebrow">FIRE CONTROL</span><span id="weapon-hint">WHEEL / 1–3 TO SELECT</span></div>
+			<div class="weapon-bank">
+				<button class="weapon selected" data-weapon="cannon" aria-label="Fire cannon"><span class="weapon-icon" aria-hidden="true">╋</span><b>AC/38</b><small>CANNON <kbd>Space</kbd></small><em id="cannon-status">READY</em><i id="cannon-fill"></i></button>
+				<button class="weapon" data-weapon="laser" aria-label="Fire arc laser"><span class="weapon-icon laser-icon" aria-hidden="true">ϟ</span><b>ARC</b><small>LASER <kbd>E</kbd></small><em id="laser-status">READY</em><i id="laser-fill"></i></button>
+				<button class="weapon" data-weapon="missile" aria-label="Fire Trident missiles"><span class="weapon-icon" aria-hidden="true">⋀</span><b>TRIDENT</b><small>MISSILES <kbd>Q</kbd></small><em id="missile-status">READY</em><i id="missile-fill"></i></button>
+			</div>
+			<button id="coolant" class="coolant-button" data-weapon="coolant"><span>VENT COOLANT <kbd>V</kbd></span><b id="coolant-value">2 CHARGES</b></button>
+		</div>
+		<div id="pilot-hint" class="pilot-hint"><span id="hint-copy"></span><button id="dismiss-hint" aria-label="Dismiss piloting tip">×</button></div>
+		<nav id="touch" aria-label="Touch driving controls"><button data-control="left" aria-label="Turn hull left">↶</button><button data-control="forward" aria-label="Increase persistent throttle">＋</button><button data-control="right" aria-label="Turn hull right">↷</button><button data-control="back" aria-label="Decrease persistent throttle">−</button><button data-control="stop">STOP</button></nav>
+	</div>
+	<section id="brief" class="brief-screen menu-surface" aria-labelledby="game-title">
+		<div class="brief-top"><a href="../../" class="back-link">← DEEGEE GAMES</a><span>PLAYABLE DEMO / 01</span></div>
+		<div class="brief-content"><div class="eyebrow"><i class="live-dot"></i> NORTHLINE DEFENSE DIVISION</div><h1 id="game-title">IRON<span>WAKE</span></h1><p class="tagline">Eighty tons. One last signal.</p>
+			<div class="operation-brief"><span class="eyebrow">OPERATION 09</span><h2>LAST TRANSMISSION</h2><p>The evacuation is underway. Hold the relay through five assaults. Refit between waves. Bring your frame home.</p></div>
+			<fieldset class="difficulty-picker"><legend>ENGAGEMENT PROTOCOL</legend><label><input type="radio" name="difficulty" value="story"><span>STORY</span></label><label><input type="radio" name="difficulty" value="standard" checked><span>STANDARD</span></label><label><input type="radio" name="difficulty" value="veteran"><span>VETERAN</span></label></fieldset>
+			<p id="difficulty-copy" class="muted">The intended balance of armor, heat, and pressure.</p>
+			<button id="start" class="primary"><span>DEPLOY FRAME</span><span aria-hidden="true">↗</span></button>
+			<div class="menu-links"><button id="brief-controls">PILOT HANDBOOK</button><button id="brief-settings">SETTINGS</button></div>
+			<p id="record-summary" class="record-summary">NO OPERATIONS RECORDED</p>
+		</div>
+		<div class="frame-dossier" aria-hidden="true"><span class="eyebrow">YOUR FRAME</span><b>WARDEN / 08</b><span>80T SIEGE CLASS</span><div><span>AC/38 BALLISTIC</span><span>ARC ENERGY</span><span>TRIDENT GUIDED</span></div></div>
+		<footer class="brief-footer"><span>KEYBOARD + MOUSE / GAMEPAD / TOUCH</span><span>ORIGINAL MECH COMBAT</span></footer>
+	</section>
+	<section id="pause-panel" class="modal compact menu-surface" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
+		<span class="eyebrow">OPERATION SUSPENDED</span><h2 id="pause-title">STANDING BY.</h2><p>Your throttle and operation are preserved.</p><button id="resume" class="primary">RESUME OPERATION <span>→</span></button><div class="pause-actions"><button id="pause-controls" class="secondary">PILOT HANDBOOK</button><button id="pause-settings" class="secondary">SETTINGS</button><button id="reset" class="secondary">RESTART OPERATION</button><button id="leave" class="text-button">RETURN TO BRIEFING</button></div>
+	</section>
+	<section id="refit" class="modal refit-modal menu-surface" role="dialog" aria-modal="true" aria-labelledby="refit-title" hidden>
+		<div class="modal-kicker"><span class="eyebrow">FIELD SERVICE / RELAY 09</span><span id="refit-phase"></span></div><h2 id="refit-title">A MOMENT TO REBUILD.</h2><p id="refit-copy">Sector secured. Choose one frame upgrade before the next assault.</p><div id="refit-cards" class="refit-cards"></div><div class="refit-footer"><span id="refit-next"></span><span>SELECT AN UPGRADE TO CONTINUE →</span></div>
+	</section>
+	<section id="result" class="modal result-modal menu-surface" role="dialog" aria-modal="true" aria-labelledby="result-title" hidden>
+		<div class="modal-kicker"><span class="eyebrow">AFTER ACTION REPORT</span><span id="result-difficulty"></span></div><h2 id="result-title">SIGNAL UNBROKEN.</h2><p id="result-copy"></p><div class="report-score"><span id="result-rank">A</span><div><small>OPERATION SCORE</small><b id="result-score">0</b></div></div><div id="result-stats" class="result-stats"></div><div id="result-upgrades" class="report-upgrades"></div><p id="record-feedback" class="muted"></p><button id="restart" class="primary">DEPLOY AGAIN <span>↗</span></button><button id="result-briefing" class="text-button">RETURN TO BRIEFING</button>
+	</section>
+	<section id="settings" class="modal compact menu-surface" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+		<span class="eyebrow">PILOT PREFERENCES</span><h2 id="settings-title">SETTINGS</h2><div class="slider-setting"><label for="master-volume">MASTER VOLUME</label><output id="master-output" for="master-volume">80%</output><input id="master-volume" type="range" min="0" max="100" value="80"></div><div class="slider-setting"><label for="music-volume">MUSIC</label><output id="music-output" for="music-volume">55%</output><input id="music-volume" type="range" min="0" max="100" value="55"></div><div class="slider-setting"><label for="effects-volume">EFFECTS</label><output id="effects-output" for="effects-volume">85%</output><input id="effects-volume" type="range" min="0" max="100" value="85"></div><label class="toggle-setting"><input id="reduce-motion" type="checkbox"><span>REDUCE MOTION<small>Disable camera shake and decorative motion.</small></span></label><label class="toggle-setting"><input id="show-touch" type="checkbox"><span>SHOW TOUCH CONTROLS<small>Also shown automatically on touch-first devices.</small></span></label><p id="storage-status" class="muted">Preferences and operation records are saved on this device.</p><button id="close-settings" class="primary">DONE <span>→</span></button>
+	</section>
+	<section id="handbook" class="modal handbook-modal menu-surface" role="dialog" aria-modal="true" aria-labelledby="handbook-title" hidden>
+		<span class="eyebrow">WARDEN / 08 · FIELD MANUAL</span><h2 id="handbook-title">KNOW YOUR FRAME.</h2><p>Your legs and turret move independently. Set your throttle, turn the hull, and keep your guns on the target.</p><div class="handbook-grid"><div><h3>KEYBOARD + MOUSE</h3><dl><dt>W / S</dt><dd>Raise / lower persistent throttle</dd><dt>A / D</dt><dd>Turn the hull</dd><dt>X</dt><dd>Neutral. Momentum decays.</dd><dt>Mouse</dt><dd>Aim the turret</dd><dt>Click / Space</dt><dd>Selected weapon / cannon</dd><dt>Wheel / 1–3</dt><dd>Select mouse weapon</dd><dt>E / Q / V</dt><dd>Laser / missiles / coolant</dd><dt>Esc</dt><dd>Pause / resume</dd></dl></div><div><h3>GAMEPAD</h3><dl><dt>Left stick</dt><dd>Throttle and hull steering</dd><dt>Right stick</dt><dd>Aim in screen direction</dd><dt>RT / LT</dt><dd>Cannon / laser</dd><dt>RB / LB</dt><dd>Missiles / coolant</dd><dt>X / □</dt><dd>Neutral throttle</dd><dt>Menu</dt><dd>Pause / resume</dd><dt>D-pad + A / ×</dt><dd>Navigate and confirm menus</dd></dl><h3>TOUCH</h3><p>Tap the battlefield to aim. Hold weapon buttons to fire. + / − set throttle; arrows steer.</p></div></div><div class="tactical-notes"><p><b>MANAGE HEAT.</b> Sustained fire locks your weapons at 100%. Vent with limited coolant or let the reactor cool.</p><p><b>READ THE FIELD.</b> Orange circles warn of artillery. Keep moving. Intercept siege units before they shell the relay.</p><p><b>REFIT & RECOVER.</b> Drive over salvage for repairs and coolant. Each cleared assault earns a permanent upgrade for this operation.</p></div><button id="close-handbook" class="primary">READY <span>→</span></button>
+	</section>
+	<section id="confirm" class="modal compact menu-surface" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" hidden><span class="eyebrow">CURRENT OPERATION</span><h2 id="confirm-title">ABANDON THIS RUN?</h2><p>The current operation will be lost. Your recorded results and settings will be kept.</p><button id="confirm-action" class="primary">CONFIRM</button><button id="confirm-cancel" class="secondary">KEEP PLAYING</button></section>
+	<p id="error" role="alert" hidden></p>
 </main>
-<script type="module" src="./src/main.ts">
-</script>
+<script type="module" src="./src/main.ts"></script>
 </body>
 </html>

@@ -1,13 +1,22 @@
 import { mountGame } from '../../../shared/lifecycle';
-import { createState, distance, step, type Controls, type State } from './simulation';
+import { applyRefit, createState, distance, getOperationReport, step, type Controls, type Point } from './simulation';
+import { DIFFICULTIES, getWaveDefinition, REFITS, TOTAL_HOSTILES, WAVES } from './operation';
 import { createPresentation } from './presentation';
 import { advanceGaits, createGaits } from './gait';
 import { viewScale } from './projection-3d';
+import type { ScreenRect } from './overlay';
 import { createAudio } from './audio';
+import { createGamepadInput } from './gamepad';
+import { addOperationRecord, isDifficulty, readProfile, saveProfile } from './profile';
 
 const element = function (id: string): HTMLElement {
 	const value = document.getElementById(id);
-	if (!(value instanceof HTMLElement)) throw new Error(`Missing cockpit element: ${id}`);
+	if (!(value instanceof HTMLElement)) throw new Error(`Missing interface element: ${id}`);
+	return value;
+};
+const inputElement = function (id: string): HTMLInputElement {
+	const value = element(id);
+	if (!(value instanceof HTMLInputElement)) throw new Error(`Missing input: ${id}`);
 	return value;
 };
 const bindings = new Map([
@@ -16,177 +25,316 @@ const bindings = new Map([
 	['KeyX', 'stop'], ['Space', 'cannon'], ['KeyE', 'laser'], ['KeyQ', 'missile'], ['KeyV', 'coolant'],
 ]);
 const formatTime = function (time: number) { return `${Math.floor(time / 60)}:${Math.floor(time % 60).toString().padStart(2, '0')}`; };
+type Screen = 'brief' | 'playing' | 'pause-panel' | 'refit' | 'result';
+type Auxiliary = 'settings' | 'handbook' | 'confirm';
+type Weapon = 'cannon' | 'laser' | 'missile';
+const weapons: readonly Weapon[] = ['cannon', 'laser', 'missile'];
 const shutdown = await mountGame('game', async function (container) {
 	const canvas = container.querySelector('canvas');
 	if (!canvas) throw new Error('Missing battlefield');
 	canvas.tabIndex = 0;
 	const presentation = await createPresentation(canvas);
 	const audio = createAudio();
+	const padInput = createGamepadInput();
+	let profile = readProfile();
 	const abort = new AbortController(); const listenerOptions = { signal: abort.signal };
 	const keys = new Set<string>(); const pending = new Set<string>(); const held = new Map<number, string>();
 	const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+	const coarsePointer = window.matchMedia('(pointer: coarse)');
 	const ui = {
 		phase: element('phase'), status: element('status'), armor: element('armor-value'), armorFill: element('armor-fill'),
 		relay: element('relay-value'), relayFill: element('relay-fill'), heat: element('heat-value'), heatFill: element('heat-fill'),
 		drive: element('drive-value'), throttleFill: element('throttle-fill'), speed: element('speed-value'),
 		cannon: element('cannon-status'), cannonFill: element('cannon-fill'), laser: element('laser-status'), laserFill: element('laser-fill'),
 		missile: element('missile-status'), missileFill: element('missile-fill'), coolant: element('coolant-value'), message: element('message'),
-		brief: element('brief'), pause: element('pause-panel'), result: element('result'), pauseButton: element('pause'), sound: element('sound'),
+		sound: element('sound'), hint: element('pilot-hint'), hintCopy: element('hint-copy'), inputMode: element('input-mode'),
 	};
-	let selectedWeapon: 'cannon' | 'laser' | 'missile' = 'cannon';
+	const cockpitElements = [...container.querySelectorAll<HTMLElement>('.left-instruments, .weapon-console, #touch')];
+	let hudObstructions: ScreenRect[] = [];
+	const weaponButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-weapon]')];
+	let screen: Screen = 'brief'; let auxiliary: Auxiliary | undefined;
+	let selectedWeapon: Weapon = 'cannon';
 	const mousePointers = new Set<number>();
-	let mousePressed = false;
-	let state = createState(); let gaits = createGaits(state); let running = false; let paused = false; let muted = false;
-	let aim = { x: 900, y: 450 }; let pointer: { x: number; y: number } | undefined;
-	let frame = 0; let previous = 0; let accumulator = 0; let lastOutcome: State['outcome'] = 'playing';
-	let message = ''; let messageUntil = 0; let terminalUntil = 0; let audioAvailable = true; let contextLost = false;
-	const resetInput = function () { keys.clear(); pending.clear(); held.clear(); mousePointers.clear(); mousePressed = false; };
-	const active = function (action: string) { return ((mousePointers.size > 0 || mousePressed) && action === selectedWeapon) || keys.has(action) || pending.has(action) || [...held.values()].includes(action); };
+	let state = createState({ difficulty: profile.settings.difficulty }); let gaits = createGaits(state); let muted = false;
+	let aim: Point = { x: 900, y: 450 }; let pointer: Point | undefined; let aimMode: 'pointer' | 'gamepad' = 'pointer';
+	let frame = 0; let previous = 0; let accumulator = 0; let lastHud = 0;
+	let message = ''; let messageUntil = 0; let terminalUntil = 0; let audioAvailable = true; let contextLost = false; let focused = true;
+	let returnFocus: HTMLElement | undefined; let confirmedAction: (() => void) | undefined; let tipDismissed = false; let hadPad = false;
+	let lastSoundState = '';
+	const resetInput = function () { keys.clear(); pending.clear(); held.clear(); mousePointers.clear(); };
+	const playing = function () { return screen === 'playing' && !auxiliary && !contextLost && !document.hidden && focused; };
+	const active = function (action: string) { return (mousePointers.size > 0 && action === selectedWeapon) || keys.has(action) || pending.has(action) || [...held.values()].includes(action); };
+	const silenceAudio = function () { audio.update({ speed: 0, laser: false, heat: 0, active: false }); };
+	const motionReduced = function () { return reducedMotion.matches || profile.settings.reducedMotion; };
 	const unlockSound = function () {
-		void audio.unlock().then(function (available) {
-			audioAvailable = available;
-			if (!available) { ui.sound.textContent = 'Audio unavailable'; ui.sound.setAttribute('aria-disabled', 'true'); }
-		});
+		void audio.unlock().then(function (available) { audioAvailable = available; });
 	};
-	const syncMenu = function () {
-		ui.brief.hidden = running;
-		ui.pause.hidden = !paused;
-		ui.result.hidden = !running || state.outcome === 'playing';
-		container.classList.toggle('modal-open', !running || paused || state.outcome !== 'playing');
-		ui.pauseButton.textContent = paused ? 'Resume · Esc' : 'Pause · Esc';
-		ui.pauseButton.setAttribute('aria-disabled', String(!running || state.outcome !== 'playing'));
+	const save = function () {
+		element('storage-status').textContent = saveProfile(profile) ? 'Preferences and operation records are saved on this device.' : 'Device storage is unavailable. You can keep playing; records will last for this session.';
+	};
+	const updateSettings = function () {
+		audio.setMix(profile.settings);
+		container.classList.toggle('reduced-motion', motionReduced());
+		container.classList.toggle('touch-enabled', coarsePointer.matches || profile.settings.touchControls);
+		for (const name of ['master', 'music', 'effects'] as const) {
+			inputElement(`${name}-volume`).value = String(Math.round(profile.settings[name] * 100));
+			element(`${name}-output`).textContent = `${Math.round(profile.settings[name] * 100)}%`;
+		}
+		inputElement('reduce-motion').checked = profile.settings.reducedMotion;
+		inputElement('show-touch').checked = profile.settings.touchControls;
+	};
+	const menu = function () { return auxiliary ? element(auxiliary) : screen === 'playing' ? undefined : element(screen); };
+	const focusable = function (root: HTMLElement) {
+		return [...root.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], input:not(:disabled), [tabindex="0"]')].filter(function (item) { return !item.closest('[hidden], [inert]'); });
+	};
+	const syncScreen = function (focus = true) {
+		for (const id of ['brief', 'pause-panel', 'refit', 'result', 'settings', 'handbook', 'confirm']) {
+			const node = element(id); const visible = auxiliary ? id === auxiliary : id === screen;
+			node.hidden = !visible; node.inert = !visible;
+		}
+		const modal = screen !== 'playing' || Boolean(auxiliary);
+		container.classList.toggle('menu-open', modal); container.dataset['screen'] = auxiliary ?? screen;
+		element('hud').inert = modal; canvas.inert = modal;
+		resetInput(); accumulator = 0; lastHud = 0;
+		if (!focus) return;
+		const root = menu();
+		const initial = auxiliary === 'settings' ? element('master-volume') : auxiliary === 'handbook' ? element('close-handbook') : auxiliary === 'confirm' ? element('confirm-cancel') : screen === 'brief' ? element('start') : screen === 'pause-panel' ? element('resume') : screen === 'result' ? element('restart') : root?.querySelector<HTMLElement>('button');
+		(initial ?? canvas).focus({ preventScroll: true });
+	};
+	const updateRecordSummary = function () {
+		const records = profile.bests.filter(function (record) { return record.difficulty === profile.settings.difficulty; });
+		const best = [...records].sort(function (a, b) { return b.score - a.score; })[0];
+		element('record-summary').textContent = best ? `${profile.settings.difficulty.toUpperCase()} BEST · ${best.score.toLocaleString()} · RANK ${best.rank} · ${best.won ? 'SIGNAL HELD' : `ASSAULT ${best.wave}/5`}` : 'NO OPERATIONS RECORDED';
+		for (const input of container.querySelectorAll<HTMLInputElement>('input[name="difficulty"]')) input.checked = input.value === profile.settings.difficulty;
+		element('difficulty-copy').textContent = DIFFICULTIES.find(function (difficulty) { return difficulty.id === profile.settings.difficulty; })?.description ?? '';
 	};
 	const start = function () {
 		if (contextLost) return;
-		state = createState(); gaits = createGaits(state); selectedWeapon = 'cannon'; running = true; paused = false; lastOutcome = 'playing';
-		aim = { x: 900, y: 450 }; pointer = undefined; message = 'SYSTEMS ONLINE / DEFEND RELAY 09'; messageUntil = 4;
-		resetInput(); accumulator = 0; terminalUntil = 0; syncMenu(); canvas.focus({ preventScroll: true }); unlockSound();
+		state = createState({ difficulty: profile.settings.difficulty }); gaits = createGaits(state); selectedWeapon = 'cannon'; screen = 'playing'; auxiliary = undefined;
+		aim = { x: 900, y: 450 }; pointer = undefined; message = 'WARDEN ONLINE. PROTECT RELAY 09.'; messageUntil = 5; tipDismissed = false;
+		terminalUntil = 0; audio.reset(); syncScreen(); unlockSound();
 	};
-	const setPaused = function (value: boolean) {
-		if (!running || state.outcome !== 'playing' || (!value && contextLost)) return;
-		paused = value; resetInput(); accumulator = 0; syncMenu();
-		if (paused) { audio.update({ speed: 0, laser: false, heat: 0, active: false }); element('resume').focus({ preventScroll: true }); }
-		else { canvas.focus({ preventScroll: true }); unlockSound(); }
+	const toBriefing = function () {
+		screen = 'brief'; auxiliary = undefined; state = createState({ difficulty: profile.settings.difficulty }); gaits = createGaits(state);
+		aim = { x: 900, y: 450 }; pointer = undefined; audio.reset(); updateRecordSummary(); syncScreen();
 	};
-	element('start').addEventListener('click', start, listenerOptions);
-	element('restart').addEventListener('click', start, listenerOptions);
-	element('reset').addEventListener('click', start, listenerOptions);
-	element('resume').addEventListener('click', function () { setPaused(false); }, listenerOptions);
-	ui.pauseButton.addEventListener('click', function () { setPaused(!paused); }, listenerOptions);
-	ui.sound.addEventListener('click', function () {
+	const setPaused = function (paused: boolean) {
+		if (paused) silenceAudio();
+		if (paused && screen === 'playing') { screen = 'pause-panel'; auxiliary = undefined; syncScreen(); }
+		else if (!paused && screen === 'pause-panel' && !contextLost) { screen = 'playing'; auxiliary = undefined; syncScreen(); unlockSound(); }
+	};
+	const showAuxiliary = function (value: Auxiliary) {
+		if (document.activeElement instanceof HTMLElement) returnFocus = document.activeElement;
+		auxiliary = value; syncScreen();
+	};
+	const closeAuxiliary = function () {
+		auxiliary = undefined; confirmedAction = undefined; syncScreen(false);
+		if (returnFocus?.isConnected && !returnFocus.closest('[hidden], [inert]')) returnFocus.focus({ preventScroll: true });
+		else syncScreen();
+	};
+	const confirm = function (action: () => void, label: string) { confirmedAction = action; element('confirm-action').textContent = label; showAuxiliary('confirm'); };
+	const listen = function (id: string, callback: () => void) { element(id).addEventListener('click', callback, listenerOptions); };
+	listen('start', start); listen('restart', start); listen('resume', function () { setPaused(false); });
+	listen('pause', function () { setPaused(true); });
+	listen('reset', function () { confirm(start, 'RESTART OPERATION'); });
+	listen('leave', function () { confirm(toBriefing, 'RETURN TO BRIEFING'); });
+	listen('result-briefing', toBriefing);
+	listen('confirm-action', function () { const action = confirmedAction; confirmedAction = undefined; action?.(); });
+	listen('confirm-cancel', closeAuxiliary);
+	for (const id of ['brief-settings', 'pause-settings']) listen(id, function () { showAuxiliary('settings'); });
+	for (const id of ['brief-controls', 'pause-controls']) listen(id, function () { showAuxiliary('handbook'); });
+	listen('close-settings', closeAuxiliary); listen('close-handbook', closeAuxiliary);
+	listen('dismiss-hint', function () { tipDismissed = true; ui.hint.hidden = true; canvas.focus({ preventScroll: true }); });
+	listen('sound', function () {
 		if (!audioAvailable) return;
-		muted = !muted; audio.setMuted(muted); ui.sound.textContent = muted ? 'Sound off' : 'Sound on';
-		ui.sound.setAttribute('aria-pressed', String(muted)); if (!muted) unlockSound();
-		if (running && !paused && state.outcome === 'playing') canvas.focus({ preventScroll: true });
+		muted = !muted; audio.setMuted(muted); if (!muted) unlockSound(); canvas.focus({ preventScroll: true });
+	});
+	for (const input of container.querySelectorAll<HTMLInputElement>('input[name="difficulty"]')) input.addEventListener('change', function () {
+		if (!isDifficulty(input.value)) return;
+		profile.settings.difficulty = input.value; save(); updateRecordSummary();
 	}, listenerOptions);
+	for (const name of ['master', 'music', 'effects'] as const) inputElement(`${name}-volume`).addEventListener('input', function () {
+		profile.settings[name] = Number(inputElement(`${name}-volume`).value) / 100; updateSettings(); save(); unlockSound();
+	}, listenerOptions);
+	inputElement('reduce-motion').addEventListener('change', function () { profile.settings.reducedMotion = inputElement('reduce-motion').checked; updateSettings(); save(); }, listenerOptions);
+	inputElement('show-touch').addEventListener('change', function () { profile.settings.touchControls = inputElement('show-touch').checked; updateSettings(); save(); }, listenerOptions);
+	reducedMotion.addEventListener('change', updateSettings, listenerOptions); coarsePointer.addEventListener('change', updateSettings, listenerOptions);
+	const refitButtons = REFITS.map(function (refit, index) {
+		const button = document.createElement('button'); button.className = 'refit-card'; button.dataset['refit'] = refit.id;
+		const symbol = document.createElement('span'); symbol.className = 'refit-symbol'; symbol.setAttribute('aria-hidden', 'true'); symbol.textContent = ['╋', '❄', '◈'][index] ?? '+';
+		const title = document.createElement('b'); title.textContent = refit.name.toUpperCase();
+		const description = document.createElement('p'); description.textContent = `${refit.label}. ${refit.description}`;
+		const count = document.createElement('small');
+		button.append(symbol, title, description, count);
+		button.addEventListener('click', function () {
+			if (screen !== 'refit' || auxiliary || contextLost || !applyRefit(state, refit.id)) return;
+			screen = 'playing'; gaits = createGaits(state); message = `${getWaveDefinition(state.wave).name.toUpperCase()} / ${refit.name.toUpperCase()} INSTALLED`; messageUntil = state.time + 5;
+			syncScreen(); unlockSound(); audio.play(state.events);
+		}, listenerOptions);
+		return { button, count, choice: refit.id };
+	});
+	element('refit-cards').replaceChildren(...refitButtons.map(function (entry) { return entry.button; }));
+	const showRefit = function () {
+		screen = 'refit';
+		element('refit-phase').textContent = `ASSAULT ${state.wave} / ${WAVES.length} COMPLETE`;
+		element('refit-copy').textContent = `The yard is quiet. Field service restores 25 frame integrity, purges heat, and adds one coolant charge. Choose an upgrade for the rest of this operation.`;
+		element('refit-next').textContent = `NEXT: ${getWaveDefinition(state.wave + 1).name.toUpperCase()} — ${getWaveDefinition(state.wave + 1).briefing}`;
+		for (const entry of refitButtons) entry.count.textContent = `INSTALLED ${state.upgrades[entry.choice]} · SELECT TO REFIT →`;
+		syncScreen();
+	};
+	const showResult = function (now: number) {
+		const report = getOperationReport(state); const won = state.outcome === 'won';
+		screen = 'result'; terminalUntil = now + 1600;
+		element('result-title').textContent = won ? 'SIGNAL UNBROKEN.' : 'SIGNAL LOST.';
+		element('result-copy').textContent = won ? 'The command frame is down. The last evacuation has cleared the line. Relay 09 is still transmitting.' : state.player.hp <= 0 ? 'Warden 08 has fallen. Keep moving through artillery markers, recover salvage, and give the reactor time to cool.' : 'Relay 09 is silent. Intercept siege frames early; their artillery can reach the uplink from outside the yard.';
+		element('result-difficulty').textContent = state.difficulty.toUpperCase();
+		element('result-rank').textContent = report.rank; element('result-score').textContent = report.score.toLocaleString();
+		const stats = [[`${report.kills}/${TOTAL_HOSTILES}`, 'HOSTILES'], [formatTime(report.time), 'FIELD TIME'], [`${Math.ceil(report.relay)}%`, 'RELAY'], [`${report.accuracy}%`, 'BALLISTIC HITS']];
+		element('result-stats').replaceChildren(...stats.map(function ([value, label]) { const node = document.createElement('div'); const strong = document.createElement('b'); const small = document.createElement('small'); strong.textContent = value ?? ''; small.textContent = label ?? ''; node.append(strong, small); return node; }));
+		element('result-upgrades').textContent = `REFITS · ARSENAL ${state.upgrades.arsenal} / COOLING ${state.upgrades.cooling} / BASTION ${state.upgrades.bastion}`;
+		const oldBest = Math.max(0, ...profile.bests.filter(function (record) { return record.difficulty === state.difficulty; }).map(function (record) { return record.score; }));
+		profile = addOperationRecord(profile, { difficulty: state.difficulty, won, score: report.score, rank: report.rank, kills: report.kills, wave: state.wave, time: report.time, relay: report.relay });
+		const saved = saveProfile(profile);
+		element('record-feedback').textContent = !saved ? 'Device storage is unavailable. This report is kept for this session.' : report.score > oldBest ? `NEW ${state.difficulty.toUpperCase()} RECORD · SAVED ON THIS DEVICE` : 'OPERATION RECORDED ON THIS DEVICE';
+		syncScreen();
+	};
 	window.addEventListener('keydown', function (event) {
-		if (event.code === 'Escape') { event.preventDefault(); if (!event.repeat) setPaused(!paused); return; }
-		const action = bindings.get(event.code);
-		if (!action || !running || paused || state.outcome !== 'playing') return;
-		if (event.target instanceof HTMLButtonElement && event.code === 'Space') return;
+		if (event.code === 'Escape') { event.preventDefault(); if (event.repeat) return; if (auxiliary) closeAuxiliary(); else setPaused(screen === 'playing'); return; }
+		const root = menu();
+		if (root && event.code === 'Tab') {
+			const items = focusable(root); const first = items[0]; const last = items.at(-1);
+			if (event.shiftKey && (document.activeElement === first || !root.contains(document.activeElement))) { event.preventDefault(); last?.focus(); }
+			else if (!event.shiftKey && (document.activeElement === last || !root.contains(document.activeElement))) { event.preventDefault(); first?.focus(); }
+			return;
+		}
+		if (!playing()) return;
+		if (event.target instanceof HTMLButtonElement || event.target instanceof HTMLInputElement) return;
+		ui.inputMode.textContent = 'KB / MOUSE';
+		if (event.code === 'Digit1' || event.code === 'Digit2' || event.code === 'Digit3') { selectedWeapon = weapons[Number(event.code.slice(-1)) - 1] ?? 'cannon'; event.preventDefault(); return; }
+		const action = bindings.get(event.code); if (!action) return;
 		event.preventDefault(); keys.add(action); if (!event.repeat) pending.add(action);
 	}, listenerOptions);
 	window.addEventListener('keyup', function (event) { const action = bindings.get(event.code); if (action) keys.delete(action); }, listenerOptions);
-	window.addEventListener('blur', function () { resetInput(); setPaused(true); }, listenerOptions);
-	document.addEventListener('visibilitychange', function () {
-		if (document.hidden) { resetInput(); setPaused(true); audio.update({ speed: 0, laser: false, heat: 0, active: false }); }
-	}, listenerOptions);
+	window.addEventListener('blur', function () { focused = false; resetInput(); setPaused(true); }, listenerOptions);
+	window.addEventListener('focus', function () { focused = true; }, listenerOptions);
+	document.addEventListener('visibilitychange', function () { if (document.hidden) { silenceAudio(); resetInput(); setPaused(true); } }, listenerOptions);
 	canvas.addEventListener('webglcontextlost', function (event) {
 		event.preventDefault(); contextLost = true; resetInput(); setPaused(true);
 		const error = element('error'); error.textContent = 'Graphics interrupted. Waiting for recovery…'; error.hidden = false;
 	}, listenerOptions);
-	canvas.addEventListener('webglcontextrestored', function () {
-		contextLost = false; element('error').hidden = true; accumulator = 0; previous = 0;
-	}, listenerOptions);
+	canvas.addEventListener('webglcontextrestored', function () { contextLost = false; element('error').hidden = true; accumulator = 0; previous = 0; }, listenerOptions);
 	const updatePointer = function (event: PointerEvent) {
-		if (paused || !running || state.outcome !== 'playing') return;
-		const rect = canvas.getBoundingClientRect(); pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+		if (!playing()) return;
+		const rect = canvas.getBoundingClientRect(); pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top }; aimMode = 'pointer';
+		ui.inputMode.textContent = event.pointerType === 'touch' ? 'TOUCH' : 'KB / MOUSE';
 	};
 	canvas.addEventListener('pointermove', updatePointer, listenerOptions);
+	canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); }, listenerOptions);
 	canvas.addEventListener('wheel', function (event) {
-		if (!running || paused || state.outcome !== 'playing' || event.ctrlKey || event.deltaY === 0) return;
-		event.preventDefault();
-		if (event.deltaY > 0) selectedWeapon = selectedWeapon === 'cannon' ? 'laser' : selectedWeapon === 'laser' ? 'missile' : 'cannon';
-		else selectedWeapon = selectedWeapon === 'cannon' ? 'missile' : selectedWeapon === 'missile' ? 'laser' : 'cannon';
+		if (!playing() || event.ctrlKey || event.deltaY === 0) return;
+		event.preventDefault(); const index = weapons.indexOf(selectedWeapon); selectedWeapon = weapons[(index + (event.deltaY > 0 ? 1 : 2)) % weapons.length] ?? 'cannon';
 	}, { ...listenerOptions, passive: false });
 	canvas.addEventListener('pointerdown', function (event) {
-		if ((!event.isPrimary && event.pointerType !== 'touch') || event.button !== 0 || paused || !running || state.outcome !== 'playing') return;
+		if ((!event.isPrimary && event.pointerType !== 'touch') || event.button !== 0 || !playing()) return;
 		updatePointer(event); canvas.focus({ preventScroll: true }); canvas.setPointerCapture(event.pointerId);
-		if (event.pointerType !== 'touch') { mousePointers.add(event.pointerId); mousePressed = true; }
+		if (event.pointerType !== 'touch') { mousePointers.add(event.pointerId); pending.add(selectedWeapon); }
 	}, listenerOptions);
 	const release = function (event: PointerEvent) { held.delete(event.pointerId); mousePointers.delete(event.pointerId); };
-	window.addEventListener('pointerup', release, listenerOptions);
-	window.addEventListener('pointercancel', release, listenerOptions);
-	canvas.addEventListener('lostpointercapture', release, listenerOptions);
+	window.addEventListener('pointerup', release, listenerOptions); window.addEventListener('pointercancel', release, listenerOptions); canvas.addEventListener('lostpointercapture', release, listenerOptions);
 	for (const button of container.querySelectorAll<HTMLButtonElement>('[data-control], [data-weapon]')) {
+		const action = button.dataset['control'] ?? button.dataset['weapon']; if (!action) continue;
 		button.addEventListener('pointerdown', function (event) {
-			if (!running || paused || state.outcome !== 'playing' || event.button !== 0) return;
-			const action = button.dataset['control'] ?? button.dataset['weapon']; if (!action) return;
+			if (!playing() || event.button !== 0) return;
 			event.preventDefault(); button.setPointerCapture(event.pointerId); held.set(event.pointerId, action); pending.add(action);
+			if (action === 'cannon' || action === 'laser' || action === 'missile') selectedWeapon = action;
 		}, listenerOptions);
+		button.addEventListener('click', function (event) { if (event.detail === 0 && playing()) { pending.add(action); canvas.focus({ preventScroll: true }); } }, listenerOptions);
 		button.addEventListener('lostpointercapture', release, listenerOptions);
 	}
 	const weaponState = function (label: HTMLElement, fill: HTMLElement, cooldown: number, duration: number, firing: boolean) {
 		label.textContent = state.player.overheated ? 'HEAT LOCK' : cooldown > 0 ? `${cooldown.toFixed(1)}s` : firing ? 'FIRING' : 'READY';
 		fill.style.width = `${Math.max(0, 1 - cooldown / duration) * 100}%`;
-		label.closest('button')?.classList.toggle('firing', firing && !state.player.overheated);
-		label.closest('button')?.classList.toggle('locked', state.player.overheated);
+		label.closest('button')?.classList.toggle('firing', firing && !state.player.overheated); label.closest('button')?.classList.toggle('locked', state.player.overheated);
 	};
 	const updateHud = function () {
+		hudObstructions = cockpitElements.filter(function (node) { return node.offsetWidth > 0; }).map(function (node) { const rect = node.getBoundingClientRect(); return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }; });
 		const p = state.player;
-		for (const button of container.querySelectorAll<HTMLButtonElement>('[data-weapon]')) {
-			const selected = button.dataset['weapon'] === selectedWeapon;
-			button.classList.toggle('selected', selected);
-			if (button.classList.contains('weapon')) button.setAttribute('aria-current', String(selected));
-		}
-		ui.phase.textContent = paused ? 'OPERATION PAUSED' : `WAVE 0${state.wave} / 03`;
-		ui.status.textContent = !running ? 'Hold the uplink. Survive three waves.' : state.intermission > 0 ? 'Sector clear. Resupply incoming.' : `${state.enemies.length} active · ${state.warnings.length} inbound · ${state.kills}/21 eliminated`;
-		ui.armor.textContent = `${Math.max(0, Math.ceil(p.hp))}%`; ui.armorFill.style.width = `${Math.max(0, p.hp)}%`;
-		ui.armorFill.style.background = p.hp < 30 ? 'var(--danger)' : 'var(--cyan)';
-		ui.relay.textContent = `${Math.max(0, state.relay)}%`; ui.relayFill.style.width = `${Math.max(0, state.relay)}%`;
-		ui.heat.textContent = p.overheated ? 'LOCKOUT' : `${Math.ceil(p.heat)}%`; ui.heatFill.style.width = `${p.heat}%`;
-		ui.heatFill.style.background = p.heat > 80 ? 'var(--danger)' : 'var(--amber)';
-		ui.drive.textContent = `${p.throttle < -0.005 ? 'REV' : p.throttle > 0.005 ? 'FWD' : 'NEUTRAL'} ${Math.round(Math.abs(p.throttle) * 100)}%`;
-		ui.throttleFill.style.left = `${p.throttle < 0 ? 50 + p.throttle * 50 : 50}%`; ui.throttleFill.style.width = `${Math.abs(p.throttle) * 50}%`;
-		ui.speed.textContent = `SPEED ${Math.round(p.speed / (p.speed < 0 ? 48 : 90) * 100)}%`;
-		weaponState(ui.cannon, ui.cannonFill, state.cannonIn, 0.65, active('cannon'));
-		weaponState(ui.missile, ui.missileFill, state.missileIn, 4.5, active('missile'));
-		weaponState(ui.laser, ui.laserFill, 0, 1, !!state.beam); ui.coolant.textContent = String(state.coolantCharges);
-		ui.message.textContent = paused || !running || state.outcome !== 'playing' ? '' : p.overheated ? 'REACTOR LOCKOUT / V TO PURGE' : state.time < messageUntil ? message : state.relay < 30 ? 'RELAY INTEGRITY CRITICAL' : '';
+		for (const button of weaponButtons) { const selected = button.dataset['weapon'] === selectedWeapon; button.classList.toggle('selected', selected); if (button.classList.contains('weapon')) button.setAttribute('aria-current', String(selected)); }
+		ui.phase.textContent = `${String(state.wave).padStart(2, '0')} / ${getWaveDefinition(state.wave).name.toUpperCase()}`;
+		ui.status.textContent = state.intermission > 0 ? 'ASSAULT CLEAR · SECURING THE YARD' : `${state.enemies.length} ACTIVE · ${state.warnings.length} INBOUND · ${state.kills}/${TOTAL_HOSTILES} ELIMINATED`;
+		ui.armor.textContent = `${Math.max(0, Math.ceil(p.hp))}%`; ui.armorFill.style.width = `${Math.max(0, p.hp)}%`; ui.armorFill.style.background = p.hp < 30 ? 'var(--danger)' : 'var(--cyan)';
+		ui.relay.textContent = `${Math.max(0, Math.ceil(state.relay))}%`; ui.relayFill.style.width = `${Math.max(0, state.relay)}%`; ui.relayFill.style.background = state.relay < 30 ? 'var(--danger)' : 'var(--cyan)';
+		ui.heat.textContent = p.overheated ? 'LOCKOUT' : `${Math.ceil(p.heat)}%`; ui.heatFill.style.width = `${p.heat}%`; ui.heatFill.style.background = p.heat > 80 ? 'var(--danger)' : 'var(--amber)';
+		ui.drive.textContent = `${p.throttle < -0.005 ? 'REV' : p.throttle > 0.005 ? 'FWD' : 'N'} ${Math.round(Math.abs(p.throttle) * 100)}%`;
+		ui.throttleFill.style.left = `${p.throttle < 0 ? 50 + p.throttle * 50 : 50}%`; ui.throttleFill.style.width = `${Math.abs(p.throttle) * 50}%`; ui.speed.textContent = `SPD ${Math.round(p.speed / (p.speed < 0 ? 48 : 90) * 100)}%`;
+		weaponState(ui.cannon, ui.cannonFill, state.cannonIn, 0.65, active('cannon')); weaponState(ui.missile, ui.missileFill, state.missileIn, 4.5, active('missile')); weaponState(ui.laser, ui.laserFill, 0, 1, !!state.beam);
+		ui.coolant.textContent = `${state.coolantCharges} ${state.coolantCharges === 1 ? 'CHARGE' : 'CHARGES'}`;
+		ui.message.textContent = !playing() ? '' : p.overheated ? 'REACTOR LOCKOUT / VENT COOLANT OR CEASE FIRE' : state.time < messageUntil ? message : state.relay < 30 ? 'RELAY INTEGRITY CRITICAL' : '';
+		ui.hint.hidden = tipDismissed || state.time > 35 || screen !== 'playing';
+		ui.hintCopy.textContent = hadPad ? 'Left stick sets throttle. X / □ stops. Right stick aims; RT fires.' : coarsePointer.matches || profile.settings.touchControls ? 'Tap the field to aim. Hold + to move; STOP sets neutral. Hold a weapon to fire.' : state.time < 14 ? 'W / S set throttle. Release to cruise. X sets neutral; A / D steer.' : 'Mouse aims. Click fires. E laser · Q missiles · V coolant. Watch your heat.';
+		const soundState = !audioAvailable ? 'UNAVAILABLE' : muted ? 'SOUND OFF' : 'SOUND ON';
+		if (lastSoundState !== soundState) { lastSoundState = soundState; ui.sound.textContent = soundState; ui.sound.setAttribute('aria-label', !audioAvailable ? 'Audio unavailable' : muted ? 'Unmute sound' : 'Mute sound'); ui.sound.setAttribute('aria-pressed', String(muted)); }
+	};
+	const audioFrame = function (now: number) {
+		const combat = playing(); const audibleMenu = screen === 'brief' || screen === 'refit' || (screen === 'result' && now < terminalUntil + 30000);
+		return { speed: combat ? state.player.speed : 0, laser: combat && !!state.beam, heat: state.player.heat,
+			active: !contextLost && focused && !document.hidden && (combat || audibleMenu),
+			phase: screen === 'brief' ? 'briefing' as const : screen === 'refit' ? 'refit' as const : screen === 'result' ? 'result' as const : 'combat' as const,
+			intensity: Math.min(1, state.enemies.length / 5 + (state.wave - 1) * 0.08), danger: Math.max(0, 1 - Math.min(state.player.hp, state.relay) / 50), victory: state.outcome === 'won' };
 	};
 	const tick = function (now: number) {
 		const elapsed = previous ? Math.min((now - previous) / 1000, 0.1) : 0; previous = now;
 		const rect = canvas.getBoundingClientRect(); const width = rect.width; const height = rect.height;
-		presentation.resize(state, width, height, reducedMotion.matches);
-		if (pointer && !paused) {
-			aim = presentation.toGround(pointer) ?? aim;
-			const cursor = pointer;
-			const picked = [...state.enemies].sort(function (a, b) { return distance(presentation.toScreen(a, 45), cursor) - distance(presentation.toScreen(b, 45), cursor); })[0];
-			if (picked && distance(presentation.toScreen(picked, 45), cursor) < 42 * viewScale(width, height)) aim = { x: picked.x, y: picked.y };
+		presentation.resize(state, width, height, motionReduced());
+		let pads: readonly (Gamepad | null)[] = [];
+		try { pads = navigator.getGamepads?.() ?? []; } catch { /* Gamepad access can be restricted by an embedding policy. */ }
+		const pad = padInput.read(pads, now);
+		if (hadPad && !pad.connected && screen === 'playing') setPaused(true);
+		hadPad = pad.connected;
+		if (pad.pause && focused && !document.hidden && !contextLost) { if (auxiliary) closeAuxiliary(); else setPaused(screen === 'playing'); }
+		const root = menu();
+		if (root && pad.connected && focused && !document.hidden && !contextLost) {
+			if (pad.navigate) {
+				const focusedElement = document.activeElement;
+				if (pad.adjust && focusedElement instanceof HTMLInputElement && focusedElement.type === 'range') {
+					focusedElement.value = String(Math.max(Number(focusedElement.min), Math.min(Number(focusedElement.max), Number(focusedElement.value) + pad.adjust * 5)));
+					focusedElement.dispatchEvent(new Event('input', { bubbles: true }));
+				} else { const items = focusable(root); const index = items.findIndex(function (item) { return item === focusedElement; }); const next = (index + pad.navigate + items.length) % items.length; items[next]?.focus(); }
+			}
+			if (pad.confirm && document.activeElement instanceof HTMLElement && root.contains(document.activeElement)) document.activeElement.click();
+			if (pad.back) { if (auxiliary) closeAuxiliary(); else if (screen === 'pause-panel') setPaused(false); }
 		}
-		const makeInput = function (): Controls { return { drive: Number(active('forward')) - Number(active('back')), stop: active('stop'), turn: Number(active('right')) - Number(active('left')), aim, cannon: active('cannon'), laser: active('laser'), missile: active('missile'), coolant: active('coolant') }; };
-		if (running && !paused && !contextLost && !document.hidden && state.outcome === 'playing') {
+		if (playing()) {
+			if (Math.hypot(pad.aimX, pad.aimY) > 0.2) {
+				aimMode = 'gamepad'; ui.inputMode.textContent = 'GAMEPAD';
+				const origin = presentation.toScreen(state.player); const length = Math.hypot(pad.aimX, pad.aimY);
+				const projected = presentation.toGround({ x: origin.x + pad.aimX / length * 380, y: origin.y + pad.aimY / length * 380 });
+				if (projected) aim = projected;
+				const targets = state.enemies.map(function (enemy) { const at = presentation.toScreen(enemy); const dx = at.x - origin.x; const dy = at.y - origin.y; return { enemy, alignment: (dx * pad.aimX + dy * pad.aimY) / Math.max(1, Math.hypot(dx, dy) * length) }; }).filter(function (target) { return target.alignment > 0.975 && distance(target.enemy, state.player) < 850; }).sort(function (a, b) { return b.alignment - a.alignment; });
+				const target = targets[0]; if (target) aim = { x: target.enemy.x, y: target.enemy.y };
+			} else if (pointer && aimMode === 'pointer') {
+				aim = presentation.toGround(pointer) ?? aim;
+				const cursor = pointer;
+				const picked = [...state.enemies].sort(function (a, b) { return distance(presentation.toScreen(a, 45), cursor) - distance(presentation.toScreen(b, 45), cursor); })[0];
+				if (picked && distance(presentation.toScreen(picked, 45), cursor) < 42 * viewScale(width, height)) aim = { x: picked.x, y: picked.y };
+			}
+			const makeInput = function (): Controls { return { drive: Math.max(-1, Math.min(1, Number(active('forward')) - Number(active('back')) + pad.drive)), stop: active('stop') || pad.stop, turn: Math.max(-1, Math.min(1, Number(active('right')) - Number(active('left')) + pad.turn)), aim, cannon: active('cannon') || pad.cannon, laser: active('laser') || pad.laser, missile: active('missile') || pad.missile, coolant: active('coolant') || pad.coolant }; };
 			accumulator += elapsed;
-			while (accumulator >= 1 / 60 && state.outcome === 'playing') {
-				step(state, makeInput(), 1 / 60); gaits = advanceGaits(gaits, state); pending.clear(); mousePressed = false; accumulator -= 1 / 60;
-				audio.update({ speed: state.player.speed, laser: !!state.beam, heat: state.player.heat, active: true }); audio.play(state.events);
+			while (accumulator >= 1 / 60 && playing()) {
+				step(state, makeInput(), 1 / 60); gaits = advanceGaits(gaits, state); pending.clear(); accumulator -= 1 / 60;
+				audio.update(audioFrame(now)); audio.play(state.events);
 				if (state.events.includes('pickup')) { message = 'SALVAGE RECOVERED'; messageUntil = state.time + 2.5; }
-				if (state.events.includes('wave')) { message = state.wave === 1 ? 'HOSTILE SIGNALS / CHECK TACTICAL RADAR' : 'ARMOR REPAIRED / COOLANT RESUPPLIED'; messageUntil = state.time + 4; }
+				if (state.events.includes('wave')) { message = getWaveDefinition(state.wave).briefing.toUpperCase(); messageUntil = state.time + 5; }
 				if (state.events.includes('coolant')) { message = 'COOLANT PURGE / REACTOR STABILIZING'; messageUntil = state.time + 2; }
-				if (lastOutcome === 'playing' && state.outcome !== 'playing') { terminalUntil = now + 1400; lastOutcome = state.outcome; resetInput(); syncMenu(); element('restart').focus({ preventScroll: true }); }
+				if (state.outcome !== 'playing') showResult(now); else if (state.phase === 'refit') showRefit();
 			}
 		}
-		if (state.outcome !== 'playing') {
-			element('result-title').textContent = state.outcome === 'won' ? 'Signal unbroken.' : 'Signal lost.';
-			element('result-copy').textContent = state.outcome === 'won' ? 'All assault waves neutralized. Relay 09 is still transmitting. Bring the frame home.' : state.player.hp <= 0 ? 'Siege frame destroyed. Keep an eye on armor and recover repair salvage.' : 'The uplink has fallen. Use the radar to intercept siege units before they close in.';
-			element('result-stats').textContent = `HOSTILES ${state.kills} / 21 · TIME ${formatTime(state.time)} · RELAY ${Math.max(0, state.relay)}%`;
-		}
-		const engaged = running && !paused && !contextLost && !document.hidden && (state.outcome === 'playing' || now < terminalUntil);
-		audio.update({ speed: state.outcome === 'playing' ? state.player.speed : 0, laser: state.outcome === 'playing' && !!state.beam, heat: state.player.heat, active: engaged });
-		if (!contextLost) presentation.render(state, aim, gaits, reducedMotion.matches); updateHud();
+		audio.update(audioFrame(now));
+		if (!contextLost) presentation.render(state, aim, gaits, motionReduced(), screen === 'brief', hudObstructions);
+		if (now - lastHud > 80 || lastHud === 0) { updateHud(); lastHud = now; }
 		frame = requestAnimationFrame(tick);
 	};
-	syncMenu(); frame = requestAnimationFrame(tick);
-	return async function () { cancelAnimationFrame(frame); abort.abort(); resetInput(); try { await audio.dispose(); } finally { await presentation.dispose(); } };
+	updateSettings(); updateRecordSummary(); syncScreen(); frame = requestAnimationFrame(tick);
+	return async function () { cancelAnimationFrame(frame); abort.abort(); resetInput(); padInput.reset(); try { await audio.dispose(); } finally { await presentation.dispose(); } };
 });
 if (import.meta.hot) import.meta.hot.dispose(shutdown);
