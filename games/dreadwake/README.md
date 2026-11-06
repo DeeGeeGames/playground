@@ -117,6 +117,9 @@ families use distinct trails, pulses, bursts and charge tells. Both the Three.js
 battlefield and Canvas fallback use the same combat effect vocabulary. Reduced
 motion retains targeting geometry and the heavy beam's visible charge and lock.
 
+See [effects polish and panel ratings](./docs/effects-polish.md) for the drive,
+trail and combat-animation review, recording and normal/reduced-motion evidence.
+
 Settings preserve independent master/music/effects levels, screen shake, vibration
 and a larger HUD under `dreadwake.preferences.v1`. Original synthesized music follows
 command, combat, refit and result scenes. Browser audio may need a click or keypress;

@@ -1,3 +1,4 @@
+import { driveShape } from './effect-motion';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CEL } from './visual-theme';
@@ -27,7 +28,7 @@ export const createShipModels = function () {
 		const length = player ? 220 : small ? 115 : 170; const width = player ? 90 : small ? 42 : 58;
 		const top = material(player ? CEL.top : CEL.hostile); const side = material(player ? CEL.side : CEL.hostileSide);
 		const dark = material(CEL.dark); const shadow = material(CEL.ink); const amber = material(CEL.amber);
-		const emitter = material(player ? CEL.mint : CEL.amber); const cream = material(CEL.cream);
+		const emitter = material(player ? CEL.mint : CEL.amber);
 		const bins = new Map<THREE.Material, THREE.BufferGeometry[]>(); const edges: THREE.BufferGeometry[] = []; const contours: THREE.BufferGeometry[] = [];
 		const add = function (source: THREE.BufferGeometry, paint: THREE.Material, shade = side, outline = true) {
 			const geometry = source.index ? source.toNonIndexed() : source;
@@ -57,8 +58,10 @@ export const createShipModels = function () {
 			const geometry = new THREE.ExtrudeGeometry(shape, { depth: height - bottom, bevelEnabled: false, steps: 1, curveSegments: 1 });
 			geometry.rotateX(-Math.PI / 2); geometry.translate(0, bottom, 0); add(geometry, paint, shade);
 		};
-		const block = function (x: number, y: number, z: number, sx: number, sy: number, sz: number, paint: THREE.MeshBasicMaterial, outline = true) {
-			const geometry = new THREE.BoxGeometry(sx, sy, sz); geometry.translate(x, y, z); add(geometry, paint, paint, outline);
+		const block = function (x: number, y: number, z: number, sx: number, sy: number, sz: number, paint: THREE.MeshBasicMaterial, outline = true, luminous = false) {
+			const geometry = new THREE.BoxGeometry(sx, sy, sz); geometry.translate(x, y, z);
+			if (luminous) { geometry.deleteAttribute('uv'); const pieces = bins.get(paint) ?? []; pieces.push(geometry.toNonIndexed()); bins.set(paint, pieces); geometry.dispose(); }
+			else add(geometry, paint, paint, outline);
 		};
 		const mirror = function (outline: Outline, sign: number): Outline { return outline.map(function ([x, z]) { return [x, z * sign] as const; }); };
 		const h = small ? 0.75 : 1;
@@ -70,7 +73,7 @@ export const createShipModels = function () {
 			// Chamfered drive collar and a genuine recessed rear aperture.
 			hull(mirror([[-0.56, 0.29], [-0.535, 0.22], [-0.405, 0.22], [-0.38, 0.29], [-0.38, 0.42], [-0.405, 0.49], [-0.535, 0.49], [-0.56, 0.42]], sign), 4, 23 * h, side, dark);
 			block(-length * 0.561, 12 * h, sign * width * 0.355, 0.7, 12 * h, width * 0.15, shadow, false);
-			block(-length * 0.565, 12 * h, sign * width * 0.355, 0.6, 8 * h, width * 0.105, emitter, false);
+			block(-length * 0.565, 12 * h, sign * width * 0.355, 0.6, 8 * h, width * 0.105, emitter, false, true);
 			for (let i = 0; i < (player ? 0 : 4); i++) {
 				const x = player ? 64 - i * 25 : length * (0.28 - i * (small ? 0.15 : 0.18)); const z = sign * width * 0.405;
 				const size = small ? 7 : player ? 11 : 9;
@@ -110,11 +113,23 @@ export const createShipModels = function () {
 		const lineGeometry = mergeGeometries(edges); for (const edge of edges) edge.dispose();
 		if (lineGeometry) group.add(new THREE.LineSegments(ownGeometry(lineGeometry), ink));
 		const exhaust = new THREE.Group(); exhaust.name = 'exhaust'; group.add(exhaust);
+		const drive = driveShape(length, width);
 		for (const sign of [-1, 1]) {
-			const nozzle = new THREE.Group(); nozzle.position.set(-length * 0.57, 12 * h, sign * width * 0.355);
-			for (const [radius, distance, paint] of [[4 * h, 42, emitter], [2 * h, 27, cream]] as const) {
-				const geometry = new THREE.ConeGeometry(radius, distance, 4); geometry.rotateZ(Math.PI / 2); geometry.translate(-distance / 2, 0, 0);
-				const plume = new THREE.Mesh(ownGeometry(geometry), paint); plume.scale.y = 0.5; nozzle.add(plume);
+			const nozzle = new THREE.Group(); nozzle.position.set(drive.forward, drive.elevation, sign * drive.across);
+			for (const core of [false, true]) {
+				const profile = Array.from({ length: 25 }, function (_, i) {
+					const t = i / 24; return new THREE.Vector2(Math.sqrt(1 - t) * (1 - t * 0.45), t);
+				});
+				const geometry = new THREE.LatheGeometry(profile, 20); geometry.rotateZ(Math.PI / 2);
+				const positions = geometry.getAttribute('position'); const colors: number[] = [];
+				for (let i = 0; i < positions.count; i++) {
+					const t = -positions.getX(i); colors.push(1, 1, 1, Math.pow(1 - t, 0.65));
+				}
+				geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
+				const paint = new THREE.MeshBasicMaterial({ color: core ? CEL.cream : player ? CEL.mint : CEL.amber,
+					vertexColors: true, transparent: true, opacity: core ? 0.9 : 0.75, depthWrite: false }); materials.add(paint);
+				const plume = new THREE.Mesh(ownGeometry(geometry), paint); plume.name = core ? 'core' : 'plume';
+				plume.scale.set(core ? 18 : 28, drive.height * (core ? 0.52 : 1), drive.radius * (core ? 0.52 : 1)); nozzle.add(plume);
 			}
 			exhaust.add(nozzle);
 		}

@@ -1,3 +1,4 @@
+import { driveLength, driveShape } from './effect-motion';
 import { localPoint, type Point, type Ship, type State } from './simulation';
 import { worldToScreen, type Camera } from './projection';
 import { CEL } from './visual-theme';
@@ -66,7 +67,7 @@ const drawSocket = function (ctx: CanvasRenderingContext2D, camera: Camera, ship
 
 // Closed, layered pressure hulls share the approved split bow and twin drives.
 // Keep broad faces quiet and reduce gun detail when a hull is small on screen.
-export const drawStarship = function (ctx: CanvasRenderingContext2D, camera: Camera, ship: Ship, state: State, reducedMotion = false) {
+export const drawStarship = function (ctx: CanvasRenderingContext2D, camera: Camera, ship: Ship, state: State, reducedMotion = false, plumeLength = driveLength(ship, state, reducedMotion)) {
 	const player = ship.id === 0; const heavy = player || ship.length > 150; const alive = ship.hp > 0;
 	const command = state.enemies.some(function (enemy) { return enemy.id === ship.id && enemy.command; });
 	const top = !alive ? CEL.dark : player ? CEL.top : CEL.hostile;
@@ -100,12 +101,22 @@ export const drawStarship = function (ctx: CanvasRenderingContext2D, camera: Cam
 		parts.push({ bottom: z, depth: 0, paint: function () { polygon(ctx, points(outline, z), color, CEL.ink, weight * 0.65); } });
 	};
 	ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-	const speed = Math.hypot(ship.vx, ship.vy); const power = player ? Math.abs(state.player.throttle) : 0.55;
-	const flame = 0.08 + power * 0.18 + speed * 0.001 + (reducedMotion ? 0 : Math.sin(state.time * 18 + ship.id) * 0.008);
+	const drive = driveShape(ship.length, ship.width); const flame = plumeLength;
 	for (const sign of alive ? [-1, 1] : []) {
-		const a = sign * 0.355; const tip = screen(-0.563 - flame, a, 13);
-		polygon(ctx, [screen(-0.563, a - 0.07, 13), tip, screen(-0.563, a + 0.07, 13)], emitter, CEL.ink, weight);
-		polygon(ctx, [screen(-0.563, a - 0.035, 13), screen(-0.563 - flame * 0.7, a, 13), screen(-0.563, a + 0.035, 13)], CEL.cream);
+		const at = worldToScreen(localPoint(ship, drive.forward, sign * drive.across), camera, drive.elevation);
+		const tail = worldToScreen(localPoint(ship, drive.forward - flame, sign * drive.across), camera, drive.elevation);
+		const dx = tail.x - at.x; const dy = tail.y - at.y; const length = Math.hypot(dx, dy);
+		ctx.save(); ctx.translate(at.x, at.y); ctx.rotate(Math.atan2(dy, dx));
+		for (const core of [false, true]) {
+			const extent = length * (core ? 0.62 : 1); const radius = Math.max(0.7, drive.height * camera.scale) * (core ? 0.52 : 1);
+			const gradient = ctx.createLinearGradient(0, 0, Math.max(0.1, extent), 0);
+			gradient.addColorStop(0, core ? CEL.cream : emitter); gradient.addColorStop(1, `${core ? CEL.cream : emitter}00`);
+			ctx.beginPath(); ctx.moveTo(0, -radius);
+			ctx.bezierCurveTo(extent * 0.35, -radius, extent, -radius * 0.35, extent, 0);
+			ctx.bezierCurveTo(extent, radius * 0.35, extent * 0.35, radius, 0, radius); ctx.closePath();
+			ctx.fillStyle = gradient; ctx.fill();
+		}
+		ctx.restore();
 	}
 	module([[-0.48, -0.17], [0.29, -0.2], [0.57, -0.07], [0.57, 0.07], [0.29, 0.2], [-0.48, 0.17], [-0.55, 0]], 0, 22, CEL.dark, CEL.dark);
 	for (const sign of [-1, 1]) {
@@ -168,12 +179,6 @@ export const drawStarship = function (ctx: CanvasRenderingContext2D, camera: Cam
 	if (player && Math.abs(state.player.yaw) > 0.025) {
 		const sign = Math.sign(state.player.yaw);
 		line(ctx, screen(0.37, -sign * 0.19, 23), screen(0.37, -sign * 0.31, 23), CEL.mint, Math.max(1, 2.4 * camera.scale));
-	}
-	if (player && state.shield.active > 0) {
-		const at = worldToScreen(ship, camera, 18); const r = ship.length * camera.scale * 0.7;
-		ctx.beginPath(); ctx.ellipse(at.x, at.y, r, r * 0.64, -0.18, 0, Math.PI * 2);
-		ctx.fillStyle = `${CEL.mint}0d`; ctx.fill(); ctx.strokeStyle = CEL.ink; ctx.lineWidth = weight + 2; ctx.stroke();
-		ctx.strokeStyle = CEL.mint; ctx.lineWidth = weight; ctx.stroke();
 	}
 	ctx.restore();
 };

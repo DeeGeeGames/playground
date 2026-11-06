@@ -1,3 +1,4 @@
+import { createDriveAnimator, shieldEnvelope } from './effect-motion';
 import * as THREE from 'three';
 import { createShipModels, type HullKind } from './ship-model';
 import { hudObstacles, clearLabelPosition, type LabelObstacle } from './tactical-labels';
@@ -47,6 +48,7 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 	scene.background = skyTexture;
 	const paintSky = createBackdrop();
 	const drawCombatEffects = createCombatEffectsRenderer();
+	const driveLength = createDriveAnimator();
 	const models = createShipModels();
 	const prototypes = models.prototypes;
 	const instantiate = function (kind: HullKind): ShipVisual {
@@ -64,7 +66,7 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 	const ships = new Map<number, ShipVisual>();
 	const wrecks = new Map<Wreck, ShipVisual>();
 	const shieldMaterial = ownMaterial(new THREE.MeshBasicMaterial({ color: CEL.mint, transparent: true, opacity: 0.05, depthWrite: false }));
-	const shield = new THREE.Mesh(ownGeometry(new THREE.SphereGeometry(1, 16, 8)), shieldMaterial); shield.scale.set(155, 65, 94); scene.add(shield);
+	const shield = new THREE.Mesh(ownGeometry(new THREE.SphereGeometry(1, 40, 24)), shieldMaterial); shield.scale.set(155, 65, 94); scene.add(shield);
 	const debris = new THREE.Group(); scene.add(debris);
 	const debrisGeometry = ownGeometry(new THREE.DodecahedronGeometry(1, 0));
 	const debrisMaterial = ownMaterial(new THREE.MeshBasicMaterial({ color: CEL.planet }));
@@ -106,9 +108,9 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 	};
 	const updateShip = function (visual: ShipVisual, ship: Ship, state: State, reducedMotion: boolean) {
 		visual.group.position.set(ship.x, 0, ship.y); visual.group.rotation.y = -ship.angle;
-		const power = ship.id === 0 ? Math.abs(state.player.throttle) : 0.6;
-		const pulse = reducedMotion ? 1 : 1 + Math.sin(state.time * 21 + ship.id) * 0.045;
-		for (const nozzle of visual.exhaust.children) nozzle.scale.x = (0.35 + power * 0.8 + Math.hypot(ship.vx, ship.vy) / 120) * pulse;
+		for (const nozzle of visual.exhaust.children) for (const plume of nozzle.children) {
+			plume.scale.x = driveLength(ship, state, reducedMotion) * (plume.name === 'core' ? 0.62 : 1);
+		}
 		visual.exhaust.visible = ship.hp > 0;
 		for (const [index, scar] of visual.scars.children.entries()) scar.visible = 1 - ship.hp / ship.maxHp > (index + 1) / 8;
 		if (ship.id === 0) for (const socket of MOUNT_SOCKETS) {
@@ -211,7 +213,7 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 			ink.setLineDash([4, 7]); line(center, at, '#9ce8e894'); ink.setLineDash([]);
 			chevron(at, Math.atan2(at.y - center.y, at.x - center.x), CYAN, 7);
 		}
-		if (state.shield.active > 0) ring(center, p.length * view.scale * 0.72, CEL.mint, 2.5);
+
 		if (p.braced || state.shield.active > 0) text(state.shield.active > 0 ? 'AEGIS ACTIVE' : 'ARMOR LOCK', center.x, center.y + (p.length * 0.4 + 34) * view.scale, state.shield.active > 0 ? CYAN : GOLD, font);
 		if (width > 1050 && height > 800) {
 			const x = width - 92; const y = 365; const radius = 53;
@@ -291,11 +293,12 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 			for (const [wreck, visual] of wrecks) if (!state.wrecks.includes(wreck)) { scene.remove(visual.group); wrecks.delete(wreck); }
 			shield.visible = !briefing && state.shield.active > 0;
 			shield.position.set(state.player.x, 24, state.player.y); shield.rotation.y = -state.player.angle;
-			shieldMaterial.opacity = 0.05;
+			shieldMaterial.opacity = 0.07 * shieldEnvelope(state.shield.active);
 			debris.visible = !briefing;
 			renderer.render(scene, camera);
 			if (briefing) return;
-			drawCombatEffects(ink, view, state, reducedMotion); drawTactical(view, state, width, height, heading);
+			const effectsView = cameraFor(width, height, { x: px, y: py }, zoom);
+			drawCombatEffects(ink, effectsView, state, reducedMotion); drawTactical(effectsView, state, width, height, heading);
 		},
 		dispose: function () {
 			if (disposed) return; disposed = true;

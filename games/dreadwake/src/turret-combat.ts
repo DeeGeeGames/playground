@@ -1,3 +1,4 @@
+import { muzzlePoint } from './effect-motion';
 import { awardSalvage } from './arsenal';
 import { angleDelta, clamp, distance, hitFraction, localPoint, sideAngle, type Enemy, type Point, type Shell, type State } from './simulation';
 import { MOUNT_SOCKETS, weaponStats, type MountState, type WeaponId } from './weapons';
@@ -51,12 +52,12 @@ const selectTarget = function (state: State, mount: MountState): Enemy | undefin
 		return speedOf(a) - speedOf(b) || b.maxHp - a.maxHp || tie;
 	})[0];
 };
-const damageEnemy = function (state: State, enemy: Enemy, damage: number, weaponId: WeaponId) {
+const damageEnemy = function (state: State, enemy: Enemy, damage: number, weaponId: WeaponId, at: Point = enemy, elevation = 31) {
 	const actual = Math.min(Math.max(0, enemy.hp), Math.max(0, damage));
 	if (actual <= 0) return;
 	enemy.hp -= actual; state.stats.hits++;
 	if (!enemy.training) awardSalvage(state, actual);
-	state.effects.push({ x: enemy.x, y: enemy.y, kind: 'impact', duration: 0.25, life: 0.25, weaponId });
+	state.effects.push({ x: at.x, y: at.y, kind: 'impact', duration: 0.25, life: 0.25, weaponId, elevation });
 	state.events.push('hit');
 };
 const calibratedDamage = function (state: State, mount: MountState) {
@@ -64,7 +65,7 @@ const calibratedDamage = function (state: State, mount: MountState) {
 };
 const fired = function (state: State, mount: MountState, from: Point) {
 	mount.fired++; mount.flash = mount.weapon === 'helios' ? 0.3 : 0.12; mount.status = 'FIRING';
-	state.effects.push({ ...from, kind: 'muzzle', duration: 0.16, life: 0.16, weaponId: mount.weapon });
+	state.effects.push({ ...from, kind: 'muzzle', duration: 0.16, life: 0.16, weaponId: mount.weapon, source: { slot: mount.slot, heading: mount.locked ? mount.lockHeading : mount.heading } });
 	state.events.push(mount.weapon === 'seeker' ? 'missile' : mount.weapon);
 	if (mount.weapon === 'helios' || mount.weapon === 'rail') state.shake = Math.max(state.shake, 2);
 };
@@ -76,8 +77,8 @@ const beam = function (state: State, mount: MountState, angle: number) {
 		.filter(function (candidate): candidate is { enemy: Enemy; fraction: number } { return candidate.fraction !== undefined; })
 		.sort(function (a, b) { return a.fraction - b.fraction || a.enemy.id - b.enemy.id; })[0];
 	const to = hit ? { x: from.x + (end.x - from.x) * hit.fraction, y: from.y + (end.y - from.y) * hit.fraction } : end;
-	state.beams.push({ from, to, hostile: false, life: mount.weapon === 'helios' ? 0.24 : 0.1, weaponId: mount.weapon });
-	if (hit) damageEnemy(state, hit.enemy, calibratedDamage(state, mount), mount.weapon);
+	state.beams.push({ from, to, hostile: false, life: mount.weapon === 'helios' ? 0.24 : 0.1, weaponId: mount.weapon, visualFrom: muzzlePoint(state.player, mount.slot, mount.weapon, angle), elevation: 31 });
+	if (hit) damageEnemy(state, hit.enemy, calibratedDamage(state, mount), mount.weapon, to);
 	fired(state, mount, from);
 };
 const ion = function (state: State, mount: MountState, target: Enemy) {
@@ -85,7 +86,7 @@ const ion = function (state: State, mount: MountState, target: Enemy) {
 	let from = muzzleFor(state, mount); let current: Enemy | undefined = target; let damage = calibratedDamage(state, mount);
 	for (let link = 0; link <= stats.links && current; link++) {
 		visited.add(current.id);
-		state.beams.push({ from, to: { x: current.x, y: current.y }, hostile: false, life: 0.16, weaponId: 'ion' });
+		state.beams.push({ from, to: { x: current.x, y: current.y }, hostile: false, life: 0.16, weaponId: 'ion', ...(link === 0 ? { visualFrom: muzzlePoint(state.player, mount.slot, mount.weapon, mount.heading) } : {}), elevation: 31 });
 		damageEnemy(state, current, damage, 'ion');
 		current.slowRemaining = 1.6; current.slowFactor = current.command ? 0.1 : 0.2;
 		from = { x: current.x, y: current.y }; damage *= 0.6;
@@ -97,7 +98,7 @@ const ion = function (state: State, mount: MountState, target: Enemy) {
 const shellAt = function (state: State, mount: MountState, angle: number): Shell {
 	const stats = weaponStats(mount.weapon, mount.rank); const speed = stats.projectileSpeed;
 	return { ...muzzleFor(state, mount), vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-		life: stats.range / speed, hostile: false, damage: calibratedDamage(state, mount), weaponId: mount.weapon };
+		life: stats.range / speed, hostile: false, damage: calibratedDamage(state, mount), weaponId: mount.weapon, launch: { point: muzzlePoint(state.player, mount.slot, mount.weapon, angle), time: state.time, elevation: muzzlePoint(state.player, mount.slot, mount.weapon, angle).elevation } };
 };
 const launchMissile = function (state: State, mount: MountState) {
 	const stats = weaponStats(mount.weapon, mount.rank);
@@ -234,7 +235,7 @@ const detonate = function (state: State, shell: Shell, at: Point, directId?: num
 		other.life = 0; state.stats.interceptions++; state.events.push('intercept');
 		state.pointDefense.traces.push({ from: at, to: { x: other.x, y: other.y }, life: 0.16 });
 	}
-	state.effects.push({ ...at, kind: 'explosion', duration: 0.35, life: 0.35, weaponId: weapon, radius });
+	state.effects.push({ ...at, kind: 'explosion', duration: 0.35, life: 0.35, weaponId: weapon, radius, elevation: shell.launch?.elevation ?? 22 });
 	shell.life = 0;
 };
 
@@ -264,7 +265,7 @@ export const updateTurretProjectiles = function (state: State, dt: number) {
 			.sort(function (a, b) { return a.fraction - b.fraction || a.enemy.id - b.enemy.id; });
 		for (const hit of hits) {
 			const at = { x: from.x + (shell.x - from.x) * hit.fraction, y: from.y + (shell.y - from.y) * hit.fraction };
-			damageEnemy(state, hit.enemy, shell.damage, weapon);
+			damageEnemy(state, hit.enemy, shell.damage, weapon, at, shell.launch?.elevation ?? 22);
 			if (weapon === 'rail') {
 				shell.hitIds?.push(hit.enemy.id); shell.pierceRemaining = (shell.pierceRemaining ?? 1) - 1; shell.damage *= 0.65;
 				if (shell.pierceRemaining > 0) continue;
