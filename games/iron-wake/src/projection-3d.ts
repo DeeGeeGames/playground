@@ -5,8 +5,8 @@ export const viewScale = function (width: number, height: number) { return Math.
 
 // Three uses (ground X, elevation, ground Y). This basis reproduces the
 // existing Canvas projection, including its elevation and 52% ground anchor.
-export const alignCamera = function (camera: OrthographicCamera, width: number, height: number, state: State) {
-	const scale = viewScale(width, height) * Math.sqrt(3 / 2);
+export const alignCamera = function (camera: OrthographicCamera, width: number, height: number, state: State, zoom = 1) {
+	const scale = viewScale(width, height) * Math.sqrt(3 / 2) * zoom;
 	camera.left = -width / (2 * scale); camera.right = width / (2 * scale);
 	camera.top = height * 0.52 / scale; camera.bottom = -height * 0.48 / scale;
 	camera.position.set(state.player.x + 1000, 1000, state.player.y + 1000);

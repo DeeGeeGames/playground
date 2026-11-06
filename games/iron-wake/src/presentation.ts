@@ -1,5 +1,6 @@
 import ECSpresso from 'ecspresso';
 import { createGroupComponents, createRenderer3DPlugin } from 'ecspresso/plugins/rendering/renderer3D';
+import { zoomForWheel } from '../../../shared/wheel-zoom';
 import { ACESFilmicToneMapping, BufferGeometry, Color, DirectionalLight, Fog, HemisphereLight, Line, LineBasicMaterial, Mesh, MeshBasicMaterial, OrthographicCamera, PCFShadowMap, RingGeometry, Scene, Vector3, WebGLRenderer } from 'three';
 import { createGait, mechScale, type Gaits } from './gait';
 import { createMech } from './mech-3d';
@@ -38,6 +39,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 	const enemies = new Map<number, ReturnType<typeof makeUnit>>();
 	let player: ReturnType<typeof makeUnit> | undefined;
 	let width = 1; let height = 1; let disposed = false; let previousStateTime = 0;
+	let zoom = 1;
 	let relayHp: number | undefined; let relayHitAt = -10;
 	const dispose = async function () {
 		if (disposed) return; disposed = true;
@@ -58,7 +60,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 			renderer.setPixelRatio(dpr); renderer.setSize(width, height, false);
 		}
 		if (labels.width !== canvas.width || labels.height !== canvas.height) { labels.width = canvas.width; labels.height = canvas.height; }
-		camera.clearViewOffset(); camera.zoom = 1; alignCamera(camera, width, height, state);
+		camera.clearViewOffset(); camera.zoom = 1; alignCamera(camera, width, height, state, zoom);
 		if (!reducedMotion && state.shake > 0) camera.setViewOffset(width, height, -Math.sin(state.time * 79) * state.shake, -Math.cos(state.time * 91) * state.shake, width, height);
 		ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 	};
@@ -71,6 +73,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 	const kindHeat = function (kind: EnemyKind | undefined, state: State) { return kind ? 0 : state.player.heat; };
 	return {
 		resize,
+		zoomWithWheel: function (event: Pick<WheelEvent, 'deltaY' | 'deltaMode'>) { zoom = zoomForWheel(zoom, event, height); },
+		resetZoom: function () { zoom = 1; },
 		toGround: function (point: Point) { return toGround(point, camera, width, height); },
 		toScreen: function (point: Point, elevation = 0) { return toScreen(point, camera, width, height, elevation); },
 		render: function (state: State, aim: Point, gaits: Gaits, reducedMotion: boolean, attract = false, obstructions: readonly ScreenRect[] = [], couchMode = false) {
