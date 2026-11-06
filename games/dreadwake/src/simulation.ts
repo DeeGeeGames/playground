@@ -1,24 +1,26 @@
 export interface Point { x: number; y: number }
 export type Side = 'port' | 'starboard';
-export type CombatEvent = 'cannon' | 'torpedo' | 'intercept' | 'hit' | 'damage' | 'explosion' | 'wave' | 'shield' | 'shield-hit' | 'alert' | 'ready';
+export type CombatEvent = 'cannon' | 'torpedo' | 'intercept' | 'hit' | 'damage' | 'explosion' | 'wave' | 'shield' | 'shield-hit' | 'alert' | 'ready' | 'beam' | 'missile';
 export interface Ship extends Point {
 	id: number; angle: number; vx: number; vy: number; hp: number; maxHp: number;
 	length: number; width: number;
 }
 export interface Enemy extends Ship {
 	kind: 'frigate' | 'cruiser'; tactic?: 'flanker' | 'brawler' | 'standoff'; command?: boolean; cooldown: number; warning: number; aim: Point; orbit: number;
+	training?: boolean; weapon?: 'rail' | 'beam' | 'missile'; beamRemaining?: number; beamHeading?: number;
 }
 export interface Battery { reload: number; remaining: number; next: number; target: number | undefined }
-export interface Shell extends Point { vx: number; vy: number; life: number; hostile: boolean; damage: number; guidance?: { target: number | undefined } }
+export interface Shell extends Point { vx: number; vy: number; life: number; hostile: boolean; damage: number; projectile?: 'rail' | 'torpedo' | 'missile'; guidance?: { target: number | undefined } }
 export interface Effect extends Point { kind: 'muzzle' | 'impact' | 'explosion' | 'shield' | 'intercept'; life: number; duration: number }
+export interface BeamTrace { from: Point; to: Point; hostile: boolean; life: number }
 export interface DefenseTrace { from: Point; to: Point; life: number }
 export interface Wreck extends Point { angle: number; length: number; width: number; life: number }
 export const CAMPAIGN_MISSIONS = [
 	{ name: 'Outer picket', location: 'Lyra outskirts', briefing: 'Break the patrol. Turn your flank toward each contact and learn the rhythm of the arrays.', enemies: ['frigate', 'frigate'], bearings: [-1.55, 1.45], tactics: [] },
 	{ name: 'Crossfire', location: 'The broken relay', briefing: 'Flanking frigates hunt your bow and stern blind spots. Turn across their approach to bring the arrays to bear.', enemies: ['frigate', 'frigate', 'frigate'], bearings: [-1.9, 0.9, 2.1], tactics: ['flanker', 'flanker', 'flanker'] },
-	{ name: 'Heavy escort', location: 'Ash corridor', briefing: 'A standoff cruiser holds beyond broadside range while frigates screen it. Use bow torpedoes and close the distance.', enemies: ['frigate', 'frigate', 'cruiser'], bearings: [-1.4, 1.5, 3], tactics: ['flanker', 'flanker', 'standoff'] },
+	{ name: 'Heavy escort', location: 'Ash corridor', briefing: 'A missile cruiser holds beyond broadside range behind a frigate screen. Use your all-angle missiles to pressure it, then close for a bow lance. Point defense can thin its guided salvos.', enemies: ['frigate', 'frigate', 'cruiser'], bearings: [-1.4, 1.5, 3], tactics: ['flanker', 'flanker', 'standoff'] },
 	{ name: 'The hammer', location: 'Inner passage', briefing: 'Two brawlers drive into close range with rapid volleys. Keep thrust available: a stationary armor lock invites a collision.', enemies: ['cruiser', 'cruiser'], bearings: [-1.2, 1.6], tactics: ['brawler', 'brawler'] },
-	{ name: 'Dreadwake', location: 'Lyra gate', briefing: 'Flankers screen a standoff command cruiser while a brawler advances. Break the screen, then chase down command to open Lyra gate.', enemies: ['frigate', 'frigate', 'cruiser', 'cruiser'], bearings: [-1.7, 1.6, -0.6, 0.6], tactics: ['flanker', 'flanker', 'brawler', 'standoff'] },
+	{ name: 'Dreadwake', location: 'Lyra gate', briefing: 'The command cruiser charges a sustained beam while missile escorts screen it. Its beam cannot be intercepted: change course during the violet tell, or time Aegis for impact.', enemies: ['frigate', 'frigate', 'cruiser', 'cruiser'], bearings: [-1.7, 1.6, -0.6, 0.6], tactics: ['flanker', 'flanker', 'brawler', 'standoff'] },
 ] as const;
 export type RefitChoice = 'repair' | 'rails' | 'capacitor';
 export const REFIT_CHOICES: readonly { id: RefitChoice; name: string; description: string }[] = [
@@ -36,11 +38,14 @@ export interface State {
 	stats: { salvos: number; torpedoSalvos: number; interceptions: number; hits: number; damageBlocked: number };
 	shield: { active: number; cooldown: number; held: boolean };
 	torpedoes: Battery & { held: boolean };
+	missiles: Battery & { held: boolean };
+	beam: { charge: number; cooldown: number; firing: boolean; target: number | undefined };
+	beams: BeamTrace[];
 	fireControl: { automatic: boolean; held: boolean };
 	pointDefense: { reload: number; traces: DefenseTrace[] };
 	priorityTarget: number | undefined;
 }
-export interface Controls { drive: number; turn: number; heading?: number; neutral: boolean; port: boolean; starboard: boolean; brace: boolean; pulse: boolean; torpedo: boolean; autoFire: boolean }
+export interface Controls { drive: number; turn: number; heading?: number; neutral: boolean; port: boolean; starboard: boolean; brace: boolean; pulse: boolean; torpedo: boolean; autoFire: boolean; beam?: boolean; missile?: boolean }
 export const RANGE = 690;
 export const ARC = Math.PI / 6;
 export const RELOAD = 7.5;
@@ -50,6 +55,12 @@ export const SHIELD_COOLDOWN = 18;
 export const TORPEDO_RANGE = 1000;
 export const TORPEDO_ARC = Math.PI / 3;
 export const TORPEDO_RELOAD = 14;
+export const BEAM_DURATION = 2.4;
+export const BEAM_COOLDOWN = 10;
+export const BEAM_RANGE = 920;
+export const BEAM_ARC = Math.PI / 8;
+export const MISSILE_RELOAD = 12;
+export const MISSILE_RANGE = 1200;
 export const DEFENSE_RANGE = 240;
 export const DEFENSE_RELOAD = 0.38;
 export const clamp = function (value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); };
@@ -76,6 +87,19 @@ export const torpedoTargetFor = function (state: State): Enemy | undefined {
 	return targets.find(function (enemy) { return enemy.id === state.priorityTarget; })
 		?? targets.sort(function (a, b) { return distance(state.player, a) - distance(state.player, b) || a.id - b.id; })[0];
 };
+export const missileTargetFor = function (state: State): Enemy | undefined {
+	const targets = state.enemies.filter(function (enemy) { return enemy.hp > 0 && distance(state.player, enemy) <= MISSILE_RANGE; });
+	return targets.find(function (enemy) { return enemy.id === state.priorityTarget; })
+		?? targets.sort(function (a, b) { return distance(state.player, a) - distance(state.player, b) || a.id - b.id; })[0];
+};
+export const beamTargetFor = function (state: State): Enemy | undefined {
+	const targets = state.enemies.filter(function (enemy) {
+		return enemy.hp > 0 && distance(state.player, enemy) <= BEAM_RANGE
+			&& Math.abs(angleDelta(state.player.angle, Math.atan2(enemy.y - state.player.y, enemy.x - state.player.x))) <= BEAM_ARC;
+	});
+	return targets.find(function (enemy) { return enemy.id === state.priorityTarget; })
+		?? targets.sort(function (a, b) { return distance(state.player, a) - distance(state.player, b) || a.id - b.id; })[0];
+};
 export const designateTarget = function (state: State, id: number | undefined) {
 	state.priorityTarget = state.enemies.find(function (enemy) { return enemy.hp > 0 && enemy.id === id; })?.id;
 };
@@ -98,10 +122,12 @@ const spawnWave = function (state: State) {
 		const tactic = mission?.tactics[index];
 		const radius = tactic === 'standoff' ? 830 : 460 + index * 70;
 		const kind = mission?.enemies[index] ?? (state.wave === 3 && index === 2 ? 'cruiser' : 'frigate');
-		const hp = kind === 'cruiser' ? (state.campaign && state.wave === CAMPAIGN_MISSIONS.length && index === 3 ? 1000 : 600) : 280;
+		const command = Boolean(state.campaign && state.wave === CAMPAIGN_MISSIONS.length && index === 3);
+		const hp = state.campaign ? command ? 2400 : kind === 'cruiser' ? 1400 : 720 : kind === 'cruiser' ? 600 : 280;
 		const x = p.x + Math.cos(angle) * radius; const y = p.y + Math.sin(angle) * radius;
 		state.enemies.push({ id: state.nextId++, x, y, angle: angle + Math.PI / 2, vx: 0, vy: 0,
-			hp, maxHp: hp, kind, ...(tactic ? { tactic } : {}), command: hp === 1000, length: kind === 'cruiser' ? 170 : 115, width: kind === 'cruiser' ? 58 : 42,
+			hp, maxHp: hp, kind, ...(tactic ? { tactic } : {}), command, length: kind === 'cruiser' ? 170 : 115, width: kind === 'cruiser' ? 58 : 42,
+			weapon: state.campaign && state.wave >= 3 ? command ? 'beam' : tactic === 'standoff' || (state.wave === 5 && kind === 'frigate') ? 'missile' : 'rail' : 'rail',
 			cooldown: 5 + index * 2, warning: 0, aim: { x: p.x, y: p.y }, orbit: index % 2 === 0 ? 1 : -1 });
 	}
 	state.events.push('wave');
@@ -115,6 +141,8 @@ export const createState = function (): State {
 		outcome: 'playing', events: [], shake: 0, stats: { salvos: 0, torpedoSalvos: 0, interceptions: 0, hits: 0, damageBlocked: 0 },
 		shield: { active: 0, cooldown: 0, held: false }, priorityTarget: undefined,
 		torpedoes: { reload: 0, remaining: 0, next: 0, target: undefined, held: false },
+		missiles: { reload: 0, remaining: 0, next: 0, target: undefined, held: false },
+		beam: { charge: BEAM_DURATION, cooldown: 0, firing: false, target: undefined }, beams: [],
 		fireControl: { automatic: false, held: false }, pointDefense: { reload: 0, traces: [] },
 	};
 	spawnWave(state); state.events = [];
@@ -124,6 +152,7 @@ export const createState = function (): State {
 export const createCampaignState = function (): State {
 	const state = createState();
 	state.campaign = { phase: 'combat', completedMissions: 0, upgrades: { rails: 0, capacitor: 0 } };
+	state.enemies = []; state.nextId = 1; spawnWave(state); state.events = [];
 	return state;
 };
 export const chooseRefit = function (state: State, choice: RefitChoice): boolean {
@@ -136,11 +165,12 @@ export const chooseRefit = function (state: State, choice: RefitChoice): boolean
 	campaign.phase = 'combat'; state.wave++; state.intermission = 0;
 	state.player.vx = 0; state.player.vy = 0; state.player.yaw = 0; state.player.throttle = 0; state.player.braced = false;
 	state.shells = []; state.effects = []; state.wrecks = []; state.priorityTarget = undefined;
-	for (const battery of [state.batteries.port, state.batteries.starboard, state.torpedoes]) {
+	for (const battery of [state.batteries.port, state.batteries.starboard, state.torpedoes, state.missiles]) {
 		battery.reload = 0; battery.remaining = 0; battery.next = 0; battery.target = undefined;
 	}
 	state.shield = { active: 0, cooldown: 0, held: false };
-	state.torpedoes.held = false; state.fireControl.held = false;
+	state.torpedoes.held = false; state.missiles.held = false; state.fireControl.held = false;
+	state.beam = { charge: BEAM_DURATION, cooldown: 0, firing: false, target: undefined }; state.beams = [];
 	state.pointDefense.reload = 0; state.pointDefense.traces = [];
 	spawnWave(state);
 	return true;
@@ -201,9 +231,65 @@ const updateTorpedoes = function (state: State, fire: boolean, dt: number) {
 	rack.next -= dt;
 	if (rack.next > 0) return;
 	const muzzle = localPoint(p, p.length * 0.48, (rack.remaining % 2 === 0 ? -1 : 1) * 18);
-	state.shells.push({ ...muzzle, vx: Math.cos(p.angle) * 220, vy: Math.sin(p.angle) * 220, life: 6, hostile: false, damage: 72,
+	state.shells.push({ ...muzzle, vx: Math.cos(p.angle) * 220, vy: Math.sin(p.angle) * 220, life: 6, hostile: false, damage: 72, projectile: 'torpedo',
 		guidance: { target: rack.target } });
 	rack.remaining--; rack.next += 0.22; effect(state, muzzle, 'muzzle'); state.events.push('torpedo');
+};
+const updateMissiles = function (state: State, fire: boolean, dt: number) {
+	const rack = state.missiles; const p = state.player;
+	rack.reload = Math.max(0, rack.reload - dt * (p.braced ? 0.45 : 1));
+	if (fire && !rack.held && !p.braced && rack.reload === 0 && rack.remaining === 0) {
+		const target = missileTargetFor(state);
+		if (target) { rack.target = target.id; rack.remaining = 4; rack.next = 0; rack.reload = MISSILE_RELOAD; }
+	}
+	rack.held = fire;
+	if (rack.remaining === 0) return;
+	rack.next -= dt;
+	if (rack.next > 0) return;
+	const side = rack.remaining % 2 === 0 ? -1 : 1;
+	const muzzle = localPoint(p, -25, side * p.width * 0.55);
+	const angle = p.angle + side * Math.PI / 2;
+	state.shells.push({ ...muzzle, vx: Math.cos(angle) * 340, vy: Math.sin(angle) * 340, life: 5,
+		hostile: false, damage: 38, projectile: 'missile', guidance: { target: rack.target } });
+	rack.remaining--; rack.next += 0.16; effect(state, muzzle, 'muzzle'); state.events.push('missile');
+};
+// A beam ray stops at the first hull, sharing the swept hull geometry with rounds.
+const fireBeam = function (state: State, from: Point, angle: number, range: number, damage: number, hostile: boolean) {
+	const end = { x: from.x + Math.cos(angle) * range, y: from.y + Math.sin(angle) * range };
+	const targets: readonly Ship[] = hostile ? [state.player] : state.enemies;
+	const hit = targets.filter(function (ship) { return ship.hp > 0; })
+		.map(function (ship) { return { ship, fraction: hitFraction(from, end, ship) }; })
+		.filter(function (candidate): candidate is { ship: Ship; fraction: number } { return candidate.fraction !== undefined; })
+		.sort(function (a, b) { return a.fraction - b.fraction || a.ship.id - b.ship.id; })[0];
+	const to = hit ? { x: from.x + (end.x - from.x) * hit.fraction, y: from.y + (end.y - from.y) * hit.fraction } : end;
+	state.beams.push({ from, to, hostile, life: 0.045 });
+	if (!hit) return;
+	const reduction = hostile ? state.shield.active > 0 ? 0.15 : state.player.braced ? 0.35 : 1 : 1;
+	hit.ship.hp = Math.max(0, hit.ship.hp - damage * reduction);
+	if (hostile) state.stats.damageBlocked += damage * (1 - reduction);
+	// Sparse impact sparks keep continuous beams readable without filling the effect pool.
+	if (Math.floor(state.time * 60) % 6 === 0) {
+		effect(state, to, hostile && state.shield.active > 0 ? 'shield' : 'impact');
+		state.events.push(hostile ? state.shield.active > 0 ? 'shield-hit' : 'damage' : 'hit');
+	}
+};
+const updateBeam = function (state: State, fire: boolean, dt: number) {
+	const beam = state.beam; const wasFiring = beam.firing;
+	beam.firing = false; beam.target = undefined;
+	if (beam.cooldown > 0) {
+		beam.cooldown = Math.max(0, beam.cooldown - dt);
+		if (beam.cooldown === 0) { beam.charge = BEAM_DURATION; state.events.push('ready'); }
+		return;
+	}
+	if (!fire || state.player.braced) { beam.charge = Math.min(BEAM_DURATION, beam.charge + dt * 0.35); return; }
+	const target = beamTargetFor(state); const p = state.player;
+	const from = localPoint(p, p.length * 0.49, 0);
+	const angle = target ? Math.atan2(target.y - from.y, target.x - from.x) : p.angle;
+	beam.target = target?.id; beam.firing = true;
+	if (!wasFiring) state.events.push('beam');
+	fireBeam(state, from, angle, BEAM_RANGE, 80 * Math.min(dt, beam.charge), false);
+	beam.charge = Math.max(0, beam.charge - dt);
+	if (beam.charge <= 0.00001) { beam.charge = 0; beam.cooldown = BEAM_COOLDOWN; }
 };
 const updatePointDefense = function (state: State, dt: number) {
 	const defense = state.pointDefense; const p = state.player;
@@ -225,6 +311,7 @@ const updatePointDefense = function (state: State, dt: number) {
 	effect(state, threat.shell, 'intercept'); state.events.push('intercept');
 };
 const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
+	if (enemy.training) return;
 	const p = state.player; const range = distance(enemy, p);
 	const bearing = Math.atan2(p.y - enemy.y, p.x - enemy.x);
 	const flank = localPoint(p, enemy.orbit * 320, 0);
@@ -237,24 +324,36 @@ const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 	const speed = enemy.tactic === 'flanker' ? 66 : enemy.tactic === 'brawler' ? 44 : enemy.kind === 'cruiser' ? 30 : 48;
 	enemy.vx = Math.cos(enemy.angle) * speed; enemy.vy = Math.sin(enemy.angle) * speed;
 	enemy.x += enemy.vx * dt; enemy.y += enemy.vy * dt;
-	if (enemy.warning > 0) {
+	if ((enemy.beamRemaining ?? 0) > 0) {
+		enemy.beamRemaining = Math.max(0, (enemy.beamRemaining ?? 0) - dt);
+		fireBeam(state, { x: enemy.x, y: enemy.y }, enemy.beamHeading ?? bearing, 1400, 62 * dt, true);
+	} else if (enemy.warning > 0) {
 		enemy.warning -= dt;
 		if (enemy.warning <= 0) {
 			const angle = Math.atan2(enemy.aim.y - enemy.y, enemy.aim.x - enemy.x);
-			const count = enemy.kind === 'cruiser' ? 7 : 5;
-			for (let i = 0; i < count; i++) {
-				const spread = angle + (i - (count - 1) / 2) * 0.032;
-				state.shells.push({ x: enemy.x, y: enemy.y, vx: Math.cos(spread) * 240, vy: Math.sin(spread) * 240, life: 4.2, hostile: true, damage: enemy.kind === 'cruiser' ? 38 : 26 });
+			if (enemy.weapon === 'beam') {
+				enemy.beamRemaining = 1.4; enemy.beamHeading = angle; state.events.push('beam');
+			} else {
+				const missile = enemy.weapon === 'missile';
+				const count = missile ? enemy.kind === 'cruiser' ? 4 : 3 : enemy.kind === 'cruiser' ? 7 : 5;
+				for (let i = 0; i < count; i++) {
+					const spread = angle + (i - (count - 1) / 2) * (missile ? 0.14 : 0.032);
+					state.shells.push({ x: enemy.x, y: enemy.y, vx: Math.cos(spread) * (missile ? 200 : 240),
+						vy: Math.sin(spread) * (missile ? 200 : 240), life: missile ? 6 : 4.2, hostile: true,
+						damage: (missile ? enemy.kind === 'cruiser' ? 32 : 24 : enemy.kind === 'cruiser' ? 38 : 26) * (state.campaign ? 0.8 : 1),
+						...(missile ? { projectile: 'missile', guidance: { target: p.id } } as const : {}) });
+				}
+				if (missile) state.events.push('missile');
 			}
 			effect(state, enemy, 'muzzle'); enemy.cooldown = enemy.tactic === 'brawler' ? 5.5 : enemy.kind === 'cruiser' ? 8 : 10;
 		}
 	} else {
 		enemy.cooldown -= dt;
-		if (enemy.cooldown <= 0 && range < 900) {
-			enemy.warning = 1.8;
+		if (enemy.cooldown <= 0 && range < (enemy.weapon === 'missile' ? 1100 : 900)) {
+			enemy.warning = enemy.weapon === 'beam' ? 2.2 : 1.8;
 			state.events.push('alert');
 			// Commit the firing solution at the start of the tell. A course change can dodge it.
-			const lead = range / 240 + 1.8;
+			const lead = enemy.weapon === 'beam' ? 2.2 : range / 240 + 1.8;
 			enemy.aim = { x: p.x + p.vx * lead, y: p.y + p.vy * lead };
 		}
 	}
@@ -274,6 +373,7 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	state.events = [];
 	if (state.outcome !== 'playing' || state.campaign?.phase === 'refit' || !Number.isFinite(elapsed) || elapsed <= 0) return;
 	const dt = Math.min(elapsed, 1 / 30); const p = state.player;
+	state.beams = state.beams.filter(function (beam) { beam.life -= dt; return beam.life > 0; });
 	state.time += dt; state.shake = Math.max(0, state.shake - dt * 12);
 	const cooling = state.shield.cooldown > 0;
 	state.shield.active = Math.max(0, state.shield.active - dt);
@@ -298,17 +398,20 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	p.x += p.vx * dt; p.y += p.vy * dt;
 	updateBattery(state, 'port', input.port, dt); updateBattery(state, 'starboard', input.starboard, dt);
 	updateTorpedoes(state, input.torpedo, dt);
+	updateMissiles(state, input.missile ?? false, dt); updateBeam(state, input.beam ?? false, dt);
 	for (const enemy of state.enemies) if (enemy.hp > 0) updateEnemy(state, enemy, dt);
 	updatePointDefense(state, dt);
 	for (const shell of state.shells) {
 		if (shell.life <= 0) continue;
 		if (shell.guidance) {
-			const target = state.enemies.find(function (enemy) { return enemy.id === shell.guidance?.target && enemy.hp > 0; });
+			const target = shell.hostile ? p : state.enemies.find(function (enemy) { return enemy.id === shell.guidance?.target && enemy.hp > 0; });
 			if (target) {
 				const angle = Math.atan2(shell.vy, shell.vx);
 				const bearing = Math.atan2(target.y - shell.y, target.x - shell.x);
-				const next = angle + clamp(angleDelta(angle, bearing), -dt * 0.8, dt * 0.8);
-				shell.vx = Math.cos(next) * 220; shell.vy = Math.sin(next) * 220;
+				const turnRate = shell.projectile === 'missile' ? shell.hostile ? 1.15 : 2.8 : 0.8;
+				const speed = shell.projectile === 'missile' ? shell.hostile ? 200 : 340 : 220;
+				const next = angle + clamp(angleDelta(angle, bearing), -dt * turnRate, dt * turnRate);
+				shell.vx = Math.cos(next) * speed; shell.vy = Math.sin(next) * speed;
 			}
 		}
 		const from = { x: shell.x, y: shell.y }; const travel = Math.min(dt, shell.life);
