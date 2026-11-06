@@ -357,13 +357,18 @@ export const createMech = function (kind?: EnemyKind, commander = false, frame: 
 			const humanoid = rig.kneeDirection === 1;
 			hull.position.y = (poseRig.hipHeight - rig.hipHeight) * size;
 			const motion = feedback?.reducedMotion ? 0 : 1;
-			const sway = gait.motion.roll * 26 * size * motion * suspension;
+			// Tall humanoids stabilize their upper assembly over the pelvis.
+			// Keep a small support-side shift and lean without magnifying the
+			// shared suspension roll through their much longer waist-to-head lever.
+			const roll = gait.motion.roll * (humanoid ? 0.28 : 1);
+			const pitch = gait.motion.pitch * (humanoid ? 0.5 : 1);
+			const sway = gait.motion.roll * (humanoid ? 6 : 26) * size * motion * suspension;
 			turret.position.set(-Math.sin(gait.body.angle) * sway, humanoid ? poseRig.hipHeight * size : waistHeight + gait.motion.lift * size * motion * suspension, Math.cos(gait.body.angle) * sway);
 			// Express chassis-relative lean in turret space so aiming does not
 			// rotate the weight shift away from the supporting foot.
 			const relativeHeading = gait.body.angle - heading;
-			turret.rotation.x = (Math.cos(relativeHeading) * gait.motion.roll - Math.sin(relativeHeading) * gait.motion.pitch) * motion * suspension;
-			turret.rotation.z = (Math.sin(relativeHeading) * gait.motion.roll + Math.cos(relativeHeading) * gait.motion.pitch) * motion * suspension;
+			turret.rotation.x = (Math.cos(relativeHeading) * roll - Math.sin(relativeHeading) * pitch) * motion * suspension;
+			turret.rotation.z = (Math.sin(relativeHeading) * roll + Math.cos(relativeHeading) * pitch) * motion * suspension;
 			const recoil = feedback?.reducedMotion ? 0 : feedback?.recoil ?? 0;
 			for (const barrel of barrels) barrel.part.position.x = barrel.x - recoil * 7 * size * (kind ? 1 : definition.recoil);
 			for (const shutter of shutters) shutter.part.position.y = shutter.y + recoil * 5 * size;
