@@ -2,7 +2,7 @@ import { clamp, distance, targetFor, torpedoTargetFor, type Point, type Ship, ty
 import { cameraFor, worldToScreen, type Camera } from './projection';
 import { drawStarship, polygon, line } from './ship-art';
 import { createBackdrop } from './backdrop';
-import { drawCombatEffects } from './combat-effects';
+import { createCombatEffectsRenderer } from './combat-effects';
 import { hudObstacles, clearLabelPosition } from './tactical-labels';
 import { CEL } from './visual-theme';
 
@@ -62,6 +62,7 @@ const drawHeading = function (ctx: CanvasRenderingContext2D, camera: Camera, pla
 };
 export const createRenderer = function () {
 	const backdrop = createBackdrop();
+	const drawCombatEffects = createCombatEffectsRenderer();
 	return function (ctx: CanvasRenderingContext2D, width: number, height: number, state: State, reducedMotion: boolean, briefing = false, zoom = 1, heading?: number) {
 		if (width <= 0 || height <= 0) return;
 		const camera = cameraFor(width, height, state.player, zoom);
@@ -88,8 +89,8 @@ export const createRenderer = function () {
 			const r = (8 + i % 4 * 8) * camera.scale;
 			polygon(ctx, [{ x: at.x - r, y: at.y }, { x: at.x, y: at.y - r * 0.4 }, { x: at.x + r * 0.7, y: at.y + r * 0.3 }, { x: at.x, y: at.y + r * 0.6 }], CEL.planet, CEL.ink);
 		}
-		drawFiringSolution(ctx, camera, state, 'port'); drawFiringSolution(ctx, camera, state, 'starboard');
-		const torpedoTarget = torpedoTargetFor(state);
+		if (!state.arsenal) { drawFiringSolution(ctx, camera, state, 'port'); drawFiringSolution(ctx, camera, state, 'starboard'); }
+		const torpedoTarget = state.arsenal ? undefined : torpedoTargetFor(state);
 		if (torpedoTarget && state.torpedoes.reload === 0 && !p.braced) {
 			const at = worldToScreen(torpedoTarget, camera);
 			ring(ctx, at, torpedoTarget.length * camera.scale * 0.82, `${CEL.amber}99`);
@@ -121,7 +122,7 @@ export const createRenderer = function () {
 				label(ctx, state.shield.active > 0 ? 'AEGIS FIELD ACTIVE' : p.braced ? 'ARMOR LOCK / −65%' : 'DREADWAKE', at, p.braced ? CEL.amber : CEL.mint, 9);
 			} else {
 				if (!contactOnField(worldToScreen(ship, camera), width, height)) continue;
-				const priority = ship.id === state.priorityTarget;
+				const priority = state.arsenal ? state.arsenal.mounts.some(function (mount) { return mount?.target === ship.id; }) : ship.id === state.priorityTarget;
 				const contact = state.enemies.find(function (enemy) { return enemy.id === ship.id; });
 				const designation = contact?.command ? 'COMMAND CRUISER' : ship.length > 150 ? 'CRUISER' : 'FRIGATE';
 				label(ctx, `${priority ? '◆ ' : ''}${designation} ${String(ship.id).padStart(2, '0')}`, at, contact?.command || priority ? CEL.amber : CEL.hostile, 11);

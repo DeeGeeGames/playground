@@ -1,6 +1,7 @@
 import { localPoint, type Point, type Ship, type State } from './simulation';
 import { worldToScreen, type Camera } from './projection';
 import { CEL } from './visual-theme';
+import { MOUNT_SOCKETS, WEAPONS, type MountState } from './weapons';
 
 export type Outline = readonly (readonly [number, number])[];
 export const polygon = function (ctx: CanvasRenderingContext2D, points: readonly Point[], fill: string | CanvasGradient, stroke?: string, width = 1.4) {
@@ -18,6 +19,49 @@ const mirror = function (outline: Outline, sign: number): Outline {
 };
 const chamfer = function (f0: number, f1: number, a0: number, a1: number, cf: number, ca: number): Outline {
 	return [[f0 + cf, a0], [f1 - cf, a0], [f1, a0 + ca], [f1, a1 - ca], [f1 - cf, a1], [f0 + cf, a1], [f0, a1 - ca], [f0, a0 + ca]];
+};
+const drawSocket = function (ctx: CanvasRenderingContext2D, camera: Camera, ship: Ship, slot: number, mount: MountState | null | undefined, reducedMotion: boolean) {
+	const socket = MOUNT_SOCKETS[slot]; if (!socket) return;
+	const origin = localPoint(ship, socket.forward, socket.across); const at = worldToScreen(origin, camera, 24);
+	const radius = Math.max(2.6, camera.scale * 7);
+	ctx.beginPath(); ctx.ellipse(at.x, at.y, radius, radius * 0.58, 0, 0, Math.PI * 2);
+	ctx.fillStyle = CEL.ink; ctx.fill(); ctx.strokeStyle = CEL.side; ctx.lineWidth = Math.max(1, camera.scale * 1.8); ctx.stroke();
+	if (!mount) return;
+	const heading = mount.locked ? mount.lockHeading : mount.heading;
+	const recoil = reducedMotion ? 0 : Math.min(2.4, mount.flash * 15);
+	const screen = function (forward: number, across: number, elevation = 30) {
+		return worldToScreen({ x: origin.x + Math.cos(heading) * (forward - recoil) - Math.sin(heading) * across,
+			y: origin.y + Math.sin(heading) * (forward - recoil) + Math.cos(heading) * across }, camera, elevation);
+	};
+	const color = WEAPONS[mount.weapon].color;
+	const plate = function (f0: number, f1: number, halfWidth: number, fill: string, elevation = 30) {
+		polygon(ctx, [screen(f0, -halfWidth, elevation), screen(f1, -halfWidth, elevation), screen(f1, halfWidth, elevation), screen(f0, halfWidth, elevation)], fill, CEL.ink, Math.max(0.8, camera.scale));
+	};
+	const barrel = function (forward: number, across: number, length: number, width: number, fill = color) {
+		line(ctx, screen(forward, across), screen(forward + length, across), CEL.ink, Math.max(2, width * camera.scale + 1.5));
+		line(ctx, screen(forward, across), screen(forward + length, across), fill, Math.max(0.8, width * camera.scale));
+	};
+	plate(-6, 6, mount.weapon === 'flak' ? 7 : 5, CEL.top);
+	if (mount.weapon === 'seeker') {
+		plate(-6, 7, 6, CEL.side, 34);
+		for (const f of [-3, 3]) for (const a of [-3, 3]) {
+			const point = screen(f, a, 35); ctx.fillStyle = color;
+			ctx.fillRect(point.x - Math.max(0.6, camera.scale), point.y - Math.max(0.6, camera.scale), Math.max(1.2, camera.scale * 2), Math.max(1.2, camera.scale * 2));
+		}
+	} else if (mount.weapon === 'rail') {
+		barrel(2, -3.3, 24, 1.8); barrel(2, 3.3, 24, 1.8);
+	} else if (mount.weapon === 'rattler') {
+		for (const across of [-2.4, 0, 2.4]) barrel(3, across, 16, 1.1, CEL.top);
+	} else if (mount.weapon === 'flak') {
+		for (const across of [-4, 4]) { barrel(2, across, 12, 3); const tip = screen(14, across); ctx.beginPath(); ctx.arc(tip.x, tip.y, Math.max(1, 2.2 * camera.scale), 0, Math.PI * 2); ctx.fillStyle = CEL.ink; ctx.fill(); }
+	} else if (mount.weapon === 'torpedo') {
+		plate(-7, 16, 5, CEL.top, 32); barrel(16, -3, 0.7, 4, CEL.ink); barrel(-3, 0, 15, 1.5);
+	} else if (mount.weapon === 'helios') {
+		barrel(-2, -5, 22, 3); barrel(-2, 5, 22, 3); barrel(3, 0, 12, 4, CEL.cream);
+	} else if (mount.weapon === 'ion') {
+		barrel(2, 0, 14, 1.4, CEL.dark);
+		for (const f of [4, 9, 14]) line(ctx, screen(f, -4), screen(f, 4), color, Math.max(1.1, camera.scale * 2));
+	} else { barrel(2, 0, 14, 2.4); const tip = screen(16, 0); ctx.beginPath(); ctx.arc(tip.x, tip.y, Math.max(1.1, camera.scale * 3), 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill(); }
 };
 
 // Closed, layered pressure hulls share the approved split bow and twin drives.
@@ -79,6 +123,11 @@ export const drawStarship = function (ctx: CanvasRenderingContext2D, camera: Cam
 		for (let i = 0; i < (player ? 6 : 4); i++) {
 			const f = player ? (64 - i * 25) / ship.length : 0.22 - i * 0.16;
 			const a = sign * 0.405; const halfF = 6 / ship.length; const halfA = 6 / ship.width;
+			if (player && state.arsenal) {
+				const slot = (sign < 0 ? 0 : 6) + i;
+				parts.push({ bottom: 24, depth: screen(f, a).y, paint: function () { drawSocket(ctx, camera, ship, slot, state.arsenal?.mounts[slot], reducedMotion); } });
+				continue;
+			}
 			module(chamfer(f - halfF, f + halfF, a - halfA, a + halfA, 2 / ship.length, 2 / ship.width), 20, 27, side, CEL.dark);
 			parts.push({ bottom: 28, depth: screen(f, a).y, paint: function () {
 				for (const offset of distant ? [0] : [-2.4, 2.4]) {

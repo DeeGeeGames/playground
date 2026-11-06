@@ -174,9 +174,16 @@ export const createAudio = function () {
 			engine.frequency.setTargetAtTime(28 + power * 22, at, 0.3); sub.frequency.setTargetAtTime(49 + power * 15, at, 0.3);
 			engineGain.gain.setTargetAtTime(scene === 'combat' ? 0.028 + power * 0.06 : 0, at, 0.3);
 			for (const event of events) {
-				if (at - (last.get(event) ?? -1) < 0.07) continue;
+				const spacing = event === 'rattler' ? 0.1 : event === 'spark' || event === 'ion' || event === 'hit' ? 0.14 : event === 'helios' ? 0.3 : 0.07;
+				if (at - (last.get(event) ?? -1) < spacing) continue;
 				last.set(event, at);
 				if (event === 'cannon') { tone(130, 24, 0.55, 0.48, 'sine'); burst(1800, 0.28, 0.3); tone(920, 150, 0.09, 0.08, 'sawtooth'); }
+				if (event === 'rail') { tone(190, 28, 0.24, 0.2, 'sine'); tone(1800, 220, 0.12, 0.065, 'triangle'); burst(3400, 0.11, 0.12); }
+				if (event === 'flak') { burst(1400, 0.18, 0.15); tone(110, 48, 0.15, 0.1, 'triangle'); }
+				if (event === 'rattler') { burst(2400, 0.045, 0.065); tone(150, 80, 0.045, 0.045, 'triangle'); }
+				if (event === 'spark') { tone(1100, 580, 0.075, 0.075, 'sine'); tone(2200, 1000, 0.045, 0.026, 'triangle'); }
+				if (event === 'helios') { tone(85, 33, 0.72, 0.22, 'sine'); tone(720, 170, 0.42, 0.095, 'sawtooth'); burst(2100, 0.31, 0.12); }
+				if (event === 'ion') { tone(310, 1400, 0.08, 0.065, 'triangle'); tone(1060, 440, 0.12, 0.048, 'sine', 0.045); }
 				if (event === 'torpedo') { burst(1200, 0.45, 0.18); tone(90, 240, 0.38, 0.14, 'sawtooth'); }
 				if (event === 'missile') { burst(2800, 0.23, 0.12); tone(180, 920, 0.24, 0.08, 'triangle'); }
 				if (event === 'beam') { tone(90, 720, 0.7, 0.12, 'sawtooth'); tone(1280, 640, 0.22, 0.07, 'sine'); }

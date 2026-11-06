@@ -1,0 +1,35 @@
+[
+  {
+    "journey": "controller",
+    "checks": [
+      "menu to starter",
+      "socket navigation and confirm",
+      "held launch neutral gate",
+      "fire policy toggle",
+      "legacy controls inactive",
+      "disconnect pause",
+      "explicit reconnect resume"
+    ],
+    "errors": []
+  },
+  {
+    "journey": "flight school",
+    "checks": [
+      "all seven lessons through real inputs",
+      "paused practice draft",
+      "charged Helios shot",
+      "armor and Aegis",
+      "existing campaign unchanged"
+    ],
+    "errors": []
+  },
+  {
+    "journey": "Canvas compatibility",
+    "checks": [
+      "WebGL failure recovers",
+      "empty sockets and installed Helios render",
+      "visible charge"
+    ],
+    "errors": []
+  }
+]

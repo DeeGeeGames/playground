@@ -1,123 +1,141 @@
 # Dread Wake · The Lyra Passage
 
-A browser capital-ship combat demo. Commit a heavy cruiser to slow turns, bring its
-flanks to bear, and combine independent rail broadsides with bow torpedoes, a beam
-lance, and all-aspect guided missiles. Survive five linked encounters; hull damage
-carries forward, and each victory buys one repair or permanent upgrade.
+A browser capital-ship combat demo. Keep a heavy cruiser moving through five linked
+encounters, beginning with one chosen turret and eleven empty sockets. Weapons
+acquire and fire autonomously. Damage earns paused salvage choices: install another
+weapon, strengthen a fitted turret, or repair the hull.
 
-Open `games/dreadwake/` through the workspace launcher. The game stays self-contained
-and browser-only; it does not include Steam or desktop packaging.
+Open `games/dreadwake/` through the workspace launcher. The game is self-contained
+and browser-only, without desktop or Steam packaging.
 
 ## Playing
 
-Flight school is a safe seven-step introduction covering handling, all four weapon
-systems, and both defenses. It never reads or replaces your campaign checkpoint.
-The campaign starts with a patrol, then introduces flankers, missile cruisers,
-close-range brawlers, and a beam-armed command ship. Red firing tells announce
-projectiles; violet tells announce a lance that point defense cannot intercept.
+Choose one of eight starter weapons, choose its port or starboard socket, and
+confirm deployment. The ship starts **Weapons Free**. Each direct-fire turret
+covers the outward half of its fitted flank; Seekers can launch at any bearing.
+Bring the right flank and range to the enemy. There is no manual target selection,
+individual gun trigger, or hidden legacy armament.
 
-| Command | Keyboard / mouse | Standard controller |
+| Command | Keyboard / mouse | Standard controller | Touch |
+| --- | --- | --- | --- |
+| Persistent throttle | W / S, up / down | D-pad up / down | Hold + / − |
+| Neutral / coast | X | D-pad left | Neutral |
+| Steer | A / D; right-click orders a heading | Left stick horizontal | Turn arrows |
+| Weapons Free / Hold Fire | G | D-pad right | Fire-policy button |
+| Armor lock | Hold Space | Hold LB | Hold Armor Lock |
+| Aegis pulse | F | A | Aegis |
+| Zoom | Mouse wheel | Right stick vertical | — |
+| Pause / resume | Escape | Menu / Start | Pause |
+| Menus | Tab or arrows; Enter; Escape back | D-pad / left stick; A select; B back | Tap |
+
+Hold Fire immediately inhibits all fitted turrets, including flak interception
+and pending launches. Projectiles already in flight remain live. Hold Fire and
+armor lock cancel an unfinished Helios charge. Armor reduces incoming damage by
+65% while limiting movement and reload speed; Aegis gives 85% protection for three
+seconds. These defenses do not stack. There is no built-in point defense: fit flak
+for interception, or avoid and absorb incoming fire with the helm and defenses.
+
+Menus and drafts freeze simulation. Controller transitions require released
+controls before rearming. Disconnection, focus loss and graphics interruption
+pause combat. Wheel zoom ranges from 0.5× to 2.5×; browser zoom and menu scrolling
+remain available. Inspect pauses the game and shows each socket's weapon, rank,
+statistics and current firing constraint.
+
+## The battery
+
+| Weapon | Distinct role | Main constraint |
 | --- | --- | --- |
-| Persistent throttle | W / S, or up / down | D-pad up / down |
-| Neutral / coast | X | D-pad left |
-| Steer | A / D; right-click orders a heading | Left stick horizontal |
-| Port / starboard rail array | Hold Q / E | Hold LT / RT |
-| Automatic broadside crews | G | D-pad right |
-| Heavy bow torpedoes | T | Y |
-| Beam lance | Hold C | Hold RB |
-| Guided missiles | V | X |
-| Armor lock | Hold Space | Hold LB |
-| Aegis pulse | F | A |
-| Priority target | Click a hostile; R cycles | B cycles, including auto acquisition |
-| Zoom | Mouse wheel | Right stick vertical |
-| Pause / resume | Escape | Menu / Start |
-| Menu navigation | Tab or arrows; Enter; Escape back | D-pad / left stick; A select; B back |
+| Seeker missiles | Guided pressure through a turn; prefers weakened hulls | Lower damage, limited flight and turning, no retarget after launch |
+| Longspike rail | Predictive straight shots pierce aligned hulls | Slow traverse and a 180 m dead zone |
+| Bulwark flak | Area bursts and interception of approaching volleys | Defense spends the same cooldown as offense; cannot intercept beams |
+| Rattler machine gun | Sustained pursuit ramps damage to 1.8× | 380 m range; losing the target, arc or range resets the ramp |
+| Spark pulse beam | Fast precise pulses against agile contacts | First-hull hits without area damage or penetration |
+| Helios charge beam | Heavy shot after a visible growing charge | Slow tracking; final 0.6 seconds locks its firing direction |
+| Breach torpedo | Heavy guided blast against slow hulls and clusters | Wide turns, slow flight and a 200 m dead zone |
+| Ion arc | Chains nearby hulls and slows targets for heavy guns | Short initial reach; slow is capped and weaker on command ships |
 
-Wheel up zooms in and wheel down zooms out, from 0.5× to 2.5×, while keeping
-the cruiser centered. Menus keep their normal scrolling, and Ctrl/Command +
-wheel remains available for browser zoom.
+All families work as starters. Flak allows no more than two consecutive defensive
+bursts while a valid offensive target is available. Ion preferentially supports
+nearby rail and Helios targets. Autonomous target preferences and traversal make
+weapon choices affect how the ship should approach each encounter.
 
-Touch has simultaneous on-screen helm, weapons and defense controls. Standard
-Gamepad API mappings are supported. Buttons change prompts with the active input.
-Disconnecting pauses combat; reconnecting requires an explicit resume. Menu, refit,
-and launch transitions require the controller to return to neutral before arming.
-Optional dual-rumble is used only where the browser/controller supports it.
+Each socket can reach rank III. Upgrades increase role-specific damage, cadence,
+piercing, burst radius, ramp speed, charge time or chaining. The fitting screen
+shows exact statistics and before/after upgrades. Duplicate weapons are allowed.
+Installing over a fitted socket requires explicit confirmation and states which
+weapon and rank will be lost.
 
-## Weapon and defense decisions
+See [weapon design and panel record](./docs/weapon-design.md) for the complete
+approved set, numerical baseline and independent panel feedback.
 
-- Each rail array commits six rounds, leads a target within its side arc, and reloads
-  independently in 7.5 seconds. Auto crews fire only with a valid solution; manual
-  firing can waste a salvo. Committed shots retain their designated target.
-- Torpedoes ripple three heavy homing rounds from a broad bow cone, with a 14-second
-  reload. They cannot acquire behind the ship.
-- The beam lance sustains a narrow bow ray for up to 2.4 seconds. It hits the first
-  hull along its line, recharges while released, and overheats for 10 seconds after
-  a full burn. Holding a firing solution matters.
-- Missiles launch four lighter homing rounds at any bearing within 1,200 m, with a
-  12-second reload. Their separate rack lets them pressure contacts during a turn.
-- Automatic point defense intercepts approaching projectiles, including hostile
-  missiles. It cannot intercept a beam.
-- Armor lock reduces damage by 65%, slows handling/reloads, and prevents new salvos
-  and beam fire. Aegis gives 85% protection for three seconds without that penalty,
-  followed by an 18-second base recharge. The defenses do not stack.
+## Salvage and campaign
 
-Campaign-only enemies have more hull than the legacy three-wave skirmish to account
-for the expanded arsenal. Repairs restore 35% maximum hull. Rail calibration adds
-15% base broadside damage; capacitor upgrades reduce Aegis recharge by three seconds.
-There is no automatic repair. Refit selection is explicit and combat stays frozen.
+Actual enemy hull damage from fitted weapons earns salvage. Overkill, interceptions,
+ramming and training award none. The first reward costs 180 damage, with the next
+cost increasing by 100 each time, up to fourteen rewards. Excess salvage carries
+forward; queued choices resolve before the next mission. Final victory does not
+interrupt the ending with unusable weapon rewards.
 
-## Presentation and settings
+Each three-card draft includes an installation and an upgrade for an eligible
+fitted socket when one exists, plus a flex choice. Upgrades favor an already
+invested mount. One free reroll changes the offers while preserving that upgrade
+opportunity. Repair restores 15% maximum hull instead of taking a weapon; skipping
+is also explicit. Choosing a reward spends it once. Simulation, projectiles,
+charges and momentum remain frozen throughout the choice.
 
-The battlefield uses Three.js with an orthographic camera matched to targeting and
-heading projection. Cel Fleet art uses solid armor colors, dark outlines, short
-capped rail cannons, recessed twin drives, and distinct frigate, cruiser, and command
-silhouettes. Mint identifies friendly systems; coral identifies hostile hulls and
-projectiles. Hostile lance fire and its warning remain violet.
+The five encounters introduce flankers, missile cruisers, close brawlers and a
+beam-armed command ship. Violet charge tells announce enemy beams that flak cannot
+intercept. Hull damage persists. Each of the first four victories also offers one
+field refit: repair 35% hull, add 15% base damage to every fitted weapon, or reduce
+Aegis recharge by three seconds, down to six seconds. Upgrades do not automatically
+repair the ship. There is no persistent unlock grind.
 
-The Canvas annotation layer shares one combat-effects renderer with the Canvas
-compatibility mode: inked rail streaks, solid guided rounds, continuous beam cores,
-point-defense ticks, shield rings, angular impact bursts, and explosion fragments.
-Flat planet and nebula shapes, damage scars, wrecks, and the solid navy interface
-use the same palette. Reduced motion suppresses decorative effect expansion and
-fragment movement while retaining projectile paths and warning information.
-
-The interface includes a title scene, route chart, concise combat strip, pause
-reference, refit selection, results and checkpoint retry. Large HUD, screen shake,
-controller vibration, and independent master/music/effects levels persist under
-`dreadwake.preferences.v1`. Device reduced-motion preferences suppress shake.
-Original synthesized music changes between command, combat, refit and results;
-rail impacts, torpedoes, missiles, the sustained beam and defenses have separate cues.
-
-Browser autoplay rules may require one real click or keypress before sound can
-start. The interface reports this as **Enable audio · click or key**. Gamepad input
-alone cannot override browser policy. Unsupported audio degrades to silent play.
+Flight school uses an isolated practice state. It teaches throttle, turning,
+Hold Fire, autonomous firing, a scripted salvage choice, Helios charge and defenses.
+Its temporary training loadouts and rewards never change campaign saves.
 
 ## Checkpoints and compatibility
 
-Campaign checkpoints retain the existing `dreadwake.campaign.v1` schema and validate
-untrusted storage. They are written at mission launch and refit. Continue restarts
-a mid-battle mission from its launch checkpoint; it does not save individual shots.
-Defeat preserves that checkpoint for retry. Victory clears it. New campaigns require
-confirmation before replacing an existing run. Storage failures are reported while
-play and an in-memory retry remain available. Flight school leaves saves untouched.
+Checkpoints remain under `dreadwake.campaign.v1`. Validated loadout, turret ranks,
+salvage, reward count and offer seed are saved together at mission launch and refit.
+**Retry and Continue restore the launch build and salvage along with the mission.**
+Mid-mission choices roll back; replaying a checkpoint cannot retain upgrades while
+respawning the enemies that paid for them. New campaign selection leaves the old
+checkpoint intact until the starter and socket are confirmed.
 
-`createState()` preserves the original skirmish for existing callers;
-`createCampaignState()` initializes the revised campaign. Beam and missile control
-fields are optional for existing simulation callers. Simulation runs at a fixed
-60 Hz independently of rendering. Gamepad polling is separate from rendering and
-queues discrete actions. Blur/hiding pauses and clears input. Cleanup releases
-listeners, polling, animation, GPU objects, annotation canvas and audio scheduling.
+Existing checkpoints preserve route, hull, statistics, upgrade counts and fire
+policy. They receive a compatible six-mount fit: two rails, Seeker, Helios, Breach
+and Bulwark. New runs always begin with one chosen turret. Legacy simulation entry
+points remain available for existing callers. Invalid or unavailable storage is
+reported; play and an in-memory retry remain available.
+
+## Presentation and settings
+
+Cel Fleet ships retain their solid armor colors, ink outlines and recessed drives.
+Empty socket rings and fitted turret shapes show the build on the ship. Weapon
+families use distinct trails, pulses, bursts and charge tells. Both the Three.js
+battlefield and Canvas fallback use the same combat effect vocabulary. Reduced
+motion retains targeting geometry and the heavy beam's visible charge and lock.
+
+Settings preserve independent master/music/effects levels, screen shake, vibration
+and a larger HUD under `dreadwake.preferences.v1`. Original synthesized music follows
+command, combat, refit and result scenes. Browser audio may need a click or keypress;
+the interface reports this explicitly. Unsupported audio degrades to silent play.
 
 ## Validation
 
-Run `bun run check`, then validate the built game using `bun run preview`.
-Meaningful regression checks cover weapon acquisition, first-hull beam blocking,
-heat/cooldown, missile commitment/guidance/interception, shields, campaign/refits,
-save validation, projected picking, and controller transition/input safety.
+Run `bun run check` for existing tests, strict TypeScript, lint and production build.
+Validate the built game using `bun run preview`, including starter selection,
+fire-policy changes, weapon drafts, placement, upgrading, queued choices, retry,
+flight school and desktop/portrait/short-landscape layouts.
 
-Production browser journeys cover controller-operated flight school, campaign,
-pause/settings, reconnect, refit/deploy, save isolation and responsive layouts.
-Audio probes establish independent channel output and pause/mute silence.
-Simulated input, software-rendered timing, and signal measurements do not establish
-physical controller feel, rumble, TV readability, speaker mix, human difficulty,
-commercial acceptance, or Steam-client behavior.
+Simulation and browser checks establish behavior under automated inputs. They do
+not establish physical controller or touch feel, rumble, speaker mix, hardware GPU
+performance, human difficulty or owner acceptance of balance.
+
+Production evidence: [starter fitting](../../docs/evidence/dreadwake-arsenal/desktop-starter.png),
+[earned draft](../../docs/evidence/dreadwake-arsenal/desktop-draft.png),
+[phone combat](../../docs/evidence/dreadwake-arsenal/phone-combat.png),
+[short landscape](../../docs/evidence/dreadwake-arsenal/landscape-combat.png), and
+[Helios charge](../../docs/evidence/dreadwake-arsenal/training-charge.png).
+Browser and simulation results are recorded in the same evidence directory.

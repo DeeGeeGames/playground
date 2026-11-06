@@ -1,0 +1,233 @@
+[
+  {
+    "name": "desktop",
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "checks": [
+      "8 starters",
+      "explicit socket",
+      "one fitted turret",
+      "fire policy keyboard and pointer",
+      "no viewport clipping",
+      "earned paused draft",
+      "reroll",
+      "rank upgrade",
+      "launch checkpoint rollback"
+    ],
+    "errors": [],
+    "combatControls": [
+      {
+        "id": "auto-fire",
+        "x": 220,
+        "y": 769,
+        "w": 298.171875,
+        "h": 104
+      },
+      {
+        "id": "brace",
+        "x": 921.8125,
+        "y": 769,
+        "w": 146.09375,
+        "h": 104
+      },
+      {
+        "id": "pulse",
+        "x": 1073.90625,
+        "y": 769,
+        "w": 146.09375,
+        "h": 104
+      },
+      {
+        "id": "left",
+        "x": 540.171875,
+        "y": 800,
+        "w": 38,
+        "h": 40
+      },
+      {
+        "id": "back",
+        "x": 583.171875,
+        "y": 800,
+        "w": 38,
+        "h": 40
+      },
+      {
+        "id": "forward",
+        "x": 818.8125,
+        "y": 800,
+        "w": 38,
+        "h": 40
+      },
+      {
+        "id": "right",
+        "x": 861.8125,
+        "y": 800,
+        "w": 38,
+        "h": 40
+      },
+      {
+        "id": "neutral",
+        "x": 540.171875,
+        "y": 840,
+        "w": 359.640625,
+        "h": 25
+      }
+    ]
+  },
+  {
+    "name": "phone",
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "checks": [
+      "8 starters",
+      "explicit socket",
+      "one fitted turret",
+      "fire policy keyboard and pointer",
+      "no viewport clipping",
+      "earned paused draft",
+      "reroll",
+      "rank upgrade",
+      "launch checkpoint rollback"
+    ],
+    "errors": [],
+    "combatControls": [
+      {
+        "id": "auto-fire",
+        "x": 14,
+        "y": 650.21875,
+        "w": 116.65625,
+        "h": 66.78125
+      },
+      {
+        "id": "brace",
+        "x": 136.65625,
+        "y": 650.21875,
+        "w": 116.65625,
+        "h": 66.78125
+      },
+      {
+        "id": "pulse",
+        "x": 259.3125,
+        "y": 650.21875,
+        "w": 116.671875,
+        "h": 66.78125
+      },
+      {
+        "id": "left",
+        "x": 25,
+        "y": 752,
+        "w": 44,
+        "h": 44
+      },
+      {
+        "id": "back",
+        "x": 75,
+        "y": 752,
+        "w": 44,
+        "h": 44
+      },
+      {
+        "id": "forward",
+        "x": 270.984375,
+        "y": 752,
+        "w": 44,
+        "h": 44
+      },
+      {
+        "id": "right",
+        "x": 320.984375,
+        "y": 752,
+        "w": 44,
+        "h": 44
+      },
+      {
+        "id": "neutral",
+        "x": 25,
+        "y": 796,
+        "w": 339.984375,
+        "h": 30
+      }
+    ]
+  },
+  {
+    "name": "landscape",
+    "viewport": {
+      "width": 568,
+      "height": 320
+    },
+    "checks": [
+      "8 starters",
+      "explicit socket",
+      "one fitted turret",
+      "fire policy keyboard and pointer",
+      "no viewport clipping",
+      "earned paused draft",
+      "reroll",
+      "rank upgrade",
+      "launch checkpoint rollback"
+    ],
+    "errors": [],
+    "combatControls": [
+      {
+        "id": "auto-fire",
+        "x": 12,
+        "y": 242,
+        "w": 125.640625,
+        "h": 70
+      },
+      {
+        "id": "brace",
+        "x": 398.9375,
+        "y": 242,
+        "w": 76.515625,
+        "h": 70
+      },
+      {
+        "id": "pulse",
+        "x": 479.453125,
+        "y": 242,
+        "w": 76.53125,
+        "h": 70
+      },
+      {
+        "id": "left",
+        "x": 148.640625,
+        "y": 264,
+        "w": 32,
+        "h": 44
+      },
+      {
+        "id": "back",
+        "x": 183.640625,
+        "y": 264,
+        "w": 32,
+        "h": 44
+      },
+      {
+        "id": "forward",
+        "x": 269.9375,
+        "y": 264,
+        "w": 32,
+        "h": 44
+      },
+      {
+        "id": "right",
+        "x": 304.9375,
+        "y": 264,
+        "w": 32,
+        "h": 44
+      },
+      {
+        "id": "neutral",
+        "x": 339.9375,
+        "y": 264,
+        "w": 48,
+        "h": 44
+      }
+    ]
+  }
+]

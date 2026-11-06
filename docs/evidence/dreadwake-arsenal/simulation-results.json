@@ -1,0 +1,572 @@
+{
+  "method": "Fixed-step 60 Hz simulation; ordinary throttle, heading and Aegis controls. Seed 417 for draft choices. No invulnerability or enemy stat overrides. Full build runs select offered upgrades or installations; not a human balance assessment.",
+  "starters": [
+    {
+      "weapon": "seeker",
+      "earned": 1,
+      "time": 4.7499999999999885,
+      "hull": 1400,
+      "kills": 0,
+      "damage": 0,
+      "shots": 6,
+      "outcome": "playing",
+      "collisions": 0,
+      "status": "RELOADING"
+    },
+    {
+      "weapon": "rail",
+      "earned": 1,
+      "time": 3.2499999999999933,
+      "hull": 1400,
+      "kills": 0,
+      "damage": 120,
+      "shots": 2,
+      "outcome": "playing",
+      "collisions": 0,
+      "status": "RELOADING"
+    },
+    {
+      "weapon": "flak",
+      "earned": 1,
+      "time": 3.483333333333326,
+      "hull": 1400,
+      "kills": 0,
+      "damage": 0,
+      "shots": 4,
+      "outcome": "playing",
+      "collisions": 0,
+      "status": "RELOADING"
+    },
+    {
+      "weapon": "rattler",
+      "earned": 1,
+      "time": 2.9499999999999944,
+      "hull": 1400,
+      "kills": 0,
+      "damage": 9.000000000000057,
+      "shots": 23,
+      "outcome": "playing",
+      "collisions": 0,
+      "status": "FIRING"
+    },
+    {
+      "weapon": "spark",
+      "earned": 1,
+      "time": 2.6166666666666623,
+      "hull": 1400,
+      "kills": 0,
+      "damage": 20,
+      "shots": 5,
+      "outcome": "playing",
+      "collisions": 0,
+      "status": "FIRING"
+    },
+    {
+      "weapon": "helios",
+      "earned": 1,
+      "time": 2.066666666666664,
+      "hull": 1400,
+      "kills": 1,
+      "damage": 180,
+      "shots": 1,
+      "outcome": "playing",
+      "collisions": 0,
+      "status": "FIRING"
+    },
+    {
+      "weapon": "torpedo",
+      "earned": 1,
+      "time": 1.35,
+      "hull": 1400,
+      "kills": 0,
+      "damage": 60,
+      "shots": 1,
+      "outcome": "playing",
+      "collisions": 0,
+      "status": "RELOADING"
+    },
+    {
+      "weapon": "ion",
+      "earned": 1,
+      "time": 3.5333333333333257,
+      "hull": 1400,
+      "kills": 0,
+      "damage": 0,
+      "shots": 6,
+      "outcome": "playing",
+      "collisions": 0,
+      "status": "FIRING"
+    }
+  ],
+  "builds": [
+    {
+      "name": "pursuit",
+      "outcome": "won",
+      "time": 192.63333333337877,
+      "wave": 5,
+      "hull": 702.0749999999967,
+      "kills": 14,
+      "collisions": 244,
+      "repairs": 0,
+      "rewards": 14,
+      "fit": [
+        "flak:3",
+        "rattler:3",
+        "flak:3",
+        "ion:3",
+        "spark:3"
+      ],
+      "rewardTimings": [
+        {
+          "time": 2.9499999999999944,
+          "wave": 1,
+          "remainingHp": 530.9999999999999
+        },
+        {
+          "time": 53.89999999999822,
+          "wave": 1,
+          "remainingHp": 248.25
+        },
+        {
+          "time": 62.28333333333108,
+          "wave": 2,
+          "remainingHp": 2029.7688888888888
+        },
+        {
+          "time": 63.74999999999766,
+          "wave": 2,
+          "remainingHp": 1532.33
+        },
+        {
+          "time": 65.5333333333309,
+          "wave": 2,
+          "remainingHp": 977.8788888888889
+        },
+        {
+          "time": 72.51666666666384,
+          "wave": 2,
+          "remainingHp": 286.5138888888888
+        },
+        {
+          "time": 80.33333333333006,
+          "wave": 3,
+          "remainingHp": 2340.7566666666667
+        },
+        {
+          "time": 81.78333333332998,
+          "wave": 3,
+          "remainingHp": 1418.4766666666667
+        },
+        {
+          "time": 125.64999999999415,
+          "wave": 3,
+          "remainingHp": 490
+        },
+        {
+          "time": 135.41666666666657,
+          "wave": 4,
+          "remainingHp": 2088.8233333333337
+        },
+        {
+          "time": 136.4666666666674,
+          "wave": 4,
+          "remainingHp": 1023.4600000000004
+        },
+        {
+          "time": 144.2833333333403,
+          "wave": 5,
+          "remainingHp": 4389.92
+        },
+        {
+          "time": 166.46666666669128,
+          "wave": 5,
+          "remainingHp": 3385
+        },
+        {
+          "time": 183.1333333333712,
+          "wave": 5,
+          "remainingHp": 1872.0000000000005
+        }
+      ]
+    },
+    {
+      "name": "artillery",
+      "outcome": "won",
+      "time": 95.5333333333292,
+      "wave": 5,
+      "hull": 1099.7800000000054,
+      "kills": 14,
+      "collisions": 0,
+      "repairs": 0,
+      "rewards": 14,
+      "fit": [
+        "flak:3",
+        "rail:3",
+        "flak:3",
+        "ion:3",
+        "spark:3"
+      ],
+      "rewardTimings": [
+        {
+          "time": 3.2499999999999933,
+          "wave": 1,
+          "remainingHp": 420
+        },
+        {
+          "time": 11.716666666666828,
+          "wave": 1,
+          "remainingHp": 120
+        },
+        {
+          "time": 20.8000000000001,
+          "wave": 2,
+          "remainingHp": 1780.5
+        },
+        {
+          "time": 23.149999999999967,
+          "wave": 2,
+          "remainingHp": 1388.25
+        },
+        {
+          "time": 25.54999999999983,
+          "wave": 2,
+          "remainingHp": 784.5
+        },
+        {
+          "time": 32.866666666666084,
+          "wave": 2,
+          "remainingHp": 260
+        },
+        {
+          "time": 40.94999999999896,
+          "wave": 3,
+          "remainingHp": 2034
+        },
+        {
+          "time": 41.88333333333224,
+          "wave": 3,
+          "remainingHp": 1425.15
+        },
+        {
+          "time": 45.949999999998674,
+          "wave": 3,
+          "remainingHp": 263.1500000000001
+        },
+        {
+          "time": 55.016666666664825,
+          "wave": 4,
+          "remainingHp": 1671.9
+        },
+        {
+          "time": 55.81666666666478,
+          "wave": 4,
+          "remainingHp": 980.5400000000001
+        },
+        {
+          "time": 63.74999999999766,
+          "wave": 5,
+          "remainingHp": 4545.6
+        },
+        {
+          "time": 77.14999999999691,
+          "wave": 5,
+          "remainingHp": 3568
+        },
+        {
+          "time": 79.96666666666341,
+          "wave": 5,
+          "remainingHp": 1872
+        }
+      ]
+    },
+    {
+      "name": "missile",
+      "outcome": "won",
+      "time": 102.9666666666621,
+      "wave": 5,
+      "hull": 1171.2000000000005,
+      "kills": 14,
+      "collisions": 0,
+      "repairs": 0,
+      "rewards": 14,
+      "fit": [
+        "flak:3",
+        "seeker:2",
+        "rattler:1",
+        "flak:1",
+        "seeker:1",
+        "spark:1",
+        "helios:1",
+        "flak:1",
+        "rail:1",
+        "helios:1",
+        "ion:1",
+        "ion:1"
+      ],
+      "rewardTimings": [
+        {
+          "time": 4.7499999999999885,
+          "wave": 1,
+          "remainingHp": 540
+        },
+        {
+          "time": 16.28333333333369,
+          "wave": 1,
+          "remainingHp": 252
+        },
+        {
+          "time": 33.76666666666603,
+          "wave": 2,
+          "remainingHp": 2036.8580000000002
+        },
+        {
+          "time": 35.316666666665945,
+          "wave": 2,
+          "remainingHp": 1518.3000000000002
+        },
+        {
+          "time": 37.13333333333251,
+          "wave": 2,
+          "remainingHp": 971.7660000000002
+        },
+        {
+          "time": 42.633333333332196,
+          "wave": 2,
+          "remainingHp": 297.85800000000006
+        },
+        {
+          "time": 50.7499999999984,
+          "wave": 3,
+          "remainingHp": 2355.048
+        },
+        {
+          "time": 53.09999999999827,
+          "wave": 3,
+          "remainingHp": 1429.076
+        },
+        {
+          "time": 66.83333333333083,
+          "wave": 3,
+          "remainingHp": 464.0000000000008
+        },
+        {
+          "time": 77.9333333333302,
+          "wave": 4,
+          "remainingHp": 2209.4439999999995
+        },
+        {
+          "time": 80.1166666666634,
+          "wave": 4,
+          "remainingHp": 1008.5
+        },
+        {
+          "time": 89.24999999999622,
+          "wave": 5,
+          "remainingHp": 4929.472
+        },
+        {
+          "time": 90.8166666666628,
+          "wave": 5,
+          "remainingHp": 3618.56
+        },
+        {
+          "time": 91.11666666666278,
+          "wave": 5,
+          "remainingHp": 2121.6000000000004
+        }
+      ]
+    },
+    {
+      "name": "ion-heavy",
+      "outcome": "won",
+      "time": 159.68333333335255,
+      "wave": 5,
+      "hull": 800.7349999999931,
+      "kills": 14,
+      "collisions": 204,
+      "repairs": 0,
+      "rewards": 14,
+      "fit": [
+        "flak:3",
+        "ion:3",
+        "flak:3",
+        "ion:3",
+        "spark:3"
+      ],
+      "rewardTimings": [
+        {
+          "time": 3.5333333333333257,
+          "wave": 1,
+          "remainingHp": 540
+        },
+        {
+          "time": 22.78333333333332,
+          "wave": 1,
+          "remainingHp": 216
+        },
+        {
+          "time": 31.66666666666615,
+          "wave": 2,
+          "remainingHp": 1920.8
+        },
+        {
+          "time": 33.133333333332736,
+          "wave": 2,
+          "remainingHp": 1526.35
+        },
+        {
+          "time": 34.9499999999993,
+          "wave": 2,
+          "remainingHp": 901.7999999999998
+        },
+        {
+          "time": 43.04999999999884,
+          "wave": 2,
+          "remainingHp": 265.75
+        },
+        {
+          "time": 50.583333333331744,
+          "wave": 3,
+          "remainingHp": 2327.8
+        },
+        {
+          "time": 52.133333333331656,
+          "wave": 3,
+          "remainingHp": 1400
+        },
+        {
+          "time": 94.93333333332923,
+          "wave": 3,
+          "remainingHp": 490
+        },
+        {
+          "time": 104.68333333332868,
+          "wave": 4,
+          "remainingHp": 1999.6000000000001
+        },
+        {
+          "time": 105.48333333332863,
+          "wave": 4,
+          "remainingHp": 1006.6400000000002
+        },
+        {
+          "time": 112.76666666666155,
+          "wave": 5,
+          "remainingHp": 4907.2
+        },
+        {
+          "time": 133.43333333333166,
+          "wave": 5,
+          "remainingHp": 3375
+        },
+        {
+          "time": 149.6833333333446,
+          "wave": 5,
+          "remainingHp": 1977.6000000000004
+        }
+      ]
+    },
+    {
+      "name": "broadside",
+      "outcome": "won",
+      "time": 145.80000000000817,
+      "wave": 5,
+      "hull": 1056.8000000000018,
+      "kills": 14,
+      "collisions": 0,
+      "repairs": 0,
+      "rewards": 14,
+      "fit": [
+        "flak:3",
+        "spark:2",
+        "rattler:1",
+        "flak:1",
+        "seeker:1",
+        "spark:1",
+        "helios:1",
+        "flak:1",
+        "rail:1",
+        "helios:1",
+        "ion:1",
+        "ion:1"
+      ],
+      "rewardTimings": [
+        {
+          "time": 2.6166666666666623,
+          "wave": 1,
+          "remainingHp": 520
+        },
+        {
+          "time": 62.03333333333109,
+          "wave": 1,
+          "remainingHp": 253.91999999999996
+        },
+        {
+          "time": 70.44999999999729,
+          "wave": 2,
+          "remainingHp": 1994.308
+        },
+        {
+          "time": 72.14999999999719,
+          "wave": 2,
+          "remainingHp": 1458.5000000000002
+        },
+        {
+          "time": 73.6999999999971,
+          "wave": 2,
+          "remainingHp": 960.6800000000001
+        },
+        {
+          "time": 79.49999999999677,
+          "wave": 2,
+          "remainingHp": 278.308
+        },
+        {
+          "time": 87.366666666663,
+          "wave": 3,
+          "remainingHp": 2354.58
+        },
+        {
+          "time": 89.28333333332955,
+          "wave": 3,
+          "remainingHp": 1475.3559999999998
+        },
+        {
+          "time": 110.44999999999501,
+          "wave": 3,
+          "remainingHp": 495.20000000000067
+        },
+        {
+          "time": 121.49999999999439,
+          "wave": 4,
+          "remainingHp": 2192.044
+        },
+        {
+          "time": 123.46666666666094,
+          "wave": 4,
+          "remainingHp": 1014.242
+        },
+        {
+          "time": 131.9999999999972,
+          "wave": 5,
+          "remainingHp": 4948.16
+        },
+        {
+          "time": 133.4833333333317,
+          "wave": 5,
+          "remainingHp": 3566.016
+        },
+        {
+          "time": 133.94999999999874,
+          "wave": 5,
+          "remainingHp": 2057.152
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Close-range full-build pilots incurred incidental hull collisions; starter runs did not.",
+    "A shared generic pilot is not optimized for each weapon.",
+    "No physical controller, touch, audio mix or hardware GPU acceptance."
+  ]
+}
