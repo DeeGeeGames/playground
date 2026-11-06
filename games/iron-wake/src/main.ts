@@ -1,5 +1,6 @@
-import { DRAFT_MILESTONES, WEAPONS, getWeapon, type WeaponId } from './arsenal';
-import { MOUNTS, mountSummary, rankLabel, weaponCard } from './loadout-ui';
+import { DRAFT_MILESTONES, getWeapon, type WeaponId } from './arsenal';
+import { FRAMES, getFrame, type FrameId } from './frames';
+import { frameCard, MOUNTS, mountSummary, rankLabel, weaponCard } from './loadout-ui';
 import { mountGame } from '../../../shared/lifecycle';
 import { applyRefit, chooseWeapon, createState, distance, getOperationReport, step, type Controls, type Point } from './simulation';
 import { DIFFICULTIES, getWaveDefinition, REFITS, TOTAL_HOSTILES, WAVES } from './operation';
@@ -62,7 +63,7 @@ const shutdown = await mountGame('game', async function (container) {
 	element('weapon-bank').replaceChildren(...weaponButtons);
 	let training: Training | undefined;
 	let screen: Screen = 'brief'; let auxiliary: Auxiliary | undefined;
-	let starter: WeaponId = 'autocannon';
+	let selectedFrame: FrameId = 'warden';
 	const mouseButtons = new Set<number>();
 	const consumedMouseButtons = new Set<number>();
 	let state = createState({ difficulty: profile.settings.difficulty }); let gaits = createGaits(state); let muted = false;
@@ -129,7 +130,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (!focus) return;
 		const root = menu();
 		const initial = auxiliary === 'settings' ? element('master-volume') : auxiliary === 'handbook' ? element('handbook') : auxiliary === 'confirm' ? element('confirm-cancel') : screen === 'brief' ? element('start') : screen === 'pause-panel' ? element('resume') : screen === 'result' ? element('restart') : root?.querySelector<HTMLElement>('button');
-		if (root) root.scrollTop = 0;
+		if (root) (root.querySelector<HTMLElement>('.frame-list') ?? root).scrollTop = 0;
 		(initial ?? canvas).focus({ preventScroll: true });
 		if (initial && auxiliary !== 'handbook') initial.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 	};
@@ -144,8 +145,8 @@ const shutdown = await mountGame('game', async function (container) {
 		if (contextLost) return;
 		presentation.resetZoom();
 		training = undefined;
-		state = createState({ difficulty: profile.settings.difficulty, starter, seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1 }); gaits = createGaits(state); screen = 'playing'; auxiliary = undefined;
-		aim = { x: 900, y: 450 }; pointer = undefined; message = 'WARDEN ONLINE. PROTECT RELAY 09.'; messageUntil = 5; tipDismissed = false;
+		state = createState({ difficulty: profile.settings.difficulty, frame: selectedFrame, seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1 }); gaits = createGaits(state); screen = 'playing'; auxiliary = undefined;
+		aim = { x: 900, y: 450 }; pointer = undefined; message = `${getFrame(selectedFrame).name} ONLINE. PROTECT RELAY 09.`; messageUntil = 5; tipDismissed = false;
 		terminalUntil = 0; audio.reset(); syncScreen(); unlockSound();
 	};
 	const startTraining = function () {
@@ -159,7 +160,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const toBriefing = function () {
 		presentation.resetZoom();
 		training = undefined;
-		screen = 'brief'; auxiliary = undefined; state = createState({ difficulty: profile.settings.difficulty }); gaits = createGaits(state);
+		screen = 'brief'; auxiliary = undefined; state = createState({ difficulty: profile.settings.difficulty, frame: selectedFrame }); gaits = createGaits(state);
 		aim = { x: 900, y: 450 }; pointer = undefined; audio.reset(); updateRecordSummary(); syncScreen();
 	};
 	const setPaused = function (paused: boolean) {
@@ -177,23 +178,34 @@ const shutdown = await mountGame('game', async function (container) {
 		else syncScreen();
 	};
 	const confirm = function (action: () => void, label: string) { confirmedAction = action; element('confirm-action').textContent = label; showAuxiliary('confirm'); };
-	const starterCards = WEAPONS.map(function (weapon) {
-		return weaponCard(weapon.id, 'SELECT STARTING WEAPON', function () {
-			starter = weapon.id; updateStarter();
+	const frameCards = FRAMES.map(function (definition) {
+		return frameCard(definition, function () {
+			if (screen !== 'loadout' || auxiliary) return;
+			selectedFrame = definition.id;
+			state = createState({ difficulty: profile.settings.difficulty, frame: selectedFrame }); gaits = createGaits(state);
+			updateFrame();
 		});
 	});
-	const updateStarter = function () {
-		for (const card of starterCards) {
-			const selected = card.dataset['choice'] === starter;
+	const updateFrame = function () {
+		const definition = getFrame(selectedFrame);
+		for (const card of frameCards) {
+			const selected = card.dataset['frame'] === selectedFrame;
 			card.setAttribute('aria-pressed', String(selected));
-			const badge = card.querySelector('.weapon-badge'); if (badge) badge.textContent = selected ? '✓ EQUIPPED IN MOUNT 1' : 'SELECT STARTING WEAPON';
+			const badge = card.querySelector('.frame-badge'); if (badge) badge.textContent = selected ? '✓ SELECTED FRAME' : 'SELECT FRAME';
 		}
-		element('starter-summary').textContent = `${getWeapon(starter).name} · RANK I`;
+		element('frame-summary').textContent = `${definition.name} + ${getWeapon(definition.starter).name}`;
+		element('frame-dossier-name').textContent = `${definition.name} / ${definition.designation}`;
+		element('frame-dossier-role').textContent = `${definition.mass}T ${definition.role.toUpperCase()}`;
+		element('hangar-frame-name').textContent = `${definition.name} / ${definition.designation}`;
+		element('hangar-frame-role').textContent = definition.role.toUpperCase();
+		element('hangar-preview').style.setProperty('--frame-color', definition.color);
 	};
-	element('starter-cards').replaceChildren(...starterCards); updateStarter();
+	element('frame-cards').replaceChildren(...frameCards); updateFrame();
 	const openLoadout = function () {
+		presentation.resetZoom();
+		state = createState({ difficulty: profile.settings.difficulty, frame: selectedFrame }); gaits = createGaits(state);
 		screen = 'loadout'; auxiliary = undefined; training = undefined; syncScreen();
-		const selected = starterCards.find(function (card) { return card.dataset['choice'] === starter; });
+		const selected = frameCards.find(function (card) { return card.dataset['frame'] === selectedFrame; });
 		selected?.focus({ preventScroll: true }); selected?.scrollIntoView({ block: 'nearest' });
 	};
 	const finishDraft = function (id: WeaponId, slot?: number) {
@@ -281,8 +293,8 @@ const shutdown = await mountGame('game', async function (container) {
 		const report = getOperationReport(state); const won = state.outcome === 'won';
 		screen = 'result'; terminalUntil = now + 1600;
 		element('result-title').textContent = won ? 'SIGNAL UNBROKEN.' : 'SIGNAL LOST.';
-		element('result-copy').textContent = won ? 'The command frame is down. The last evacuation has cleared the line. Relay 09 is still transmitting.' : state.player.hp <= 0 ? 'Warden 08 has fallen. Keep moving through artillery markers, recover salvage, and give the reactor time to cool.' : 'Relay 09 is silent. Intercept siege frames early; their artillery can reach the uplink from outside the yard.';
-		element('result-difficulty').textContent = state.difficulty.toUpperCase();
+		element('result-copy').textContent = won ? 'The command frame is down. The last evacuation has cleared the line. Relay 09 is still transmitting.' : state.player.hp <= 0 ? `${getFrame(state.frame).name} has fallen. Keep moving through artillery markers, recover salvage, and give the reactor time to cool.` : 'Relay 09 is silent. Intercept siege frames early; their artillery can reach the uplink from outside the yard.';
+		element('result-difficulty').textContent = `${getFrame(state.frame).name} · ${state.difficulty.toUpperCase()}`;
 		element('result-rank').textContent = report.rank; element('result-score').textContent = report.score.toLocaleString();
 		const stats = [[`${report.kills}/${TOTAL_HOSTILES}`, 'HOSTILES'], [formatTime(report.time), 'FIELD TIME'], [`${Math.ceil(report.relay)}%`, 'RELAY'], [`${report.accuracy}%`, 'BALLISTIC HITS']];
 		element('result-stats').replaceChildren(...stats.map(function ([value, label]) { const node = document.createElement('div'); const strong = document.createElement('b'); const small = document.createElement('small'); strong.textContent = value ?? ''; small.textContent = label ?? ''; node.append(strong, small); return node; }));
@@ -374,7 +386,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (training) {
 			const copy = trainingCopy(training, inputMode === 'gamepad');
 			container.dataset['trainingStage'] = training.stage;
-			ui.phase.textContent = 'FRAME QUALIFICATION'; ui.status.textContent = 'SAFE RANGE · NO SCORED RECORD';
+			ui.phase.textContent = 'WARDEN QUALIFICATION'; ui.status.textContent = 'STANDARD TRAINING FRAME · NO SCORED RECORD';
 			element('training-progress').textContent = `DRILL ${copy.progress}`;
 			element('training-title').textContent = copy.title;
 			element('training-copy').textContent = inputMode === 'gamepad' && currentPad?.connected && !currentPad.ready ? 'Release sticks and triggers to arm the controls, then follow the drill.' : copy.instruction;
@@ -383,7 +395,8 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.relay.textContent = `${Math.max(0, Math.ceil(state.relay))}%`; ui.relayFill.style.width = `${Math.max(0, state.relay)}%`; ui.relayFill.style.background = state.relay < 30 ? 'var(--danger)' : 'var(--cyan)';
 		ui.heat.textContent = p.overheated ? 'LOCKOUT' : `${Math.ceil(p.heat)}%`; ui.heatFill.style.width = `${p.heat}%`; ui.heatFill.style.background = p.heat > 80 ? 'var(--danger)' : 'var(--amber)';
 		ui.drive.textContent = `${p.throttle < -0.005 ? 'REV' : p.throttle > 0.005 ? 'FWD' : 'N'} ${Math.round(Math.abs(p.throttle) * 100)}%`;
-		ui.throttleFill.style.left = `${p.throttle < 0 ? 50 + p.throttle * 50 : 50}%`; ui.throttleFill.style.width = `${Math.abs(p.throttle) * 50}%`; ui.speed.textContent = `SPD ${Math.round(p.speed / (p.speed < 0 ? 48 : 90) * 100)}%`;
+		const definition = getFrame(state.frame);
+		ui.throttleFill.style.left = `${p.throttle < 0 ? 50 + p.throttle * 50 : 50}%`; ui.throttleFill.style.width = `${Math.abs(p.throttle) * 50}%`; ui.speed.textContent = `SPD ${Math.round(p.speed / (p.speed < 0 ? definition.reverseSpeed : definition.speed) * 100)}%`;
 		for (const [index, button] of weaponButtons.entries()) {
 			const mount = state.loadout[index]; const binding = MOUNTS[index]; if (!binding) continue;
 			const weapon = mount ? getWeapon(mount.weapon) : undefined;
@@ -440,7 +453,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (pad.pause && focused && !document.hidden && !contextLost) { audio.cue('back'); if (auxiliary) closeAuxiliary(); else setPaused(screen === 'playing'); }
 		const root = menu();
 		if (root && pad.connected && screenRevision === revisionAtFrame && focused && !document.hidden && !contextLost) {
-			if (Math.abs(pad.scroll) > 0.15) root.scrollTop += pad.scroll * elapsed * 540;
+			if (Math.abs(pad.scroll) > 0.15) (root.querySelector<HTMLElement>('.frame-list') ?? root).scrollTop += pad.scroll * elapsed * 540;
 			if (pad.navigate) {
 				const focusedElement = document.activeElement;
 				if (pad.adjust && focusedElement instanceof HTMLInputElement && focusedElement.type === 'range') {
@@ -490,7 +503,7 @@ const shutdown = await mountGame('game', async function (container) {
 			}
 		}
 		audio.update(audioFrame(now));
-		if (!contextLost) presentation.render(state, aim, gaits, motionReduced(), screen === 'brief', hudObstructions, inputMode === 'gamepad' || profile.settings.couchUI);
+		if (!contextLost) presentation.render(state, aim, gaits, motionReduced(), screen === 'brief' || screen === 'loadout', hudObstructions, inputMode === 'gamepad' || profile.settings.couchUI, screen === 'loadout');
 		if (now - lastHud > 80 || lastHud === 0) { updateHud(); lastHud = now; }
 		frame = requestAnimationFrame(tick);
 	};

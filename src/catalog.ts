@@ -33,7 +33,7 @@ export const experiments: readonly Experiment[] = [
 		thumbnail: './games/iron-wake/preview.png',
 		thumbnailAlt: 'Iron Wake demo: the Warden siege frame staged in front of Relay 09 in the industrial yard.',
 		href: './games/iron-wake/',
-		description: 'Pilot an 80-ton siege frame through five assaults. Manage three weapon systems, evade artillery, and refit your frame to keep the last relay transmitting.',
+		description: 'Choose from five combat frames with assigned weapons. Build a four-mount arsenal, evade artillery, and refit between five assaults to keep the last relay transmitting.',
 		controls: 'Keyboard + Mouse · Gamepad · Touch',
 		category: 'Isometric mech combat demo',
 	},
