@@ -1,5 +1,6 @@
 import { BufferAttribute, BufferGeometry, IcosahedronGeometry, InstancedMesh, LineBasicMaterial, LineSegments, MeshStandardMaterial, Object3D, Points, PointsMaterial, Vector3, type Scene } from 'three';
 import { tactical } from './combat-scale';
+import { createDeepSpace } from './deep-space';
 import { toWorld, type View } from './projection';
 import type { Point, State } from './simulation';
 
@@ -32,19 +33,22 @@ export const rockAt = function (x: number, y: number, cell = ROCK_CELL, scale = 
 };
 
 export const createBackdrop = function (scene: Scene) {
-	const navigation = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: '#254255', transparent: true, opacity: 0.24 })); scene.add(navigation);
-	const geometry = new IcosahedronGeometry(1, 0); const material = new MeshStandardMaterial({ color: '#1a2b3b', roughness: 1 });
+	const updateDeepSpace = createDeepSpace(scene);
+	const navigation = new LineSegments(new BufferGeometry(), new LineBasicMaterial({ color: '#557b83', transparent: true, opacity: 0.075 })); scene.add(navigation);
+	const geometry = new IcosahedronGeometry(1, 1); const material = new MeshStandardMaterial({ color: '#253039', roughness: 1 });
 	let rocks = new InstancedMesh(geometry, material, 1); scene.add(rocks);
 	const transform = new Object3D();
 	let gridSignature = ''; let rockSignature = '';
 	const stars = [0.08, 0.2, 0.46].map(function (parallax, layer) {
 		const positions = new Float32Array(100 * 3);
 		const starGeometry = new BufferGeometry(); starGeometry.setAttribute('position', new BufferAttribute(positions, 3));
-		const points = new Points(starGeometry, new PointsMaterial({ color: layer === 2 ? '#7a94a6' : '#3b5064', size: layer === 2 ? 1.8 : 1.2, sizeAttenuation: false, depthWrite: false }));
+		const points = new Points(starGeometry, new PointsMaterial({ color: layer === 2 ? '#b8cbd2' : '#506675', size: layer === 2 ? 1.6 : 1, sizeAttenuation: false, depthWrite: false }));
 		points.frustumCulled = false; scene.add(points); return { points, positions, parallax, layer };
 	});
-	return function (state: State, view: View, reducedMotion: boolean) {
+	return function (state: State, view: View, reducedMotion: boolean, cinematic = false) {
 		const origin = state.routeOrigin;
+		updateDeepSpace(view);
+		navigation.visible = !cinematic && state.status === 'fitting';
 		const spacing = gridSpacing(view.camera.zoom); const grid = backdropBounds(view, origin, spacing);
 		const gridKey = `${origin.x}/${origin.y}/${spacing}/${Object.values(grid).join('/')}`;
 		if (gridKey !== gridSignature) {
@@ -58,25 +62,25 @@ export const createBackdrop = function (scene: Scene) {
 		const cells = backdropBounds(view, origin, ROCK_CELL);
 		const nearX = Math.floor((state.ark.x - origin.x) / 200); const nearY = Math.floor((state.ark.y - origin.y) / 200);
 		const nearDetail = Math.max(0, Math.min(1, (view.camera.zoom - 0.25) / 0.4));
-		const rockKey = `${origin.x}/${origin.y}/${Object.values(cells).join('/')}/${nearX}/${nearY}/${nearDetail}`;
+		const rockKey = `${origin.x}/${origin.y}/${Object.values(cells).join('/')}/${nearX}/${nearY}/${nearDetail}/${cinematic}`;
 		if (rockKey !== rockSignature) {
 			rockSignature = rockKey;
 			const placements: ReturnType<typeof rockAt>[] = [];
 			for (let x = cells.left; x <= cells.right; x++) for (let y = cells.top; y <= cells.bottom; y++) {
 				const rock = rockAt(x, y);
-				if (Math.abs(rock.y) >= tactical(350)) placements.push(rock);
+				if (Math.abs(rock.y) >= tactical(350) && rock.angle / (Math.PI * 2) > (cinematic ? 0.6 : 0.3)) placements.push({ ...rock, radius: rock.radius * 0.42 });
 			}
 			// Small nearby debris preserves detail when zoomed in; the larger
 			// outer field remains legible across the expanded combat space. Fade
 			// small debris out at wide zoom so its local detail patch has no edge.
 			for (let x = nearX - 8; x <= nearX + 8; x++) for (let y = nearY - 8; y <= nearY + 8; y++) {
 				const rock = rockAt(x, y, 200, 1);
-				if (Math.abs(rock.y) >= 350) placements.push({ ...rock, radius: rock.radius * nearDetail });
+				if (Math.abs(rock.y) >= 350 && rock.angle / (Math.PI * 2) > (cinematic ? 0.7 : 0.55)) placements.push({ ...rock, radius: rock.radius * nearDetail * 0.55 });
 			}
 			if (placements.length > rocks.instanceMatrix.count) { scene.remove(rocks); rocks.dispose(); rocks = new InstancedMesh(geometry, material, placements.length); scene.add(rocks); }
 			let index = 0;
 			for (const rock of placements) {
-				transform.position.set(origin.x + rock.x, ROCK_HEIGHT, origin.y + rock.y); transform.scale.setScalar(rock.radius); transform.rotation.set(rock.angle * 0.4, rock.angle, rock.angle * 0.17); transform.updateMatrix(); rocks.setMatrixAt(index++, transform.matrix);
+				transform.position.set(origin.x + rock.x, ROCK_HEIGHT, origin.y + rock.y); transform.scale.set(rock.radius * 0.9, rock.radius * 0.55, rock.radius * 0.72); transform.rotation.set(rock.angle * 0.4, rock.angle, rock.angle * 0.17); transform.updateMatrix(); rocks.setMatrixAt(index++, transform.matrix);
 			}
 			rocks.count = index; rocks.instanceMatrix.needsUpdate = true; rocks.computeBoundingSphere();
 		}
@@ -92,6 +96,10 @@ export const createBackdrop = function (scene: Scene) {
 			for (let i = 0; i < 100; i++) {
 				positions[i * 3] = (fraction(i * 0.17373 + layer * 0.313 - drift) - 0.5) * width + (upper.x + lower.x) / 2;
 				positions[i * 3 + 1] = (fraction(i * 0.9731 + layer * 0.217) - 0.5) * height + (upper.y + lower.y) / 2;
+				// The distant planet occludes stars; keep its silhouette clean.
+				const px = (positions[i * 3] ?? 0) - lower.x - (upper.x - lower.x) * 0.91;
+				const py = (positions[i * 3 + 1] ?? 0) - lower.y - (upper.y - lower.y) * 0.94;
+				if (Math.hypot(px, py) < (upper.y - lower.y) * 0.365) positions[i * 3] = (positions[i * 3] ?? 0) - (upper.x - lower.x) * 0.58;
 				positions[i * 3 + 2] = -view.camera.far * (0.75 + layer * 0.03);
 			}
 			points.geometry.getAttribute('position').needsUpdate = true;
