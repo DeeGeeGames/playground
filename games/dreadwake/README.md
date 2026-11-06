@@ -69,10 +69,17 @@ There is no automatic repair. Refit selection is explicit and combat stays froze
 ## Presentation and settings
 
 The battlefield uses Three.js with an orthographic camera matched to targeting and
-heading projection. Layered armored hulls, gun housings, drive glow, hull scars,
-shield volumes, wrecks and debris sit under a Canvas annotation layer for targeting,
-weapon trails, beams, warning tells and offscreen contacts. A Canvas compatibility
-renderer retains combat feedback when WebGL cannot initialize.
+heading projection. Cel Fleet art uses solid armor colors, dark outlines, short
+capped rail cannons, recessed twin drives, and distinct frigate, cruiser, and command
+silhouettes. Mint identifies friendly systems; coral identifies hostile hulls and
+projectiles. Hostile lance fire and its warning remain violet.
+
+The Canvas annotation layer shares one combat-effects renderer with the Canvas
+compatibility mode: inked rail streaks, solid guided rounds, continuous beam cores,
+point-defense ticks, shield rings, angular impact bursts, and explosion fragments.
+Flat planet and nebula shapes, damage scars, wrecks, and the solid navy interface
+use the same palette. Reduced motion suppresses decorative effect expansion and
+fragment movement while retaining projectile paths and warning information.
 
 The interface includes a title scene, route chart, concise combat strip, pause
 reference, refit selection, results and checkpoint retry. Large HUD, screen shake,

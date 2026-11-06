@@ -1,116 +1,130 @@
 import { localPoint, type Point, type Ship, type State } from './simulation';
 import { worldToScreen, type Camera } from './projection';
+import { CEL } from './visual-theme';
 
 export type Outline = readonly (readonly [number, number])[];
-export const polygon = function (ctx: CanvasRenderingContext2D, points: readonly Point[], fill: string | CanvasGradient, stroke?: string) {
+export const polygon = function (ctx: CanvasRenderingContext2D, points: readonly Point[], fill: string | CanvasGradient, stroke?: string, width = 1.4) {
 	const first = points[0]; if (!first) return;
 	ctx.beginPath(); ctx.moveTo(first.x, first.y);
 	for (const point of points.slice(1)) ctx.lineTo(point.x, point.y);
 	ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
-	if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 0.8; ctx.stroke(); }
+	if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.stroke(); }
 };
 export const line = function (ctx: CanvasRenderingContext2D, a: Point, b: Point, color: string, width = 1) {
 	ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
 };
+const mirror = function (outline: Outline, sign: number): Outline {
+	return outline.map(function ([f, a]) { return [f, a * sign] as const; });
+};
+const chamfer = function (f0: number, f1: number, a0: number, a1: number, cf: number, ca: number): Outline {
+	return [[f0 + cf, a0], [f1 - cf, a0], [f1, a0 + ca], [f1, a1 - ca], [f1 - cf, a1], [f0 + cf, a1], [f0, a1 - ca], [f0, a0 + ca]];
+};
 
-// Closed pressure hulls and separate drive nacelles, with no exposed deck or bridge tower.
-const spine: Outline = [[0.44, -0.12], [0.53, -0.05], [0.53, 0.05], [0.44, 0.12], [-0.43, 0.16], [-0.49, 0.09], [-0.49, -0.09], [-0.43, -0.16]];
-const nacelle: Outline = [[0.31, -0.19], [0.22, -0.38], [-0.37, -0.48], [-0.51, -0.36], [-0.51, -0.22], [-0.28, -0.19]];
-const prow: Outline = [[0.55, -0.1], [0.42, -0.26], [0.1, -0.28], [0.02, -0.15], [0.38, -0.09]];
-const frigateWing: Outline = [[0.43, -0.08], [0.05, -0.48], [-0.46, -0.5], [-0.24, -0.23], [-0.42, -0.12]];
-const mirror = function (outline: Outline): Outline { return outline.map(function ([f, a]) { return [f, -a] as const; }); };
-
-export const drawStarship = function (ctx: CanvasRenderingContext2D, camera: Camera, ship: Ship, state: State) {
+// Closed, layered pressure hulls share the approved split bow and twin drives.
+// Keep broad faces quiet and reduce gun detail when a hull is small on screen.
+export const drawStarship = function (ctx: CanvasRenderingContext2D, camera: Camera, ship: Ship, state: State, reducedMotion = false) {
 	const player = ship.id === 0; const heavy = player || ship.length > 150; const alive = ship.hp > 0;
 	const command = state.enemies.some(function (enemy) { return enemy.id === ship.id && enemy.command; });
-	const accent = !alive ? '#435064' : player ? '#8bf4ed' : command ? '#ffe0a0' : heavy ? '#ffb26a' : '#ff7d8f';
-	const dark = player ? '#182b40' : '#352333';
-	const screen = function (f: number, a: number, z = 0) { return worldToScreen(localPoint(ship, f * ship.length, a * ship.width), camera, z); };
+	const top = !alive ? CEL.dark : player ? CEL.top : CEL.hostile;
+	const side = !alive ? CEL.planetShade : player ? CEL.side : CEL.hostileSide;
+	const emitter = !alive ? CEL.dark : player ? CEL.mint : CEL.amber;
+	const h = heavy ? 1 : 0.75; const distant = ship.length * camera.scale < 110;
+	const weight = Math.min(3.4, Math.max(1.1, camera.scale * 1.5));
+	const screen = function (f: number, a: number, z = 0) { return worldToScreen(localPoint(ship, f * ship.length, a * ship.width), camera, z * h); };
 	const points = function (outline: Outline, z: number) { return outline.map(function ([f, a]) { return screen(f, a, z); }); };
-	const module = function (outline: Outline, bottom: number, top: number, pale = false) {
-		const low = points(outline, bottom); const high = points(outline, top);
-		for (let i = 0; i < high.length; i++) {
-			const next = (i + 1) % high.length; const a = high[i]; const b = high[next]; const c = low[next]; const d = low[i];
-			if (a && b && c && d) polygon(ctx, [a, b, c, d], i % 3 === 0 ? '#304258' : dark, '#0a1424');
+	const parts: { bottom: number; depth: number; paint: () => void }[] = [];
+	const module = function (outline: Outline, bottom: number, height: number, fill: string = top, shade: string = side) {
+		const low = points(outline, bottom); const high = points(outline, height);
+		const center = outline.reduce(function (sum, p) { return { f: sum.f + p[0] / outline.length, a: sum.a + p[1] / outline.length }; }, { f: 0, a: 0 });
+		const winding = Math.sign(outline.reduce(function (sum, p, i) { const q = outline[(i + 1) % outline.length]; return q ? sum + p[0] * q[1] - q[0] * p[1] : sum; }, 0));
+		const faces: { depth: number; points: readonly Point[]; fill: string }[] = [];
+		for (let i = 0; i < outline.length; i++) {
+			const next = (i + 1) % outline.length; const p = outline[i]; const q = outline[next];
+			const a = high[i]; const b = high[next]; const c = low[next]; const d = low[i];
+			if (!p || !q || !a || !b || !c || !d) continue;
+			const dx = (q[0] - p[0]) * ship.length; const dy = (q[1] - p[1]) * ship.width;
+			if (winding * (dy * (Math.cos(ship.angle) + Math.sin(ship.angle)) - dx * (Math.cos(ship.angle) - Math.sin(ship.angle))) <= 0) continue;
+			faces.push({ depth: (a.y + b.y) / 2, points: [a, b, c, d], fill: a.x < b.x ? shade : CEL.dark });
 		}
-		const start = high[0]; const end = high[Math.floor(high.length / 2)];
-		if (!start || !end) return;
-		const metal = ctx.createLinearGradient(start.x, start.y, end.x + 1, end.y + 1);
-		metal.addColorStop(0, pale ? '#b4c8d9' : player ? '#748ba3' : '#a77f8b');
-		metal.addColorStop(0.45, pale ? '#748da7' : player ? '#405875' : '#654b65');
-		metal.addColorStop(1, player ? '#253c57' : '#322a43');
-		polygon(ctx, high, metal, player ? '#a0bed077' : '#d18e9677');
+		faces.sort(function (a, b) { return a.depth - b.depth; });
+		parts.push({ bottom, depth: screen(center.f, center.a).y, paint: function () {
+			for (const face of faces) polygon(ctx, face.points, face.fill, CEL.ink, weight);
+			polygon(ctx, high, fill, CEL.ink, weight * 0.8);
+		} });
 	};
+	const surface = function (outline: Outline, z: number, color: string) {
+		parts.push({ bottom: z, depth: 0, paint: function () { polygon(ctx, points(outline, z), color, CEL.ink, weight * 0.65); } });
+	};
+	ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 	const speed = Math.hypot(ship.vx, ship.vy); const power = player ? Math.abs(state.player.throttle) : 0.55;
-	const flame = 0.08 + power * 0.35 + speed * 0.0015 + Math.sin(state.time * 24 + ship.id) * 0.015;
-	ctx.save();
-	// Engine light stays attached to the hull; trails follow actual velocity through a turn.
-	for (const offset of alive ? heavy ? [-0.32, 0.32] : [-0.27, 0.27] : []) {
-		const nozzle = screen(-0.49, offset, 14);
-		const trail = worldToScreen({ x: ship.x - Math.cos(ship.angle) * ship.length * (0.5 + flame) - ship.vx * 0.3,
-			y: ship.y - Math.sin(ship.angle) * ship.length * (0.5 + flame) - ship.vy * 0.3 }, camera, 14);
-		const start = screen(-0.5, offset - 0.06, 14); const end = screen(-0.5, offset + 0.06, 14);
-		// Keep each exhaust cone centered on its own nacelle.
-		const center = screen(-0.49, 0, 14); const tip = { x: trail.x + nozzle.x - center.x, y: trail.y + nozzle.y - center.y };
-		const glow = ctx.createRadialGradient(nozzle.x, nozzle.y, 0, nozzle.x, nozzle.y, 45 * camera.scale);
-		glow.addColorStop(0, player ? '#35cfe45c' : '#ef65794c'); glow.addColorStop(1, '#00000000');
-		ctx.fillStyle = glow; ctx.fillRect(nozzle.x - 45 * camera.scale, nozzle.y - 45 * camera.scale, 90 * camera.scale, 90 * camera.scale);
-		polygon(ctx, [start, tip, end], player ? '#4dcce54a' : '#fc72874a');
-		line(ctx, nozzle, { x: nozzle.x + (tip.x - nozzle.x) * 0.65, y: nozzle.y + (tip.y - nozzle.y) * 0.65 }, accent, Math.max(1, 3 * camera.scale));
+	const flame = 0.08 + power * 0.18 + speed * 0.001 + (reducedMotion ? 0 : Math.sin(state.time * 18 + ship.id) * 0.008);
+	for (const sign of alive ? [-1, 1] : []) {
+		const a = sign * 0.355; const tip = screen(-0.563 - flame, a, 13);
+		polygon(ctx, [screen(-0.563, a - 0.07, 13), tip, screen(-0.563, a + 0.07, 13)], emitter, CEL.ink, weight);
+		polygon(ctx, [screen(-0.563, a - 0.035, 13), screen(-0.563 - flame * 0.7, a, 13), screen(-0.563, a + 0.035, 13)], CEL.cream);
 	}
-	module(spine, 2, heavy ? 21 : 15);
+	module([[-0.48, -0.17], [0.29, -0.2], [0.57, -0.07], [0.57, 0.07], [0.29, 0.2], [-0.48, 0.17], [-0.55, 0]], 0, 22, CEL.dark, CEL.dark);
 	for (const sign of [-1, 1]) {
-		const shape = heavy ? nacelle : frigateWing;
-		module(sign === -1 ? shape : mirror(shape), 4, heavy ? 24 : 17);
-		if (heavy) module(sign === -1 ? prow : mirror(prow), 18, 30, true);
-		// Armored battery rails are enclosed in the nacelles.
+		module(mirror([[-0.53, 0.23], [-0.39, 0.18], [0.2, 0.2], [heavy ? 0.35 : 0.2, heavy ? 0.34 : 0.3], [0.1, heavy ? 0.47 : 0.6], [-0.47, 0.49], [-0.57, 0.38]], sign), 3, 20);
+		module(mirror([[-0.03, 0.18], [0.4, 0.09], [player ? 0.59 : heavy ? 0.48 : 0.53, 0.1], [0.36, player ? 0.33 : 0.39], [0.04, 0.34]], sign), 16, 27);
+		surface(mirror([[-0.01, 0.21], [0.08, 0.2], [0.11, 0.33], [0.02, 0.34]], sign), 27.5, alive ? CEL.amber : CEL.dark);
+		module(mirror(chamfer(-0.56, -0.38, 0.22, 0.49, 0.024, 0.05), sign), 4, 23, side, CEL.dark);
+		// A rear-facing aperture is hidden at opposite headings, rather than
+		// painting a light through the solid engine block.
+		if (Math.cos(ship.angle) + Math.sin(ship.angle) < -0.01) {
+			parts.push({ bottom: 24, depth: screen(-0.563, sign * 0.355).y, paint: function () {
+				polygon(ctx, [screen(-0.563, sign * 0.355 - 0.065, 8), screen(-0.563, sign * 0.355 + 0.065, 8), screen(-0.563, sign * 0.355 + 0.065, 18), screen(-0.563, sign * 0.355 - 0.065, 18)], emitter, CEL.ink, weight * 1.3);
+			} });
+		}
 		for (let i = 0; i < (player ? 6 : 4); i++) {
-			const f = player ? (64 - i * 25) / ship.length : 0.2 - i * 0.15;
-			const ready = alive && (!player || state.batteries[sign < 0 ? 'port' : 'starboard'].reload === 0);
-			line(ctx, screen(f, sign * 0.29, 25), screen(f - 0.035, sign * 0.44, 25), '#091322', Math.max(2, 7 * camera.scale));
-			line(ctx, screen(f, sign * 0.34, 26), screen(f - 0.022, sign * 0.44, 26), ready ? accent : '#435064', Math.max(1, 2 * camera.scale));
+			const f = player ? (64 - i * 25) / ship.length : 0.22 - i * 0.16;
+			const a = sign * 0.405; const halfF = 6 / ship.length; const halfA = 6 / ship.width;
+			module(chamfer(f - halfF, f + halfF, a - halfA, a + halfA, 2 / ship.length, 2 / ship.width), 20, 27, side, CEL.dark);
+			parts.push({ bottom: 28, depth: screen(f, a).y, paint: function () {
+				for (const offset of distant ? [0] : [-2.4, 2.4]) {
+					const start = screen(f + offset / ship.length, a + sign * 0.035, 24);
+					const end = screen(f + offset / ship.length, a + sign * 0.135, 24);
+					line(ctx, start, end, CEL.ink, Math.max(2.4, (distant ? 6 : 4.8) * camera.scale));
+					line(ctx, start, end, top, Math.max(1, (distant ? 2.5 : 2.3) * camera.scale));
+					ctx.beginPath(); ctx.arc(end.x, end.y, Math.max(0.8, camera.scale * 1.4), 0, Math.PI * 2); ctx.fillStyle = CEL.ink; ctx.fill();
+				}
+			} });
 		}
-		for (let i = 0; i < 5; i++) {
-			const f = -0.3 + i * 0.045;
-			line(ctx, screen(f, sign * 0.22, 25), screen(f - 0.02, sign * 0.31, 25), '#111f33', 2 * camera.scale);
+		if (!distant) for (let i = 0; i < 3; i++) {
+			const f = -0.36 + i * 0.045;
+			surface(mirror([[f, 0.22], [f + 0.015, 0.22], [f + 0.015, 0.29], [f, 0.29]], sign), 22, CEL.amber);
 		}
-		line(ctx, screen(-0.46, sign * 0.23, 25), screen(-0.46, sign * 0.39, 25), accent, 2 * camera.scale);
-		line(ctx, screen(0.25, sign * 0.2, 31), screen(0.38, sign * 0.15, 31), '#dce7ed99', camera.scale);
 	}
-	const reactor: Outline = [[0.16, -0.07], [0.19, 0], [0.16, 0.07], [-0.31, 0.08], [-0.37, 0], [-0.31, -0.08]];
-	module(reactor, 21, heavy ? 34 : 24, true);
-	line(ctx, screen(-0.27, 0, heavy ? 35 : 25), screen(0.13, 0, heavy ? 35 : 25), accent, Math.max(1, 3 * camera.scale));
-	for (const f of [-0.12, -0.02, 0.08, 0.32]) {
-		line(ctx, screen(f, -0.11, 22), screen(f, 0.11, 22), '#0c1b2f', camera.scale);
+	module([[-0.4, 0], [-0.32, -0.12], [0.24, -0.09], [0.43, 0], [0.24, 0.09], [-0.32, 0.12]], 21, 33);
+	surface([[-0.31, -0.023], [0.24, -0.023], [0.29, 0], [0.24, 0.023], [-0.31, 0.023]], 33.5, player ? CEL.dark : CEL.amber);
+	surface([[-0.29, -0.016], [-0.13, -0.016], [-0.13, 0.016], [-0.29, 0.016]], 34, emitter);
+	module([[-0.08, -0.085], [0.065, -0.085], [0.14, -0.038], [0.14, 0.038], [0.065, 0.085], [-0.08, 0.085], [-0.115, 0]], 33, 40);
+	if (Math.cos(ship.angle) + Math.sin(ship.angle) > 0.01) {
+		parts.push({ bottom: 41, depth: 0, paint: function () {
+			polygon(ctx, [screen(0.14, -0.03, 36), screen(0.14, 0.03, 36), screen(0.14, 0.03, 39), screen(0.14, -0.03, 39)], emitter, CEL.ink, weight * 0.7);
+			polygon(ctx, [screen(0.57, -0.055, 7), screen(0.57, 0.055, 7), screen(0.57, 0.055, 14), screen(0.57, -0.055, 14)], CEL.amber, CEL.ink, weight);
+		} });
 	}
-	// Identification stripes and drive-control jets replace nautical superstructure.
-	for (const f of [-0.1, -0.06, -0.02]) line(ctx, screen(f, -0.14, 23), screen(f + 0.03, -0.2, 25), player ? '#f0c582' : '#ec8b91', 2 * camera.scale);
-	// Damage remains attached to armor panels, making campaign attrition visible on the hull.
+	if (command) for (const sign of [-1, 1]) module(chamfer(-0.26, -0.16, sign * 0.11 - 0.04, sign * 0.11 + 0.04, 0.015, 0.018), 33, 45, CEL.amber);
+	parts.sort(function (a, b) { return a.bottom - b.bottom || a.depth - b.depth; });
+	for (const part of parts) part.paint();
+	if (!distant) for (const sign of [-1, 1]) for (const f of [0.16, 0.32]) line(ctx, screen(f, sign * 0.15, 27.5), screen(f - 0.025, sign * 0.29, 27.5), side, Math.max(0.7, camera.scale * 0.75));
 	const damage = 1 - ship.hp / ship.maxHp;
 	for (let i = 0; i < 6; i++) {
-		if (damage < (i + 1) / 8) continue;
-		const f = -0.3 + (i % 3) * 0.18;
-		const a = (i < 3 ? -1 : 1) * 0.28;
-		polygon(ctx, [screen(f - 0.045, a - 0.06, 31), screen(f + 0.04, a - 0.03, 31),
-			screen(f + 0.025, a + 0.06, 31), screen(f - 0.03, a + 0.04, 31)], '#131923cc', '#77504a');
-		if (alive && damage > 0.6) line(ctx, screen(f - 0.02, a, 32), screen(f + 0.015, a + 0.02, 32), '#ef976b', Math.max(1, camera.scale));
-	}
-	if (command) {
-		for (const sign of [-1, 1]) {
-			line(ctx, screen(0.1, sign * 0.18, 32), screen(0.24, sign * 0.25, 32), '#ffe0a0', 3 * camera.scale);
-			line(ctx, screen(0.24, sign * 0.25, 32), screen(0.35, sign * 0.14, 32), '#ffe0a0', 3 * camera.scale);
-		}
+		if (damage <= (i + 1) / 8) continue;
+		const f = 0.15 + (i % 3) * 0.075; const a = (i < 3 ? -1 : 1) * 0.23;
+		polygon(ctx, [screen(f - 0.017, a - 0.035, 28), screen(f + 0.025, a - 0.016, 28), screen(f + 0.01, a + 0.01, 28), screen(f + 0.03, a + 0.035, 28), screen(f - 0.014, a + 0.026, 28)], CEL.ink);
+		if (alive && damage > 0.45) line(ctx, screen(f, a - 0.01, 28.5), screen(f + 0.012, a + 0.016, 28.5), CEL.amber, Math.max(1, camera.scale));
 	}
 	if (player && Math.abs(state.player.yaw) > 0.025) {
 		const sign = Math.sign(state.player.yaw);
-		line(ctx, screen(0.37, -sign * 0.19, 23), screen(0.37, -sign * 0.43, 23), '#a0edff99', 3 * camera.scale);
-		line(ctx, screen(-0.4, sign * 0.4, 14), screen(-0.4, sign * 0.65, 14), '#a0edff99', 3 * camera.scale);
+		line(ctx, screen(0.37, -sign * 0.19, 23), screen(0.37, -sign * 0.31, 23), CEL.mint, Math.max(1, 2.4 * camera.scale));
 	}
 	if (player && state.shield.active > 0) {
-		const at = worldToScreen(ship, camera, 18); const r = ship.length * camera.scale * 0.68;
-		const shield = ctx.createRadialGradient(at.x, at.y, r * 0.25, at.x, at.y, r);
-		shield.addColorStop(0, '#6eefff00'); shield.addColorStop(0.85, '#6eefff12'); shield.addColorStop(1, '#8cfaff44');
-		ctx.beginPath(); ctx.ellipse(at.x, at.y, r, r * 0.63, -0.18, 0, Math.PI * 2); ctx.fillStyle = shield; ctx.fill(); ctx.strokeStyle = '#9af6ff99'; ctx.stroke();
+		const at = worldToScreen(ship, camera, 18); const r = ship.length * camera.scale * 0.7;
+		ctx.beginPath(); ctx.ellipse(at.x, at.y, r, r * 0.64, -0.18, 0, Math.PI * 2);
+		ctx.fillStyle = `${CEL.mint}0d`; ctx.fill(); ctx.strokeStyle = CEL.ink; ctx.lineWidth = weight + 2; ctx.stroke();
+		ctx.strokeStyle = CEL.mint; ctx.lineWidth = weight; ctx.stroke();
 	}
 	ctx.restore();
 };

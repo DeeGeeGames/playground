@@ -1,0 +1,87 @@
+{
+  "scope": "Option A Cel Fleet static design refinement; owner approval required before production overhaul",
+  "reviewedArtifact": "../cel-fleet-refined.html",
+  "reviewedSha256": "142f804961aeae5b6f9b8021d78256fe99944d250978b53ba9fc37b76d67b86c",
+  "threshold": 8.5,
+  "scale": 10,
+  "rounds": 2,
+  "reviewers": [
+    {
+      "role": "Art direction",
+      "agent": "/root/art_direction",
+      "round1": {
+        "overall": 7.9,
+        "design": 7.8,
+        "style": 8.6,
+        "polish": 7.5,
+        "cohesion": 8.1,
+        "identity": 7.4
+      },
+      "round2": {
+        "overall": 8.6,
+        "design": 8.6,
+        "style": 8.8,
+        "polish": 8.5,
+        "cohesion": 8.6,
+        "identity": 8.6
+      },
+      "evidence": "Personally rendered cruiser, fleet, opposite-quarter/scale, damage/effects, and combat at 1200px; verified artifact SHA256.",
+      "feedback": "Supported center hull, integrated pressure cap, recessed drives, and capped guns resolve structural weaknesses. Sparse seams preserve quiet color planes; class differences and warm hostile emitters strengthen identity."
+    },
+    {
+      "role": "Visual polish",
+      "agent": "/root/polish",
+      "round1": {
+        "overall": 7.9,
+        "design": 8.3,
+        "style": 8.6,
+        "polish": 7.3,
+        "cohesion": 8.1,
+        "readability": 7.8
+      },
+      "round2": {
+        "overall": 8.6,
+        "design": 8.6,
+        "style": 8.8,
+        "polish": 8.5,
+        "cohesion": 8.7,
+        "readability": 8.5
+      },
+      "evidence": "Personally rendered all seven views, touch at 390px, and a separate four-heading sheet; verified artifact SHA256.",
+      "feedback": "Capped guns, engine collars, continuous support, sparse seams, and annotation placement resolve blockers. Rear drive apertures now hide correctly from opposite headings."
+    },
+    {
+      "role": "Cohesion and readability",
+      "agent": "/root/cohesion",
+      "round1": {
+        "overall": 8.0,
+        "design": 8.2,
+        "style": 8.8,
+        "polish": 7.5,
+        "cohesion": 8.1,
+        "readability": 7.7
+      },
+      "round2": {
+        "overall": 8.6,
+        "design": 8.7,
+        "style": 8.8,
+        "polish": 8.5,
+        "cohesion": 8.7,
+        "readability": 8.5
+      },
+      "evidence": "Personally rendered fleet, combat, damage/effects, angles/scale at 1200px and touch at 390px; no console errors.",
+      "feedback": "Class proportions, warm hostile emitters, supported armor, and compact gun housings retain Option A identity. Warning and target annotations remain clear of ships."
+    }
+  ],
+  "peerDiscussion": {
+    "round1": "All three directly exchanged findings. Agreed to preserve palette and silhouette, support raised armor without extra bulk, shorten guns, recess drives, simplify distant detail, warm hostile emitters, and move scars onto free armor faces.",
+    "round2": "All three directly discussed revised renders and remaining observations. No remaining blockers for owner art review; no additional embellishment recommended."
+  },
+  "remainingLimits": [
+    "Mild damage is intentionally subtle; severe damage is not covered by this study.",
+    "Small frigate gun detail remains dense; moving combat readability requires implementation evidence.",
+    "Ratings are subjective design judgments, not gameplay, hardware, performance, or shipping acceptance."
+  ],
+  "productionFilesChanged": false,
+  "ownerApproval": "Approved by owner before production overhaul"
+}

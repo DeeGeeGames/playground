@@ -427,9 +427,9 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.phase.textContent = training ? 'FLIGHT SCHOOL / LIVE PRACTICE' : paused ? 'CAMPAIGN PAUSED' : `MISSION ${String(state.wave).padStart(2, '0')} / ${String(CAMPAIGN_MISSIONS.length).padStart(2, '0')} · ${CAMPAIGN_MISSIONS[state.wave - 1]?.name.toUpperCase() ?? ''}`;
 		ui.objective.textContent = training ? 'Safe training · No campaign progress is changed' : state.intermission > 0 ? state.wave === CAMPAIGN_MISSIONS.length ? 'Final contact clear. Securing the passage.' : 'Contact clear. Preparing field refit.' : `${state.enemies.length} hostile signatures · ${state.kills} / ${totalShips} ships broken`;
 		ui.hull.textContent = String(Math.ceil(p.hp / MAX_HULL * 100)); ui.hullFill.style.width = `${p.hp / MAX_HULL * 100}%`;
-		ui.hullFill.style.background = p.hp < MAX_HULL * 0.3 ? '#e8987e' : '#90e8ec';
+		ui.hullFill.style.background = p.hp < MAX_HULL * 0.3 ? 'var(--danger)' : 'var(--cyan)';
 		ui.throttle.textContent = Math.abs(p.throttle) < 0.001 ? 'NEUTRAL' : p.throttle < 0 ? `ASTERN ${Math.round(-p.throttle / 0.35 * 100)}%` : `AHEAD ${Math.round(p.throttle * 100)}%`;
-		ui.throttleFill.style.width = `${Math.abs(p.throttle) / (p.throttle < 0 ? 0.35 : 1) * 100}%`; ui.throttleFill.style.background = p.throttle < 0 ? '#dfac86' : '#90e8ec';
+		ui.throttleFill.style.width = `${Math.abs(p.throttle) / (p.throttle < 0 ? 0.35 : 1) * 100}%`; ui.throttleFill.style.background = p.throttle < 0 ? 'var(--gold)' : 'var(--cyan)';
 		ui.speed.textContent = `${Math.round(p.vx * Math.cos(p.angle) + p.vy * Math.sin(p.angle))} M/S`;
 		ui.motion.textContent = `${speed < 1 ? 'DRIVE IDLE' : 'UNDER THRUST'} / ${Math.abs(p.yaw) < 0.015 ? 'THRUSTERS CENTERED' : `${p.yaw < 0 ? 'PORT' : 'STBD'} ${Math.abs(p.yaw * 180 / Math.PI).toFixed(0)}°/S`}`;
 		for (const side of ['port', 'starboard'] as const) {

@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dread Wake · Cel Fleet design review</title>
+<style>
+:root { color-scheme: dark; --background:#151719; --foreground:#eceef0; --muted:#9ca4af; --card:#202327; --border:#3c4149; --primary:#91dcda; --primary-foreground:#142126; --ring:#f5c879; --radius:12px; --font-sans:Arial,Helvetica,sans-serif; }
+* { box-sizing:border-box; }
+body { margin:0; color:var(--foreground); font:14px/1.5 var(--font-sans); }
+main { max-width:1400px; margin:auto; }
+.intro { margin:0 0 22px; color:var(--muted); max-width:76ch; }
+.intro strong { color:var(--foreground); font-weight:500; }
+.study { margin:0 0 32px; }
+.heading { display:flex; align-items:baseline; gap:12px; margin-bottom:7px; flex-wrap:wrap; }
+h2 { margin:0; font-size:22px; line-height:1.2; letter-spacing:-.5px; }
+.letter { color:var(--muted); font:12px monospace; letter-spacing:1px; }
+.badge { color:var(--primary); font-size:12px; }
+.summary { color:var(--muted); margin:0 0 13px; max-width:90ch; }
+.toolbar { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:9px; }
+.views { display:flex; gap:4px; flex-wrap:wrap; }
+button { color:var(--foreground); font:inherit; background:var(--card); border:1px solid var(--border); border-radius:7px; padding:6px 11px; min-height:36px; cursor:pointer; }
+button[aria-pressed=true] { color:var(--primary-foreground); background:var(--primary); border-color:var(--primary); }
+button:hover { border-color:var(--foreground); }
+button:focus-visible { outline:3px solid var(--ring); outline-offset:3px; }
+.motion { color:var(--muted); font-size:12px; }
+.viewport { border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; background:#101923; line-height:0; }
+.viewport svg { display:block; width:100%; height:auto; }
+.viewport.phone { max-width:390px; margin:auto; }
+.notes { display:flex; align-items:center; gap:12px; justify-content:space-between; padding-top:10px; }
+.notes p { margin:0; color:var(--muted); font-size:12px; }
+.swatches { display:flex; gap:5px; flex-shrink:0; }
+.swatches i { display:block; width:14px; height:14px; border-radius:50%; border:1px solid #ffffff40; }
+.footer { color:var(--muted); font-size:12px; margin:0; }
+.salvo { opacity:1; }
+.replay .salvo { animation:shot .9s ease-out 2; }
+.replay .impact { animation:impact .9s ease-out 2; transform-box:fill-box; transform-origin:center; }
+.replay .flame-core { animation:drive .3s steps(2,end) 6; }
+@keyframes shot { 0%,12% { opacity:0; } 18%,44% { opacity:1; } 75%,100% { opacity:0; } }
+@keyframes impact { 0%,35% { opacity:0; scale:.65; } 48% { opacity:1; scale:1.2; } 90%,100% { opacity:0; scale:1.35; } }
+@keyframes drive { 50% { opacity:.55; } }
+@media (prefers-reduced-motion:reduce) { .replay * { animation:none !important; } }
+@media (max-width:500px) { h2 { font-size:20px; } .heading { gap:8px; } .summary { font-size:13px; } button { min-height:44px; padding:6px 9px; font-size:12px; } .notes { align-items:flex-start; } .study { margin-bottom:28px; } }
+</style>
+</head>
+<body>
+<main>
+<p class="intro"><strong>Cel Fleet · refined ship designs.</strong> The approved palette and long split bow, with more deliberate construction and a coherent fleet family. Select a study below. This is an art preview for approval, not a playable build.</p>
+<div id="studies"></div>
+<p class="footer">Art-only proposal. Orthographic camera, enclosed hulls, paired drives, and six player broadside mounts per flank are retained. Class details and effects are proposed visual treatments; production code, saves, combat rules, and input behavior are unchanged.</p>
+<section class="panel-results" aria-label="Design panel results" style="margin:24px 0 12px;padding:16px;background:var(--card);border-radius:var(--radius)"><h2 style="font-size:18px;margin:0 0 6px">Panel review · two rounds</h2><p style="margin:0 0 14px;color:var(--muted)">Three independent reviewers exchanged feedback after each round. All finish at <strong style="color:var(--foreground)">8.6 / 10</strong>; every category is at least 8.5.</p><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 160" role="img" aria-label="All three reviewers rated the revised design 8.6 out of 10. Initial ratings were 7.9, 7.9 and 8.0. The required threshold was 8.5." style="display:block;width:100%;height:auto"><g font-family="Arial,sans-serif" font-size="14" fill="var(--foreground)"><text x="0" y="31">Art direction</text><text x="0" y="77">Visual polish</text><text x="0" y="123">Cohesion / readability</text></g><rect x="210" y="19" width="400" height="12" rx="6" fill="var(--border)"/><rect x="210" y="19" width="344" height="12" rx="6" fill="var(--primary)"/><line x1="526.0" y1="13" x2="526.0" y2="37" stroke="var(--muted)" stroke-width="3"/><line x1="550" y1="9" x2="550" y2="41" stroke="var(--foreground)" stroke-dasharray="3 3"/><text x="630" y="30" fill="var(--foreground)" font-family="Arial,sans-serif" font-size="15" font-weight="700">8.6</text><rect x="210" y="65" width="400" height="12" rx="6" fill="var(--border)"/><rect x="210" y="65" width="344" height="12" rx="6" fill="var(--primary)"/><line x1="526.0" y1="59" x2="526.0" y2="83" stroke="var(--muted)" stroke-width="3"/><line x1="550" y1="55" x2="550" y2="87" stroke="var(--foreground)" stroke-dasharray="3 3"/><text x="630" y="76" fill="var(--foreground)" font-family="Arial,sans-serif" font-size="15" font-weight="700">8.6</text><rect x="210" y="111" width="400" height="12" rx="6" fill="var(--border)"/><rect x="210" y="111" width="344" height="12" rx="6" fill="var(--primary)"/><line x1="530.0" y1="105" x2="530.0" y2="129" stroke="var(--muted)" stroke-width="3"/><line x1="550" y1="101" x2="550" y2="133" stroke="var(--foreground)" stroke-dasharray="3 3"/><text x="630" y="122" fill="var(--foreground)" font-family="Arial,sans-serif" font-size="15" font-weight="700">8.6</text><g font-family="Arial,sans-serif" font-size="11" fill="var(--muted)"><text x="210" y="156">0</text><text x="601" y="156">10</text></g></svg><p style="font-size:12px;margin:4px 0 0;color:var(--muted)">Mint: revised score · Gray marker: initial score · Dashed marker: 8.5 threshold.</p><p style="font-size:13px;margin:12px 0 0;color:var(--muted)">Panel consensus: retain the palette and silhouette; the construction and faction details are now cohesive. Mild damage is subtle. Severe damage and readability during moving combat remain implementation-stage checks.</p><p style="font-size:13px;margin:10px 0 0;color:var(--foreground)">These are design ratings. Final design approval remains yours.</p></section></main>
+<script>
+'use strict';
+const themes = [
+	{ id:'a', name:'Cel Fleet', badge:'Revision 2 · ready for your review', summary:'Supported armor, recessed drives, compact rail cannons, and distinct silhouettes for the existing ship classes.', note:'Measured recoil · hard-edged flashes · flat exhaust ribbons', ink:'#101d2c', sky:'#152737', cloud:'#1c3444', planet:'#2b4858', planetShade:'#203847', top:'#cbdeda', side:'#6f9caa', dark:'#385966', accent:'#edb962', light:'#f2f1db', engine:'#73e6d0', hostile:'#df786c', hostileSide:'#a84e50', hud:'#112431', text:'#edf1e4', muted:'#9fb8bd', line:2.4, swatches:['#cbdeda','#6f9caa','#73e6d0','#edb962','#101d2c'] },
+	{ id:'b', name:'Void Pulp', badge:'Most graphic', summary:'A space-comic battle: dagger-shaped armor, near-black shadows, warm paper colors, and sharp impact bursts.', note:'Brief impact holds · angular smoke · bold directional streaks', ink:'#211b29', sky:'#302b43', cloud:'#40344d', planet:'#66516a', planetShade:'#47384e', top:'#f3d394', side:'#c58a59', dark:'#635064', accent:'#e97c59', light:'#fff2cb', engine:'#e79b7a', hostile:'#ab9cc8', hostileSide:'#766185', hud:'#f1d7a0', text:'#281e2d', muted:'#65516b', line:3.7, swatches:['#f3d394','#c58a59','#e97c59','#66516a','#211b29'] },
+	{ id:'c', name:'Pocket Dreadnought', badge:'Most cartoon-like', summary:'A chunky animated model fleet: shorter hulls, rounded armor blocks, oversized drives, and bright enamel colors.', note:'Soft recoil settle · rounded smoke puffs · ring-shaped impacts', ink:'#11263f', sky:'#223b5a', cloud:'#2a4a69', planet:'#4f718b', planetShade:'#3d5d79', top:'#f2e6c8', side:'#a8bdbb', dark:'#41648a', accent:'#efbc4a', light:'#fff6da', engine:'#77e4d4', hostile:'#ea8173', hostileSide:'#ac5059', hud:'#f2e6c8', text:'#152b44', muted:'#496580', line:3.3, swatches:['#f2e6c8','#41648a','#efbc4a','#77e4d4','#11263f'] }
+];
+const round = function(n) { return Math.round(n * 100) / 100; };
+const points = function(ps) { return ps.map(function(p) { return p.map(round).join(','); }).join(' '); };
+const poly = function(ps, fill, stroke, width = 2) { return '<polygon points="'+points(ps)+'" fill="'+fill+'" stroke="'+(stroke || 'none')+'" stroke-width="'+width+'" stroke-linejoin="round"/>'; };
+const path = function(d, fill, stroke, width = 2, extra = '') { return '<path d="'+d+'" fill="'+fill+'" stroke="'+(stroke || 'none')+'" stroke-width="'+width+'" stroke-linejoin="round" stroke-linecap="round" '+extra+'/>'; };
+const line = function(a,b,color,width=2,extra='') { return '<line x1="'+round(a[0])+'" y1="'+round(a[1])+'" x2="'+round(b[0])+'" y2="'+round(b[1])+'" stroke="'+color+'" stroke-width="'+width+'" stroke-linecap="round" '+extra+'/>'; };
+const rect = function(x,y,w,h,fill,stroke='none',radius=0,strokeWidth=2) { return '<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="'+radius+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+strokeWidth+'"/>'; };
+const circle = function(x,y,r,fill,stroke='none',sw=2) { return '<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"/>'; };
+const text = function(value,x,y,size,color,weight=600,extra='') { return '<text x="'+x+'" y="'+y+'" fill="'+color+'" font-size="'+size+'" font-weight="'+weight+'" font-family="Arial, Helvetica, sans-serif" '+extra+'>'+value+'</text>'; };
+const label = function(value,x,y,t,accent=false) { return text(value,x,y,13,accent?t.accent:t.muted,700,'letter-spacing="1.4"'); };
+const octagon = function(x0,x1,y0,y1,cut=7) { return [[x0+cut,y0],[x1-cut,y0],[x1,y0+cut],[x1,y1-cut],[x1-cut,y1],[x0+cut,y1],[x0,y1-cut],[x0,y0+cut]]; };
+
+// These studies use the game's projection: x=.866(x-y), y=.5(x+y)-z.
+// Flat faces and linework are vector art, not a change to its Three.js renderer.
+const cruiser = function(t,cx,cy,scale=1,angle=-Math.PI/2,enemy=false,small=false,damage=false,kind=small?'frigate':enemy?'cruiser':'player') {
+	const top=enemy?t.hostile:t.top, side=enemy?t.hostileSide:t.side, accent=t.accent;
+	const emitter=enemy?t.accent:t.engine, distant=scale<.62, commandHull=kind==='command';
+	const P = function(x,y,z=0) { const wx=x*Math.cos(angle)-y*Math.sin(angle), wy=x*Math.sin(angle)+y*Math.cos(angle); return [cx+(wx-wy)*Math.sqrt(3)/2*scale,cy+((wx+wy)/2-z)*scale]; };
+	const faces=[]; let detail=''; let engines='';
+	const face = function(ps,fill,width=t.line) { const depth=ps.reduce(function(sum,p) { const q=P(...p); return sum+q[1]+p[2]*scale; },0)/ps.length; faces.push({depth,height:ps.reduce(function(sum,p){return sum+p[2];},0)/ps.length,markup:poly(ps.map(function(p){return P(...p);}),fill,t.ink,width)}); };
+	const prism = function(outline,bottom,height,fill=top,shade=side) {
+		const lower=outline.map(function(p){return [p[0],p[1],bottom];}), upper=outline.map(function(p){return [p[0],p[1],height];});
+		const sides=[]; const winding=Math.sign(outline.reduce(function(sum,p,i){const q=outline[(i+1)%outline.length];return sum+p[0]*q[1]-q[0]*p[1];},0));
+		for(let i=0;i<outline.length;i++) { const next=(i+1)%outline.length; const p=upper[i],q=upper[next]; if(!p||!q||!lower[i]||!lower[next]) continue; const dx=q[0]-p[0],dy=q[1]-p[1]; if(winding*(dy*(Math.cos(angle)+Math.sin(angle))-dx*(Math.cos(angle)-Math.sin(angle)))<=0) continue; const a=P(...p),b=P(...q); sides.push({middle:(a[1]+b[1])/2,ps:[p,q,lower[next],lower[i]],fill:a[0]<b[0]?shade:t.dark}); }
+		sides.sort(function(a,b){return a.middle-b.middle;});
+		const markup=sides.map(function(s){return poly(s.ps.map(function(p){return P(...p);}),s.fill,t.ink,t.line);}).join('')+poly(upper.map(function(p){return P(...p);}),fill,t.ink,t.line*.8);
+		const center=outline.reduce(function(sum,p){return [sum[0]+p[0]/outline.length,sum[1]+p[1]/outline.length];},[0,0]);
+		faces.push({depth:P(center[0],center[1],0)[1],height:bottom,markup});
+	};
+	const plate = function(ps,z,color) { face(ps.map(function(p){return [p[0],p[1],z];}),color,Math.max(1,t.line*.6)); };
+	const short=t.id==='c'; const pulp=t.id==='b';
+	const L=small?170:commandHull?340:enemy?290:330; const W=small?68:commandHull?150:enemy?132:138;
+	const main=short?octagon(-L*.42,L*.48,-W*.20,W*.20,16):[[-L*.48,-W*.17],[L*.29,-W*.20],[L*.57,-W*.07],[L*.57,W*.07],[L*.29,W*.20],[-L*.48,W*.17],[-L*.55,0]];
+	prism(main,0,33,t.dark,t.dark);
+	for(const sign of [-1,1]) {
+		const body=short?octagon(-L*.52,L*.32,W*.23,W*.53,15):[[-L*.53,W*.23],[-L*.39,W*.18],[L*.20,W*.20],[L*(small?.20:enemy?.30:.35),W*(small?.30:.34)],[L*.1,W*(small?.60:.47)],[-L*.47,W*.49],[-L*.57,W*.38]];
+		prism(body.map(function(p){return [p[0],p[1]*sign];}),5,short?38:29,enemy?top:short?t.dark:top,side);
+		const prow=short?octagon(L*.04,L*.52,W*.18,W*.39,13):pulp?[[-L*.18,W*.26],[L*.19,W*.18],[L*.38,W*.24],[L*.17,W*.42],[-L*.26,W*.42]]:[[-L*.03,W*.18],[L*.40,W*.09],[L*(small?.53:enemy?.48:.59),W*.1],[L*.36,W*(enemy?.39:.33)],[L*.04,W*.34]];
+		prism(prow.map(function(p){return [p[0],p[1]*sign];}),24,40,top,side);
+		const stripe=[[-L*.01,W*.21],[L*.08,W*.20],[L*.11,W*.33],[L*.02,W*.34]].map(function(p){return [p[0],p[1]*sign];});
+		plate(stripe,short?45:41,accent);
+		// Armored engine blocks and large, legible drive apertures.
+		prism(octagon(-L*.56,-L*.38,W*.22,W*.49,small?4:8).map(function(p){return [p[0],p[1]*sign];}),6,34,side,t.dark);
+		const engX=-L*.563, engY=sign*W*.355;
+		if(Math.cos(angle)+Math.sin(angle)<-.01) face([[engX,engY-W*.065,12],[engX,engY+W*.065,12],[engX,engY+W*.065,27],[engX,engY-W*.065,27]],emitter,3);
+		const jet=short?[[engX,engY-W*.065,20],[engX-32,engY-W*.075,20],[engX-64,engY,20],[engX-32,engY+W*.075,20],[engX,engY+W*.065,20]]:[[engX,engY-W*.07,20],[engX-85,engY,20],[engX,engY+W*.07,20]];
+		engines+=poly(jet.map(function(p){return P(...p);}),emitter,t.ink,t.line);
+		engines+='<g class="flame-core">'+poly([[engX,engY-W*.035,20],[engX-47,engY,20],[engX,engY+W*.035,20]].map(function(p){return P(...p);}),t.light,'none')+'</g>';
+		// Six paired barrels per broadside remain visible at close range.
+		for(let i=0;i<(small?4:6);i++) {
+			const x=L*(.28-i*(small?.15:.118)), y=sign*W*.405;
+			const size=small?12:17;
+			prism(octagon(x-size*.65,x+size*.65,y-size*.62,y+size*.62,short?6:3),short?34:29,short?48:40,enemy?side:short?t.accent:t.side,t.dark);
+			for(const offset of (distant?[0]:[-size*.26,size*.26])) {
+				const a=P(x+offset,y+sign*size*.35,short?43:35), b=P(x+offset,y+sign*(size*.4+W*.095),short?43:35);
+				const markup=line(a,b,t.ink,(distant?9:7.2)*scale)+line(a,b,top,(distant?4.5:3.5)*scale)+circle(round(b[0]),round(b[1]),Math.max(1.3,2.2*scale),t.ink);
+				faces.push({depth:P(x,y,0)[1]+16*scale,height:short?49:41,markup});
+			}
+		}
+		for(let i=0;i<3;i++) {
+			const x=-L*.40+i*L*.045;
+			plate([[x,sign*W*.22],[x+4,sign*W*.22],[x+4,sign*W*.30],[x,sign*W*.30]],short?41:32,t.accent);
+		}
+	}
+	const spine=short?octagon(-L*.35,L*.35,-W*.13,W*.13,14):pulp?[[-L*.46,-W*.13],[-L*.30,-W*.21],[L*.29,-W*.13],[L*.62,0],[L*.29,W*.13],[-L*.30,W*.21],[-L*.46,W*.13]]:[[-L*.40,0],[-L*.32,-W*.12],[L*.24,-W*.09],[L*.43,0],[L*.24,W*.09],[-L*.32,W*.12]];
+	prism(spine,31,49,top,side);
+	plate([[-L*.31,-W*.023],[L*.24,-W*.023],[L*.29,0],[L*.24,W*.023],[-L*.31,W*.023]],50,enemy?t.accent:t.dark);
+	plate([[-L*.29,-W*.016],[-L*.13,-W*.016],[-L*.13,W*.016],[-L*.29,W*.016]],51,emitter);
+	prism([[-L*.08,-W*.085],[L*.065,-W*.085],[L*.14,-W*.038],[L*.14,W*.038],[L*.065,W*.085],[-L*.08,W*.085],[-L*.115,0]],49,60,top,t.dark);
+	if(Math.cos(angle)+Math.sin(angle)>.01) face([[L*.14,-W*.030,54],[L*.14,W*.030,54],[L*.14,W*.030,58],[L*.14,-W*.030,58]],emitter,1.5);
+	// An inset bow emitter suggests the existing lance without a naval deck.
+	if(Math.cos(angle)+Math.sin(angle)>.01) face([[L*.57,-W*.055,10],[L*.57,W*.055,10],[L*.57,W*.055,21],[L*.57,-W*.055,21]],t.accent,2);
+	if(commandHull) {
+		for(const sign of [-1,1]) {
+			prism(octagon(-L*.26,-L*.16,sign*W*.11-5,sign*W*.11+5,3),48,67,t.accent,side);
+		}
+	}
+	// Two sparse seams and a faction stripe replace repetitive armor texture.
+	if(!distant) {
+		for(const sign of [-1,1]) {
+			for(const x of [.16,.32]) {
+				detail+=line(P(L*x,sign*W*.15,40.5),P(L*(x-.025),sign*W*.29,40.5),side,1.2);
+			}
+		}
+		const idAt=P(L*.24,W*.26,41);
+		detail+=text(enemy?commandHull?'01':'12':'07',round(idAt[0]),round(idAt[1]),Math.max(7,8*scale),t.dark,900,'text-anchor="middle" transform="rotate(-30 '+round(idAt[0])+' '+round(idAt[1])+')"');
+	}
+	if(damage) {
+		const scar=[[L*.22,W*.17,41],[L*.25,W*.18,41],[L*.23,W*.21,41],[L*.27,W*.24,41],[L*.23,W*.25,41],[L*.20,W*.21,41]];
+		detail+=poly(scar.map(function(p){return P(...p);}),t.ink,'none');
+		detail+=line(P(L*.22,W*.19,42),P(L*.24,W*.23,42),t.accent,1.6);
+	}
+	if(pulp) {
+		for(let i=0;i<6;i++) {
+			const x=L*(-.20+i*.037), y=W*(.21-(x/L+.30)/.59*.08);
+			detail+=line(P(x,y,56),P(x-6,y+2,46),t.ink,1.5);
+		}
+	}
+	faces.sort(function(a,b){return a.height-b.height||a.depth-b.depth;});
+	return '<g>'+engines+faces.map(function(f){return f.markup;}).join('')+detail+'</g>';
+};
+
+const stars = function(t,w,h) {
+	let out='';
+	for(let i=0;i<95;i++) { const x=((i*197.3+77)%w), y=((i*i*37.1+19)%h); out+=circle(round(x),round(y),i%9===0?1.8:1,t.id==='b'?'#c9a7ae':'#7b9ba7'); }
+	for(const p of [[102,170],[764,103],[1090,510],[212,425]]) out+=path('M'+(p[0]-5)+' '+p[1]+'h10 M'+p[0]+' '+(p[1]-5)+'v10','none',t.id==='b'?t.accent:t.side,1.3);
+	return out;
+};
+const backdrop = function(t,w=1200,h=690) {
+	let out=rect(0,0,w,h,t.sky);
+	if(t.id==='a') out+=path('M0 510 Q280 210 670 310 T1200 80 L1200 390 Q900 515 560 460 T0 690Z',t.cloud);
+	if(t.id==='b') out+=path('M0 480 L290 410 700 180 1200 100 1200 265 800 310 370 610 0 680Z',t.cloud);
+	if(t.id==='c') out+=path('M0 530 C130 390 170 470 310 380 S440 260 620 330 850 280 1200 220 L1200 690 0 690Z',t.cloud);
+	out+=stars(t,w,h);
+	const px=w*.94,py=80,pr=w*.19;
+	out+=circle(px,py,pr,t.planet,t.ink,t.line);
+	out+='<clipPath id="planet-'+t.id+'"><circle cx="'+px+'" cy="'+py+'" r="'+pr+'"/></clipPath><g clip-path="url(#planet-'+t.id+')">';
+	out+=path('M'+(px-pr*.65)+' '+(py-pr)+' Q'+(px+pr*.1)+' '+py+' '+(px-pr*.40)+' '+(py+pr)+' L'+(px+pr+10)+' '+(py+pr+10)+' V'+(py-pr-10)+'Z',t.planetShade);
+	out+=path('M'+(px-pr)+' '+(py+33)+' Q'+px+' '+(py-25)+' '+(px+pr)+' '+(py+30),'none',t.sky,18);
+	out+=path('M'+(px-pr)+' '+(py+80)+' Q'+px+' '+(py+25)+' '+(px+pr)+' '+(py+72),'none',t.planetShade,8);
+	if(t.id==='b') for(let y=0;y<300;y+=10) for(let x=940;x<1200;x+=10) out+=circle(x,y,1.2,t.sky);
+	out+='</g>';
+	if(t.id==='c') out+='<ellipse cx="'+px+'" cy="'+(py+10)+'" rx="'+(pr*1.36)+'" ry="34" transform="rotate(-16 '+px+' '+(py+10)+')" fill="none" stroke="'+t.planet+'" stroke-width="16"/>';
+	return out;
+};
+const rock = function(t,x,y,s=1) { return '<g transform="translate('+x+' '+y+') scale('+s+')">'+poly([[-32,-12],[-13,-29],[18,-24],[36,1],[17,26],[-17,23],[-36,7]],t.planet,t.ink,t.line)+poly([[-32,-12],[-13,-29],[18,-24],[5,-3],[-8,8]],t.cloud,t.ink,1.2)+poly([[-8,8],[5,-3],[36,1],[17,26],[-17,23]],t.planetShade,t.ink,1.2)+'</g>'; };
+const burst = function(t,x,y,r) {
+	if(t.id==='c') return '<g class="impact">'+circle(x,y,r,t.accent,t.ink,3)+circle(x-r*.4,y+r*.1,r*.65,t.accent,t.ink,3)+circle(x+r*.45,y-r*.1,r*.7,t.accent,t.ink,3)+circle(x,y,r*.60,t.light)+circle(x,y,r*1.7,'none',t.accent,3)+'</g>';
+	const ps=[]; const count=t.id==='b'?18:12;
+	for(let i=0;i<count;i++) { const a=i/count*Math.PI*2, radius=i%2===0?r:r*.47; ps.push([x+Math.cos(a)*radius,y+Math.sin(a)*radius]); }
+	return '<g class="impact">'+poly(ps,t.accent,t.ink,t.line)+poly(ps.map(function(p){return [x+(p[0]-x)*.58,y+(p[1]-y)*.58];}),t.light,'none')+'</g>';
+};
+const key = function(value,x,y,t) { return rect(x,y,23,23,t.id==='a'?t.dark:t.ink,'none',t.id==='c'?7:3)+text(value,x+11.5,y+16,13,t.light,800,'text-anchor="middle"'); };
+const panel = function(t,x,y,w,h) { return rect(x+3,y+5,w,h,t.ink,'none',t.id==='c'?17:4)+rect(x,y,w,h,t.hud,t.ink,t.id==='c'?17:t.id==='a'?6:2,t.line); };
+const command = function(t,x,y,w,name,shortcut,state,fill=1) {
+	return panel(t,x,y,w,50)+key(shortcut,x+9,y+9,t)+text(name,x+39,y+20,13,t.text,800)+text(state,x+39,y+37,11,t.muted,600)+rect(x+10,y+44,w-20,3,t.id==='a'?t.dark:t.side,'none',1)+rect(x+10,y+44,(w-20)*fill,3,t.id==='a'?t.engine:t.dark,'none',1);
+};
+const hud = function(t) {
+	let out=panel(t,24,24,280,84)+label('LYRA PASSAGE / 02 OF 05',40,47,t)+text('CROSSFIRE',40,73,25,t.text,900)+text('Break the flanking patrol.',40,94,13,t.muted,500);
+	out+=panel(t,1070,24,106,37)+text('Ⅱ   PAUSE',1085,48,13,t.text,800);
+	out+=panel(t,24,566,243,100)+label('CSV–07 / HEAVY CRUISER',40,588,t)+text('82',40,629,42,t.text,900)+text('% HULL',101,625,13,t.muted,800)+rect(40,644,175,7,t.id==='a'?t.dark:t.side,'none',3)+rect(40,644,143,7,t.id==='a'?t.engine:t.dark,'none',3)+text('PD AUTO',191,624,10,t.text,800);
+	const cmds=[['PORT','Q','READY',1],['STBD','E','RELOAD 4.2s',.44],['TORPEDO','T','NO BOW LOCK',1],['LANCE','C','READY',1],['MISSILES','V','READY',1],['AEGIS','F','READY',1]];
+	cmds.forEach(function(c,i){out+=command(t,282+i*151,566,141,c[0],c[1],c[2],c[3]);});
+	out+=panel(t,282,629,894,37)+text('W / S  THROTTLE  ½',297,653,12,t.text,700)+text('A / D  STEER',478,653,12,t.text,700)+text('X  COAST',616,653,12,t.text,700)+text('SPACE  ARMOR',733,653,12,t.text,700)+text('G  CREWS: MANUAL',905,653,12,t.text,700)+text('R  TARGET',1081,653,12,t.text,700);
+	return out;
+};
+const target = function(t,x,y) {
+	const c=t.id==='b'?t.light:t.accent;
+	return path('M'+(x-104)+' '+(y-72)+'h-16v20 M'+(x+104)+' '+(y-72)+'h16v20 M'+(x-104)+' '+(y+50)+'h-16v-20 M'+(x+104)+' '+(y+50)+'h16v-20','none',c,2.6)+text('PRIORITY / CRUISER',x,y-90,13,c,800,'text-anchor="middle" letter-spacing="1"')+rect(x-46,y+69,92,5,t.ink)+rect(x-46,y+69,57,5,t.hostile)+text('640 M',x,y+93,11,c,700,'text-anchor="middle"');
+};
+const combat = function(t) {
+	let out=backdrop(t)+rock(t,87,437,1.1)+rock(t,170,501,.35)+rock(t,1087,320,.5);
+	out+=cruiser(t,774,168,.60,Math.PI/2,true,true);
+	
+	out+='<ellipse cx="517" cy="388" rx="187" ry="86" fill="none" stroke="'+t.side+'" stroke-width="1.5" stroke-dasharray="5 11"/>';
+	
+	out+=cruiser(t,500,348,1.02,-Math.PI/2,false,false,false);
+	out+=cruiser(t,930,420,.67,Math.PI/2,true,false,false);
+	
+	out+='<g class="salvo">';
+	for(let i=0;i<3;i++) {
+		const a=[597+i*25,370-i*14], b=[820+i*18,461-i*16];
+		out+=line(a,b,t.ink,t.id==='b'?10:7)+line(a,b,t.accent,t.id==='b'?5:3.6)+line([a[0]+26,a[1]+10],[b[0]-9,b[1]-4],t.light,1.3);
+	}
+	out+='</g>'+burst(t,860,433,t.id==='b'?34:26);
+	out+=text('CSV–07',468,482,12,t.engine,800,'letter-spacing="2"');
+	if(t.id==='b') out+=path('M820 485l-34 14 M814 461l-40 1 M838 499l-15 25','none',t.accent,3);
+	out+=rect(700,230,115,28,t.hud,t.ink,5)+text('INCOMING',714,249,12,t.hostile,800)+path('M713 266 L688 292','none',t.hostile,1.8,'stroke-dasharray="5 6"');
+	out+=path('M695 320l14 -22 1 28','none',t.engine,2.5)+rect(722,299,99,26,t.hud,t.ink,5)+text('HEADING',733,317,11,t.engine,700);
+	out+=rect(854,289,207,31,t.hud,t.ink,5)+text('PRIORITY / CRUISER',867,310,13,t.accent,800)+line([955,320],[955,344],t.accent,1.5);
+	out+=path('M797 351h-12v20 M1081 351h12v20 M797 486h-12v-20 M1081 486h12v-20','none',t.accent,2)+rect(884,502,92,5,t.ink)+rect(884,502,57,5,t.hostile)+text('640 M',930,525,12,t.accent,700,'text-anchor="middle"');
+	out+=hud(t);
+	return {w:1200,h:690,art:out,description:t.name+' combat mockup: an outlined capital starship firing its starboard broadside at an enemy cruiser, with the existing weapons shown in a compact HUD.'};
+};
+const detail = function(t) {
+	let out=backdrop(t)+label('CSV–07 / ART DIRECTION STUDY',35,45,{...t,muted:t.light});
+	out+=cruiser(t,443,390,1.50,-Math.PI/2,false,false,false);
+	out+=text('CSV–07 / REFINED',825,148,26,t.light,900)+text('The approved silhouette, resolved.',825,174,16,t.side,500);
+	const facts=t.id==='a'?[['01','CONTINUOUS ARMOR','A supported keel and shallow bridge.'],['02','PURPOSEFUL HARDWARE','Recessed drives; short rail barrels.'],['03','QUIET COLOR PLANES','Sparse seams and a painted hull ID.']]:t.id==='b'?[['01','CUT-PAPER ARMOR','Long wedges and deep shadows.'],['02','HEAVY OUTER INK','Sparse hatching, decisive edges.'],['03','PUNCHY COMBAT','Starbursts and graphic streaks.']]:[['01','CHUNKIER PROPORTIONS','Shorter hull; oversized engines.'],['02','ROUND-EDGED ARMOR','Thick ink and enamel blocks.'],['03','SOFTER EFFECTS','Puffs, rings, and stubby jets.']];
+	facts.forEach(function(f,i){const y=243+i*99; out+=circle(843,y-5,17,t.accent,t.ink,2)+text(f[0],843,y,12,t.ink,900,'text-anchor="middle"')+text(f[1],873,y,15,t.light,800)+text(f[2],825,y+29,14,t.side,600);});
+	out+=text('Broadside batteries · enclosed pressure hull · twin drives',35,642,16,t.light,600)+text('Orthographic ship study / illustrative geometry',35,666,12,t.side,500);
+	return {w:1200,h:690,art:out,description:t.name+' cruiser close-up, showing flat shaded hull plates, dark outlines, paired engines, enclosed spine, and broadside gun housings.'};
+};
+const titleScene = function(t) {
+	let out=backdrop(t)+cruiser(t,860,385,1.35,-Math.PI/2);
+	out+=label('THE LYRA PASSAGE',42,68,{...t,muted:t.accent});
+	const titleFont=t.id==='b'?'Georgia, serif':'Arial, Helvetica, sans-serif';
+	out+='<g '+(t.id==='b'?'transform="skewX(-6) translate(12 0)"':'')+'><text x="40" y="190" fill="'+t.ink+'" font-family="'+titleFont+'" font-size="103" font-weight="900" stroke="'+t.ink+'" stroke-width="9" letter-spacing="-6">DREAD</text><text x="36" y="184" fill="'+t.light+'" font-family="'+titleFont+'" font-size="103" font-weight="900" letter-spacing="-6">DREAD</text><text x="40" y="291" fill="'+t.ink+'" font-family="'+titleFont+'" font-size="103" font-weight="900" stroke="'+t.ink+'" stroke-width="9" letter-spacing="-5">WAKE</text><text x="36" y="285" fill="'+t.accent+'" font-family="'+titleFont+'" font-size="103" font-weight="900" letter-spacing="-5">WAKE</text></g>';
+	out+=text('One ship. Five sectors. Bring it home.',42,335,20,t.light,600);
+	out+=rect(46,386,326,55,t.ink,'none',t.id==='c'?16:3)+rect(42,380,326,55,t.accent,t.ink,t.id==='c'?16:3,3)+text('BEGIN CAMPAIGN',62,414,19,t.ink,900)+text('→',332,414,22,t.ink,900);
+	out+=panel(t,42,452,157,49)+text('Flight school',62,483,16,t.text,700)+panel(t,211,452,157,49)+text('Settings',245,483,16,t.text,700);
+	out+=text('Keyboard · Controller · Touch',42,537,13,t.side,600);
+	out+=line([42,600],[1157,600],t.side,1);
+	['OUTER PICKET','CROSSFIRE','HEAVY ESCORT','THE HAMMER','DREADWAKE'].forEach(function(name,i){ const x=54+i*235; out+=circle(x,631,7,i===0?t.accent:t.sky,t.side,2)+text('0'+(i+1),x+19,635,12,t.accent,800)+text(name,x+19,658,12,t.light,700); if(i<4) out+=line([x+45,631],[x+211,631],t.side,1); });
+	return {w:1200,h:690,art:out,description:t.name+' title-screen concept with a large Dread Wake wordmark, campaign and training menu choices, five-sector route, and a close view of the cruiser.'};
+};
+const touchScene = function(t) {
+	let out=backdrop(t,430,780);
+	out+=panel(t,12,13,267,61)+label('02 / 05 · CROSSFIRE',25,36,t)+text('Break the flanking patrol.',25,58,14,t.text,700);
+	out+=panel(t,366,13,51,48)+text('Ⅱ',384,45,23,t.text,900);
+	out+=panel(t,12,88,148,46)+text('HULL  82%',23,108,16,t.text,800)+rect(23,118,113,5,t.dark)+rect(23,118,93,5,t.id==='a'?t.engine:t.dark);
+	out+=cruiser(t,220,298,.68,-Math.PI/2,false,false,true)+cruiser(t,328,429,.33,Math.PI/2,true);
+	out+='<g class="salvo">'+line([245,319],[310,404],t.ink,7)+line([245,319],[310,404],t.accent,3)+'</g>'+burst(t,313,405,16);
+	out+=text('PRIORITY · 640 M',295,486,11,t.accent,800,'text-anchor="middle"');
+	out+=command(t,12,521,197,'PORT','Q','READY')+command(t,222,521,196,'STARBOARD','E','4.2s',.44);
+	const names=[['TORPEDO','T','NO LOCK'],['LANCE','C','READY'],['MISSILES','V','READY'],['ARMOR','◆','HOLD'],['AEGIS','F','READY'],['CREWS','G','MANUAL']];
+	names.forEach(function(n,i){out+=command(t,12+(i%3)*139,583+Math.floor(i/3)*60,127,n[0],n[1],n[2]);});
+	out+=panel(t,12,708,406,58);
+	[['↶',23],['−',87],['COAST',151],['+',251],['↷',315]].forEach(function(p){out+=rect(p[1],716,p[0]==='COAST'?90:55,42,t.id==='a'?t.dark:t.side,t.ink,9,1.5)+text(p[0],p[1]+(p[0]==='COAST'?45:27.5),743,p[0]==='COAST'?12:23,t.text,800,'text-anchor="middle"');});
+	out+=text('DRIVE ½  ·  TAP A SHIP TO PRIORITIZE',215,506,10,t.light,700,'text-anchor="middle"');
+	return {w:430,h:780,art:out,description:t.name+' portrait touch-layout study: clear central battlefield, large port and starboard buttons, all four weapon systems, armor, Aegis, auto crews, and helm controls.'};
+};
+
+const fleetScene = function(t) {
+	let out=rect(0,0,1200,730,t.sky)+label('FLEET FAMILY / SAME ART SCALE',32,39,{...t,muted:t.light});
+	const cells=[{x:300,y:190,name:'CSV–07',sub:'Player · long split bow / six paired mounts',kind:'player',enemy:false,small:false},{x:900,y:190,name:'FRIGATE',sub:'Hostile · narrow spine / swept shoulders',kind:'frigate',enemy:true,small:true},{x:300,y:525,name:'CRUISER',sub:'Hostile · blunt prow / broad battery shoulders',kind:'cruiser',enemy:true,small:false},{x:900,y:525,name:'COMMAND',sub:'Hostile · raised aft crown / amber accents',kind:'command',enemy:true,small:false}];
+	out+=line([600,65],[600,710],t.dark,1)+line([24,379],[1176,379],t.dark,1);
+	cells.forEach(function(c){out+=cruiser(t,c.x,c.y,.85,-Math.PI/2,c.enemy,c.small,false,c.kind)+text(c.name,c.x-250,c.y+152,20,t.light,800)+text(c.sub,c.x-250,c.y+176,14,t.muted,500);});
+	return {w:1200,h:730,art:out,description:'Cel Fleet lineup at equal art scale: player cruiser, narrow hostile frigate, broad hostile cruiser, and command cruiser with paired aft crown.'};
+};
+const anglesScene = function(t) {
+	let out=rect(0,0,1200,730,t.sky)+label('CONSTRUCTION / OPPOSITE QUARTERS',32,39,{...t,muted:t.light});
+	out+=cruiser(t,337,321,1.05,-Math.PI/2)+cruiser(t,869,361,1.05,Math.PI/2);
+	out+=text('DRIVE QUARTER',55,516,20,t.light,800)+text('Recessed mint apertures, collars, continuous keel.',55,547,15,t.muted,500);
+	out+=text('BOW QUARTER',671,516,20,t.light,800)+text('Bridge visor, emitter, supported armor faces.',671,547,15,t.muted,500);
+	out+=line([32,588],[1168,588],t.dark,1)+text('BATTLE-SCALE READ',40,625,13,t.accent,800);
+	['player','frigate','cruiser','command'].forEach(function(kind,i){out+=cruiser(t,385+i*222,659,.32,-Math.PI/2,kind!=='player',kind==='frigate',false,kind)+text(kind.toUpperCase(),385+i*222,709,11,t.muted,700,'text-anchor="middle"');});
+	return {w:1200,h:730,art:out,description:'Opposite-quarter player cruiser views and small-scale fleet silhouettes, showing attached engine collars and front visor.'};
+};
+const statesScene = function(t) {
+	let out=rect(0,0,1200,730,t.sky)+label('HULL STATES / ONE CONSISTENT MATERIAL LANGUAGE',32,39,{...t,muted:t.light});
+	for(const [i,name] of ['CLEAN ARMOR','PERSISTENT DAMAGE','AEGIS ACTIVE'].entries()) {
+		const x=208+i*398;
+		if(i===2) out+='<ellipse cx="'+x+'" cy="265" rx="178" ry="137" fill="'+t.engine+'" fill-opacity=".06" stroke="'+t.engine+'" stroke-width="3"/><path d="M'+(x-127)+' 180 Q'+x+' 80 '+(x+127)+' 180" fill="none" stroke="'+t.engine+'" stroke-width="2" stroke-dasharray="9 12"/>';
+		out+=cruiser(t,x,292,.66,-Math.PI/2,false,false,i===1)+text(name,x,423,16,t.light,800,'text-anchor="middle"');
+		out+=text(['Large uninterrupted planes.','A dark scar on a free armor plate.','Clear rim; the hull stays visible.'][i],x,452,14,t.muted,500,'text-anchor="middle"');
+	}
+	out+=line([32,493],[1168,493],t.dark,1)+text('EFFECT SHAPES',40,535,14,t.accent,800);
+	out+=line([66,584],[252,584],t.ink,10)+line([66,584],[252,584],t.accent,5)+line([100,584],[252,584],t.light,2)+burst(t,277,584,23)+text('RAIL / STREAK + ANGULAR IMPACT',40,669,12,t.muted,700);
+	out+=path('M443 608 Q482 564 540 579','none',t.side,4)+poly([[529,571],[558,577],[535,586]],t.top,t.ink,2)+poly([[527,577],[511,580],[528,583]],t.accent,t.ink,1)+text('MISSILE / CURVED TRAIL',423,669,12,t.muted,700);
+	out+=line([798,584],[1128,584],t.dark,19)+line([798,584],[1128,584],t.engine,12)+line([798,584],[1128,584],t.light,4)+text('LANCE / CONTINUOUS MINT CORE',791,669,12,t.muted,700);
+	return {w:1200,h:730,art:out,description:'Clean, scarred, and shielded Cel Fleet cruiser with rail, missile, and beam effect shape studies. Illustrative states, not live simulation.'};
+};
+
+const views = {combat:combat,detail:detail,fleet:fleetScene,angles:anglesScene,states:statesScene,title:titleScene,touch:touchScene};
+const gallery=document.getElementById('studies');
+if(!gallery) throw new Error('Missing art study gallery');
+themes.slice(0,1).forEach(function(t) {
+	const section=document.createElement('section'); section.className='study'; section.setAttribute('aria-labelledby','heading-'+t.id);
+	section.innerHTML='<div class="heading"><span class="letter">OPTION '+t.id.toUpperCase()+'</span><h2 id="heading-'+t.id+'">'+t.name+'</h2><span class="badge">'+t.badge+'</span></div><p class="summary">'+t.summary+'</p><div class="toolbar"><div class="views" role="group" aria-label="'+t.name+' views"></div><button class="motion" type="button">Replay salvo</button></div><div class="viewport"></div><div class="notes"><p>Motion direction: '+t.note+'</p><span class="swatches" aria-label="'+t.name+' palette">'+t.swatches.map(function(c){return '<i style="background:'+c+'"></i>';}).join('')+'</span></div>';
+	gallery.append(section);
+	const viewport=section.querySelector('.viewport'), controls=section.querySelector('.views'), motion=section.querySelector('.motion');
+	if(!viewport||!controls||!motion) throw new Error('Incomplete study');
+	const draw=function(view) {
+		const renderer=views[view]; if(typeof renderer!=='function') return;
+		const scene=renderer(t); viewport.classList.toggle('phone',view==='touch');
+		viewport.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+scene.w+' '+scene.h+'" role="img" aria-labelledby="scene-'+t.id+'"><title id="scene-'+t.id+'">'+scene.description+'</title>'+scene.art+'</svg>';
+		controls.querySelectorAll('button').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.view===view));});
+		motion.hidden=view!=='combat'&&view!=='touch';
+	};
+	[['detail','Cruiser'],['fleet','Fleet'],['angles','Angles & scale'],['states','Damage & effects'],['combat','Combat'],['title','Title'],['touch','Touch']].forEach(function(pair) {
+		const button=document.createElement('button'); button.type='button'; button.textContent=pair[1]; button.dataset.view=pair[0]; button.setAttribute('aria-pressed','false'); button.addEventListener('click',function(){draw(pair[0]);}); controls.append(button);
+	});
+	motion.addEventListener('click',function(){viewport.classList.remove('replay'); void viewport.getBoundingClientRect(); viewport.classList.add('replay');});
+	draw('detail');
+});
+</script>
+</body>
+</html>

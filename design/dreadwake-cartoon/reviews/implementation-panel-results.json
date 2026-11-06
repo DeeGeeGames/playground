@@ -1,0 +1,105 @@
+{
+  "scope": "Approved Cel Fleet production overhaul: Three.js ships, shared weapon effects, Canvas fallback, battlefield, responsive HUD and menus.",
+  "threshold": 8.5,
+  "scale": 10,
+  "rounds": 3,
+  "reviewers": [
+    {
+      "role": "Art direction",
+      "agent": "/root/art_direction",
+      "round1Overall": 8.4,
+      "round2": "Provisional 8.6; held final approval after peer discussion identified occluded cannon shafts.",
+      "final": {
+        "overall": 8.6,
+        "design": 8.6,
+        "style": 8.8,
+        "polish": 8.5,
+        "cohesion": 8.7,
+        "effectsReadability": 8.6,
+        "interfaceReadability": 8.5
+      },
+      "feedback": "Quiet armor planes, cleaner drive apertures and differentiated classes retain the approved direction. Final offset restores compact cannon shafts between pods and caps."
+    },
+    {
+      "role": "Visual polish",
+      "agent": "/root/polish",
+      "round1Overall": 8.2,
+      "round2": "Polish 8.4; final blocker was cannon shafts disappearing into turret outlines.",
+      "final": {
+        "overall": 8.6,
+        "design": 8.6,
+        "style": 8.8,
+        "polish": 8.5,
+        "cohesion": 8.7,
+        "readability": 8.5
+      },
+      "feedback": "Lighter seams, clean engine rims, clearer contour hierarchy and compact HUD resolve earlier issues. Final short cannon exposure clears the remaining blocker. Small landscape remains dense but controls do not overlap."
+    },
+    {
+      "role": "Cohesion and readability",
+      "agent": "/root/cohesion",
+      "round1Overall": 8.2,
+      "round2": "8.6; rechecked the peer-requested cannon correction in round 3.",
+      "final": {
+        "overall": 8.6,
+        "design": 8.7,
+        "style": 8.8,
+        "polish": 8.5,
+        "cohesion": 8.7,
+        "readability": 8.5
+      },
+      "feedback": "Shared solid fills and ink connect ships, weapon families, shields, damage, battlefield and HUD. Refreshed Canvas fallback removes duplicate off-field contact names while retaining arrows and ranges."
+    }
+  ],
+  "peerDiscussion": [
+    {
+      "round": 1,
+      "result": "All three exchanged findings. Agreed to lighten seams, clean drive apertures, improve outline hierarchy, compact status/HUD layout, relocate obscured annotations and show complete fleet/effect evidence."
+    },
+    {
+      "round": 2,
+      "result": "Polish identified occluded cannon shafts. Art independently confirmed and held final approval despite a provisional passing score. Agreed a bounded outward barrel/cap displacement, without changing hulls, lengths, counts or palette."
+    },
+    {
+      "round": 3,
+      "result": "All three personally re-inspected fresh production captures, exchanged feedback directly, and independently confirmed the final cannon repair. All final categories and overall scores meet 8.5."
+    }
+  ],
+  "evidenceSha256": {
+    "docs/evidence/dreadwake-cel/angle-angle-0.png": "ab5b3e712c22bb50c816369645b06942345e3ab3506adc9dfb6c8bf6a1b170f9",
+    "docs/evidence/dreadwake-cel/angle-angle-1.5708.png": "041dda52e8405a22460542b67acfae15a6684be664cf439f7b7a3c2b55360ae1",
+    "docs/evidence/dreadwake-cel/combat-normal.png": "37a063dcaa569562902b0ca07537157160c44c84bd820548667feeedd167ff0b",
+    "docs/evidence/dreadwake-cel/combat.png": "fb2b986793ba4b0f456fff63b07c6c4afeadb810bd1fdfe19b28245ea384f54a",
+    "docs/evidence/dreadwake-cel/damage.png": "439a72781528ecaaabd0d1ce8dba558817e0a671a798e91cd0cd67c1261420bc",
+    "docs/evidence/dreadwake-cel/fallback-live.png": "1987e104e1295747d6b7e6f0b920b85be70a2e156a1731c007fc019c6c58fd95",
+    "docs/evidence/dreadwake-cel/fallback.png": "c0c586fe21299696cb64ddf68fa8476440eba35119d251c5d71db618e983d2ba",
+    "docs/evidence/dreadwake-cel/fleet.png": "1a16100a68a312a0a2bf774daf30005c71d0e1607a17416012cbfbc52074a36d",
+    "docs/evidence/dreadwake-cel/landscape.png": "d9d32945e35d2eedf48d0957ee329619564d42d4d4a8603a0561e2b0097e2540",
+    "docs/evidence/dreadwake-cel/large-hud-settings.png": "703398ee0e5a58d2fdc6f1d6f2466861a2a69b3288ce00d5057ba22a5be25269",
+    "docs/evidence/dreadwake-cel/pause.png": "97ca60ee21baed7fdef5f63a6b4382f1ca96bf01a3b271c212b91fd0e641a2db",
+    "docs/evidence/dreadwake-cel/reduced.png": "10c5167617846057f886031bccc6b20200fb23efc5bc02d16f8e59dd30be88c9",
+    "docs/evidence/dreadwake-cel/refit.png": "3a0c8a6a526caf9e494f6aab198cd9ae9b867c8cf47af09091f03427b6ada3af",
+    "docs/evidence/dreadwake-cel/settings.png": "9ba66ce906e0faa11933f3baba8f0b0032d6f112915d94f38cdce26621ff13bb",
+    "docs/evidence/dreadwake-cel/small-landscape.png": "6582ae70549b359cadcf290446ba53979d6bab4ee2d6019a86ff444bf23c5bc7",
+    "docs/evidence/dreadwake-cel/title.png": "f868c1d8f9eb4997d24b206c5f8f6bb11fc28e3d1a89f289d8cde088d07d9300",
+    "docs/evidence/dreadwake-cel/touch.png": "cb26c4da4fd35e5aafcde8c14ff3aa828f613104e2f120604caf90e0f845bb14",
+    "docs/evidence/dreadwake-cel/weapons.png": "d94bca2a12d3c0f4868fd82e09ea2962992351d2fee926e89bbffd94849704db"
+  },
+  "validation": {
+    "fullCheck": "665 tests passed; typecheck, lint and production build passed. Typecheck/lint/build repeated after final cannon adjustment.",
+    "browser": "13 production journey assertions passed; no uncaught browser errors. See docs/evidence/dreadwake-cel/journeys.json.",
+    "coverage": [
+      "Actual title, combat, pause, settings, training, refit and saved campaign continuation",
+      "390x844 portrait, 844x390 and 568x320 landscape",
+      "Controlled real-renderer fleet, all weapon families, severe damage, shields, opposite headings and reduced motion",
+      "Simulated standard controller navigation and disconnect pause",
+      "WebGL context recovery and forced Canvas fallback"
+    ]
+  },
+  "limits": [
+    "Panel ratings are subjective visual judgments based on production screenshots and controlled renderer fixtures.",
+    "Browser checks used simulated inputs and software WebGL; physical controls, audio and hardware GPU performance were not accepted by this review.",
+    "Small 568x320 landscape remains dense."
+  ],
+  "productionImplementationAuthorized": true
+}
