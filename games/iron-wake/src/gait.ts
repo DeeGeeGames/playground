@@ -65,6 +65,9 @@ export const advanceGait = function (gait: WalkerGait, actualBody: Body, dt: num
 	const turn = angleDelta(gait.body.angle, body.angle) / dt;
 	const travelSpeed = Math.hypot(dx, dy);
 	const speed = travelSpeed + Math.abs(turn) * 23 * size;
+	// Above walking pace, cover more ground per step instead of only raising
+	// cadence. Scale by body size and cap the extension to keep limbs in reach.
+	const stepStride = stride * clamp(travelSpeed / (60 * size), 1, 3);
 	const humanoid = rig.kneeDirection === 1;
 	const travel = humanoid ? { travelSpeed } : {};
 	// Lift the first foot on the same tick as acceleration from rest. Requiring
@@ -73,7 +76,7 @@ export const advanceGait = function (gait: WalkerGait, actualBody: Body, dt: num
 	const starting = humanoid && previousSpeed <= 0.1 && travelSpeed > previousSpeed + 0.001;
 	const settling = humanoid && !starting && speed <= 0.1;
 	const needsStep = function (index: FootIndex) {
-		return distance(gait.feet[index], restFoot(body, index, size, rig)) > (settling ? 0.05 * size : 10 * size * stride)
+		return distance(gait.feet[index], restFoot(body, index, size, rig)) > (settling ? 0.05 * size : 10 * size * stepStride)
 			|| (settling && Math.abs(angleDelta(gait.feet[index].angle, body.angle)) > 0.005);
 	};
 	let swing = gait.swing;
@@ -82,7 +85,7 @@ export const advanceGait = function (gait: WalkerGait, actualBody: Body, dt: num
 		const other = preferred === 0 ? 1 : 0;
 		const index = starting || needsStep(preferred) ? preferred : other;
 		if (starting || needsStep(index)) {
-			swing = { index, from: gait.feet[index], elapsed: 0, duration: settling ? 0.24 : clamp(26 * size * stride / speed, 0.12 * stride, 0.65 * stride) };
+			swing = { index, from: gait.feet[index], elapsed: 0, duration: settling ? 0.24 : clamp(26 * size * stepStride / speed, 0.12 * stride, 0.65 * stride) };
 		}
 	}
 	if (!swing) return { ...gait, ...travel, body, motion: advanceBodyMotion(gait.motion, undefined, forwardSpeed, dt) };
