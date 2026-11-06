@@ -1,3 +1,4 @@
+import { hullMuzzle } from './effect-motion';
 import { createArsenal, prepareDraft, type Arsenal } from './arsenal';
 import { resetTurrets, updateTurretProjectiles, updateTurrets } from './turret-combat';
 import type { WeaponId } from './weapons';
@@ -18,10 +19,11 @@ export interface Battery { reload: number; remaining: number; next: number; targ
 export interface Shell extends Point {
 	vx: number; vy: number; life: number; hostile: boolean; damage: number; projectile?: 'rail' | 'torpedo' | 'missile';
 	guidance?: { target: number | undefined; turnRate?: number; speed?: number };
+	launch?: { point: Point; time: number; elevation: number; offset?: Point };
 	weaponId?: WeaponId; hitIds?: number[]; pierceRemaining?: number; blastRadius?: number; interceptionLimit?: number; fuse?: number;
 }
-export interface Effect extends Point { kind: 'muzzle' | 'impact' | 'explosion' | 'shield' | 'intercept'; life: number; duration: number; weaponId?: WeaponId; radius?: number }
-export interface BeamTrace { from: Point; to: Point; hostile: boolean; life: number; weaponId?: WeaponId }
+export interface Effect extends Point { kind: 'muzzle' | 'impact' | 'explosion' | 'shield' | 'intercept'; life: number; duration: number; weaponId?: WeaponId; radius?: number; source?: { slot: number; heading: number } | { shipId: number; forward: number; across: number; heading: number; elevation: number }; elevation?: number }
+export interface BeamTrace { from: Point; to: Point; hostile: boolean; life: number; weaponId?: WeaponId; visualFrom?: Point; elevation?: number }
 export interface DefenseTrace { from: Point; to: Point; life: number }
 export interface Wreck extends Point { angle: number; length: number; width: number; life: number }
 export const CAMPAIGN_MISSIONS = [
@@ -119,9 +121,9 @@ export const cycleTarget = function (state: State) {
 	designateTarget(state, targets[current + 1]?.id);
 };
 const approach = function (value: number, target: number, amount: number) { return value + clamp(target - value, -amount, amount); };
-const effect = function (state: State, at: Point, kind: Effect['kind']) {
+const effect = function (state: State, at: Point, kind: Effect['kind'], elevation = 24, source?: Effect['source']) {
 	const duration = kind === 'explosion' ? 1.8 : kind === 'impact' ? 0.65 : 0.32;
-	state.effects.push({ ...at, kind, life: duration, duration });
+	state.effects.push({ ...at, kind, life: duration, duration, elevation, ...(source ? { source } : {}) });
 };
 const spawnWave = function (state: State) {
 	const p = state.player;
@@ -276,7 +278,7 @@ const updateMissiles = function (state: State, fire: boolean, dt: number) {
 	rack.remaining--; rack.next += 0.16; effect(state, muzzle, 'muzzle'); state.events.push('missile');
 };
 // A beam ray stops at the first hull, sharing the swept hull geometry with rounds.
-const fireBeam = function (state: State, from: Point, angle: number, range: number, damage: number, hostile: boolean) {
+const fireBeam = function (state: State, from: Point, angle: number, range: number, damage: number, hostile: boolean, visual?: { point: Point; elevation: number }) {
 	const end = { x: from.x + Math.cos(angle) * range, y: from.y + Math.sin(angle) * range };
 	const targets: readonly Ship[] = hostile ? [state.player] : state.enemies;
 	const hit = targets.filter(function (ship) { return ship.hp > 0; })
@@ -284,14 +286,14 @@ const fireBeam = function (state: State, from: Point, angle: number, range: numb
 		.filter(function (candidate): candidate is { ship: Ship; fraction: number } { return candidate.fraction !== undefined; })
 		.sort(function (a, b) { return a.fraction - b.fraction || a.ship.id - b.ship.id; })[0];
 	const to = hit ? { x: from.x + (end.x - from.x) * hit.fraction, y: from.y + (end.y - from.y) * hit.fraction } : end;
-	state.beams.push({ from, to, hostile, life: 0.045 });
+	state.beams.push({ from, to, hostile, life: 0.045, ...(visual ? { visualFrom: visual.point, elevation: visual.elevation } : {}) });
 	if (!hit) return;
 	const reduction = hostile ? state.shield.active > 0 ? 0.15 : state.player.braced ? 0.35 : 1 : 1;
 	hit.ship.hp = Math.max(0, hit.ship.hp - damage * reduction);
 	if (hostile) state.stats.damageBlocked += damage * (1 - reduction);
 	// Sparse impact sparks keep continuous beams readable without filling the effect pool.
 	if (Math.floor(state.time * 60) % 6 === 0) {
-		effect(state, to, hostile && state.shield.active > 0 ? 'shield' : 'impact');
+		effect(state, to, hostile && state.shield.active > 0 ? 'shield' : 'impact', visual?.elevation ?? 28);
 		state.events.push(hostile ? state.shield.active > 0 ? 'shield-hit' : 'damage' : 'hit');
 	}
 };
@@ -350,11 +352,12 @@ const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 	enemy.x += enemy.vx * dt; enemy.y += enemy.vy * dt;
 	if ((enemy.beamRemaining ?? 0) > 0) {
 		enemy.beamRemaining = Math.max(0, (enemy.beamRemaining ?? 0) - dt);
-		fireBeam(state, { x: enemy.x, y: enemy.y }, enemy.beamHeading ?? bearing, 1400, 62 * dt, true);
+		fireBeam(state, { x: enemy.x, y: enemy.y }, enemy.beamHeading ?? bearing, 1400, 62 * dt, true, { point: hullMuzzle(enemy, enemy.beamHeading ?? bearing).point, elevation: 24 * (enemy.length > 150 ? 1 : 0.75) });
 	} else if (enemy.warning > 0) {
 		enemy.warning -= dt;
 		if (enemy.warning <= 0) {
 			const angle = Math.atan2(enemy.aim.y - enemy.y, enemy.aim.x - enemy.x);
+			const muzzle = hullMuzzle(enemy, angle);
 			if (enemy.weapon === 'beam') {
 				enemy.beamRemaining = 1.4; enemy.beamHeading = angle; state.events.push('beam');
 			} else {
@@ -363,13 +366,13 @@ const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 				for (let i = 0; i < count; i++) {
 					const spread = angle + (i - (count - 1) / 2) * (missile ? 0.14 : 0.032);
 					state.shells.push({ x: enemy.x, y: enemy.y, vx: Math.cos(spread) * (missile ? 200 : 240),
-						vy: Math.sin(spread) * (missile ? 200 : 240), life: missile ? 6 : 4.2, hostile: true,
+						vy: Math.sin(spread) * (missile ? 200 : 240), launch: { point: muzzle.point, time: state.time, elevation: muzzle.source.elevation, offset: { x: muzzle.point.x - enemy.x, y: muzzle.point.y - enemy.y } }, life: missile ? 6 : 4.2, hostile: true,
 						damage: (missile ? enemy.kind === 'cruiser' ? 32 : 24 : enemy.kind === 'cruiser' ? 38 : 26) * (state.campaign ? 0.8 : 1),
 						...(missile ? { projectile: 'missile', guidance: { target: p.id } } as const : {}) });
 				}
 				if (missile) state.events.push('missile');
 			}
-			effect(state, enemy, 'muzzle'); enemy.cooldown = enemy.tactic === 'brawler' ? 5.5 : enemy.kind === 'cruiser' ? 8 : 10;
+			effect(state, muzzle.point, 'muzzle', muzzle.source.elevation, muzzle.source); enemy.cooldown = enemy.tactic === 'brawler' ? 5.5 : enemy.kind === 'cruiser' ? 8 : 10;
 		}
 	} else {
 		enemy.cooldown -= dt;
@@ -455,7 +458,7 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 			const shielded = shell.hostile && state.shield.active > 0;
 			const damage = shell.damage * (shielded ? 0.15 : shell.hostile && p.braced ? 0.35 : 1);
 			hit.ship.hp = Math.max(0, hit.ship.hp - damage); shell.life = 0;
-			effect(state, { x: from.x + (shell.x - from.x) * hit.fraction, y: from.y + (shell.y - from.y) * hit.fraction }, shielded ? 'shield' : 'impact');
+			effect(state, { x: from.x + (shell.x - from.x) * hit.fraction, y: from.y + (shell.y - from.y) * hit.fraction }, shielded ? 'shield' : 'impact', shell.launch?.elevation ?? 22);
 			state.events.push(shielded ? 'shield-hit' : shell.hostile ? 'damage' : 'hit'); state.shake = Math.max(state.shake, shell.hostile ? shielded ? 1 : 5 : 2);
 			if (shell.hostile) state.stats.damageBlocked += shell.damage - damage;
 			else state.stats.hits++;

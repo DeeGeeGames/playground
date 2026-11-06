@@ -1,0 +1,41 @@
+{
+  "date": "2026-11-06",
+  "productionRoute": "/games/dreadwake/",
+  "checks": {
+    "tests": 297,
+    "typecheck": "pass",
+    "lint": "pass",
+    "build": "pass"
+  },
+  "browser": {
+    "engine": "shared Chromium preview",
+    "renderers": [
+      "WebGL",
+      "Canvas fallback"
+    ],
+    "fixture": "actual game renderer functions and weapon simulation; controlled state and 60 Hz steps",
+    "productionJourney": [
+      "Seeker starter and port socket",
+      "autonomous fire and earned salvage",
+      "steering/throttle and neutral",
+      "Aegis",
+      "pause/resume with unchanged paused effects canvas",
+      "zoom limits",
+      "1300x760 desktop",
+      "390x844 portrait",
+      "667x375 landscape"
+    ],
+    "capturedRuntimeErrors": [],
+    "horizontalOverflow": false
+  },
+  "panel": {
+    "members": [
+      "motion",
+      "art",
+      "rendering correctness"
+    ],
+    "effectCategories": 16,
+    "minimumFinalRating": 9,
+    "ratingBasis": "timed browser frame sequences and source review, not human or hardware acceptance"
+  }
+}

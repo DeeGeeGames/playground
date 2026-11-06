@@ -1,3 +1,4 @@
+import { createDriveAnimator } from './effect-motion';
 import { clamp, distance, targetFor, torpedoTargetFor, type Point, type Ship, type Side, type State } from './simulation';
 import { cameraFor, worldToScreen, type Camera } from './projection';
 import { drawStarship, polygon, line } from './ship-art';
@@ -63,6 +64,7 @@ const drawHeading = function (ctx: CanvasRenderingContext2D, camera: Camera, pla
 export const createRenderer = function () {
 	const backdrop = createBackdrop();
 	const drawCombatEffects = createCombatEffectsRenderer();
+	const driveLength = createDriveAnimator();
 	return function (ctx: CanvasRenderingContext2D, width: number, height: number, state: State, reducedMotion: boolean, briefing = false, zoom = 1, heading?: number) {
 		if (width <= 0 || height <= 0) return;
 		const camera = cameraFor(width, height, state.player, zoom);
@@ -70,7 +72,7 @@ export const createRenderer = function () {
 		if (briefing) {
 			if (width > 900) {
 				const heroCamera = { ...camera, width: width * 1.46, height: height * 1.1, scale: Math.min(width / 520, height / 300, 3.1) };
-				drawStarship(ctx, heroCamera, state.player, state, reducedMotion);
+				drawStarship(ctx, heroCamera, state.player, state, reducedMotion, driveLength(state.player, state, reducedMotion));
 				label(ctx, 'CSV–07  /  DREADWAKE', { x: width * 0.73, y: height * 0.76 }, CEL.muted, 12);
 				label(ctx, '42,000 T   ·   HEAVY COMMAND CRUISER', { x: width * 0.73, y: height * 0.76 + 23 }, CEL.side, 9);
 			}
@@ -110,11 +112,11 @@ export const createRenderer = function () {
 		for (const wreck of state.wrecks) {
 			ctx.globalAlpha = Math.min(0.55, wreck.life / 12);
 			const ship: Ship = { ...wreck, id: -1, hp: 0, maxHp: 1, vx: 0, vy: 0 };
-			drawStarship(ctx, camera, ship, state, reducedMotion); ctx.globalAlpha = 1;
+			drawStarship(ctx, camera, ship, state, reducedMotion, driveLength(ship, state, reducedMotion)); ctx.globalAlpha = 1;
 		}
 		const ships: Ship[] = [...state.enemies, p];
 		ships.sort(function (a, b) { return a.x + a.y - b.x - b.y; });
-		for (const ship of ships) drawStarship(ctx, camera, ship, state, reducedMotion);
+		for (const ship of ships) drawStarship(ctx, camera, ship, state, reducedMotion, driveLength(ship, state, reducedMotion));
 		for (const ship of ships) {
 			const hull = worldToScreen(ship, camera, 20);
 			const at = { x: hull.x, y: hull.y - Math.max(34, ship.length * camera.scale * 0.54) - 12 };
