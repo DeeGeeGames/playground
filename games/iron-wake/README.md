@@ -4,13 +4,26 @@ A browser-only isometric mech-combat demo. Pilot Warden 08, an 80-ton siege
 frame, through a complete relay-defense operation. Heavy persistent throttle
 and independent turret tracking remain the core of the original prototype.
 
+**Frame Training** is a separate, unscored eight-drill range: cruise, neutral,
+turning, cannon targeting, guided missiles, heat, coolant, and artillery evasion.
+It uses the operation’s actual controls and simulation, allows safe retries,
+and starts a clean operation when you deploy. Pause can restart or exit training.
+
 ## The operation
 
 Defend Relay 09 against 39 hostiles across five assaults: **First contact**,
 **Crossfire**, **Hammerfall**, **Breaking point**, and **Iron crown**. The final
-assault includes a command frame with heavier armor and faster artillery below
-half health. Scouts close rapidly; strikers establish firing lines; siege
+assault includes Iron Crown, a command frame whose barrage widens below half
+health. Scouts close rapidly; strikers establish firing lines; siege
 frames shell the relay from outside the central yard.
+
+Siege frames turn slowly and carry frontal armor across a 120-degree arc.
+Flank them to bypass it, or attack the green **EXPOSED** window after their
+barrage for 135% damage. Their amber facing arc shows the protected side.
+Ordinary siege frames commit two delayed impacts, then expose themselves for
+3.2 seconds. Iron Crown commits repeated central impacts and two lateral
+markers, expanding to four surrounding markers below half armor, then opens
+a 4.2-second recovery window. Story uses lighter armor and single impacts.
 
 Orange ground circles mark committed artillery strikes. The impact point does
 not chase the player, giving a frame starting from neutral time to accelerate
@@ -38,6 +51,13 @@ prevent play.
 
 ## Controls
 
+Press A / cross or Menu to claim a connected standard controller. The claiming
+press is consumed; confirm again to deploy. Ownership stays with that controller
+even when another is connected. Losing it pauses the game; a replacement must
+be claimed and the operation explicitly resumed. Release sticks and triggers
+after menu transitions to arm combat controls. Inputs held while returning
+from a hidden window cannot resume the operation.
+
 | Action | Keyboard / mouse | Standard gamepad | Touch |
 | --- | --- | --- | --- |
 | Raise/lower persistent throttle | W/S or up/down | Left stick up/down | Hold +/− |
@@ -52,6 +72,12 @@ prevent play.
 | Fire selected mouse weapon | Hold left click | — | Weapon button |
 | Pause / resume | Escape | Menu | Pause |
 | Menus | Tab / Shift+Tab / Enter | D-pad or stick, A/cross confirm, B/circle back | Tap |
+
+The active input device changes weapon and menu prompts. Controller use
+automatically enables the larger interface; Settings can also enable it for
+keyboard and mouse. Vibration for recoil and damage is optional and depends on
+browser/controller support. Right-stick scrolling makes every long menu and
+handbook section accessible without a pointer.
 
 Controller left/right adjusts volume when a slider is focused; up/down moves
 between settings. Touch controls are automatic for touch-first devices and can
@@ -88,12 +114,24 @@ layered frame geometry, dynamic lighting/shadows, animated planted-foot gait,
 artillery warnings, weapon trails, and pooled effects. The briefing stages the
 same playable model in a closer camera; deployment restores normal projection.
 
+Siege frames have broad armor and dorsal artillery for a distinct silhouette.
+Committed barrages, exposed armor, player damage, and relay damage have separate
+visual cues; critical world labels enlarge with the couch interface.
+
 An original locally synthesized 96-BPM score changes its layers with combat
 intensity and uses quieter briefing/refit arrangements. Layered weapon,
 mechanical, impact, coolant, artillery, and outcome effects have separate mix
-controls. Audio starts only after a gesture and degrades gracefully if the
-audio device is unavailable. Settings include master/music/effects levels and
-reduced motion, in addition to the operating system's motion preference.
+controls. Menu actions have short feedback cues, damage briefly lowers the
+music, and footfalls follow the animated planted feet, including hull pivots.
+Audio starts after browser activation and degrades gracefully if the device
+is unavailable. If the browser requires a click or key press before accepting
+controller-triggered audio, the interface reports that state explicitly. Settings
+include master/music/effects levels and reduced motion, in addition to the
+operating system's motion preference.
+
+[Captured audio sample](./docs/demo-audio.wav): briefing music, combat, and menu
+cues from the production browser. The excerpts are concatenated without mix
+processing; this is a signal capture, not a listening-quality assessment.
 
 All gameplay geometry, surface graphics, and music are original to this demo.
 The bundled [Barlow Condensed](https://github.com/google/fonts/tree/main/ofl/barlowcondensed)
@@ -112,7 +150,13 @@ Meaningful regression coverage includes persistent throttle, swept hits,
 heat/salvage, deterministic complete operations, artillery escape/failure,
 refit freeze/one-time application, upgrade effects, difficulty, projection and
 aiming, gait, model depth, pooled resource disposal, storage corruption and
-record retention, and controller edge/disconnect behavior.
+record retention, controller ownership/reconnect, held-input recovery, and
+vibration cleanup. Training coverage includes completion, safe retry, delayed
+coolant use, and entering the evasion drill from an arena boundary.
+
+Moving heat-managed simulation policies can complete Standard and Veteran;
+the equivalent stationary policy loses. This is a balance guardrail, not a
+measurement of first-time-player difficulty.
 
 Browser verification and screenshots are recorded with the delivery PR.
 Automated controls and audio signal checks do not establish physical gamepad
@@ -122,4 +166,10 @@ included.
 
 ![Production briefing with the staged Warden frame](./docs/demo-briefing.png)
 
-![320-pixel touch layout with separate readouts, driving, and weapon controls](./docs/demo-phone.png)
+![Controller interface and guided training](./docs/demo-training.png)
+
+![Armored siege barrage and its committed impact zones](./docs/demo-barrage.png)
+
+![Iron Crown during its exposed Overdrive recovery](./docs/demo-crown.png)
+
+![320-pixel touch training layout](./docs/demo-phone.png)

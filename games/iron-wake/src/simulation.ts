@@ -2,8 +2,9 @@ import { getDifficultyDefinition, getWaveDefinition, WAVES, type Difficulty, typ
 
 export interface Point { x: number; y: number }
 export type EnemyKind = 'scout' | 'striker' | 'siege';
-export type CombatEvent = 'artillery' | 'refit' | 'cannon' | 'missile' | 'impact' | 'explosion' | 'wave' | 'pickup' | 'coolant' | 'overheat' | 'defeat' | 'victory';
-export interface Unit extends Point { id: number; hp: number; maxHp: number; angle: number; cooldown: number; heavy: boolean; kind: EnemyKind; commander?: boolean }
+export type CombatEvent = 'artillery' | 'refit' | 'cannon' | 'missile' | 'impact' | 'player-hit' | 'relay-hit' | 'explosion' | 'wave' | 'pickup' | 'coolant' | 'overheat' | 'defeat' | 'victory';
+export interface AttackCycle { phase: 'committed' | 'recovery'; remaining: number; cycle: number }
+export interface Unit extends Point { id: number; hp: number; maxHp: number; angle: number; cooldown: number; heavy: boolean; kind: EnemyKind; commander?: boolean; attack?: AttackCycle }
 export interface Shot extends Point { vx: number; vy: number; life: number; kind: 'cannon' | 'missile' | 'enemy'; target: number | undefined; damage: number }
 export interface Effect extends Point { life: number; size: number; color: string }
 export interface Salvage extends Point { id: number; kind: 'repair' | 'coolant'; life: number }
@@ -25,7 +26,7 @@ interface EnemyStats { hp: number; speed: number; range: number; reload: number;
 export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
 	scout: { hp: 48, speed: 66, range: 170, reload: 2, damage: 5, aggro: 650 },
 	striker: { hp: 76, speed: 44, range: 240, reload: 2.5, damage: 7, aggro: 440 },
-	siege: { hp: 125, speed: 28, range: 550, reload: 4.8, damage: 10, aggro: 240 },
+	siege: { hp: 125, speed: 28, range: 550, reload: 1.8, damage: 10, aggro: 650 },
 };
 export const distance = function (a: Point, b: Point) { return Math.hypot(a.x - b.x, a.y - b.y); };
 export const angleDelta = function (from: number, to: number) { return Math.atan2(Math.sin(to - from), Math.cos(to - from)); };
@@ -60,19 +61,55 @@ const hitFraction = function (from: Point, to: Point, target: Point, radius: num
 	const entry = (-b - Math.sqrt(discriminant)) / a;
 	return entry >= 0 && entry <= 1 ? entry : undefined;
 };
-const hurtEnemy = function (state: State, enemy: Unit, damage: number) {
-	state.stats.damageDealt += Math.min(Math.max(0, enemy.hp), damage);
-	enemy.hp -= damage;
+export const getEnemyDefense = function (state: State, enemy: Unit): { frontalMultiplier: number; exposed: boolean; enraged: boolean } {
+	return {
+		frontalMultiplier: enemy.kind !== 'siege' ? 1 : state.difficulty === 'story' ? 0.8 : enemy.commander ? 0.24 : 0.35,
+		exposed: enemy.kind === 'siege' && enemy.attack?.phase === 'recovery',
+		enraged: Boolean(enemy.commander) && enemy.hp < enemy.maxHp * 0.5,
+	};
+};
+const hurtEnemy = function (state: State, enemy: Unit, damage: number, from: Point) {
+	const defense = getEnemyDefense(state, enemy);
+	const frontal = Math.abs(angleDelta(enemy.angle, Math.atan2(from.y - enemy.y, from.x - enemy.x))) < Math.PI / 3;
+	const applied = damage * (defense.exposed ? 1.35 : frontal ? defense.frontalMultiplier : 1);
+	state.stats.damageDealt += Math.min(Math.max(0, enemy.hp), applied);
+	enemy.hp -= applied;
 };
 const hurtPlayer = function (state: State, damage: number) {
 	const resisted = damage * Math.max(0.6, 1 - state.upgrades.bastion * 0.1);
+	if (resisted > 0 && state.player.hp > 0) state.events.push('player-hit');
 	state.stats.damageTaken += Math.min(state.player.hp, resisted);
 	state.player.hp = Math.max(0, state.player.hp - resisted);
 	state.shake = 4;
 };
 const hurtRelay = function (state: State, damage: number) {
+	if (damage > 0 && state.relay > 0) state.events.push('relay-hit');
 	state.stats.relayDamage += Math.min(state.relay, damage);
 	state.relay = Math.max(0, state.relay - damage);
+};
+const commitBarrage = function (state: State, enemy: Unit, target: Point) {
+	const commander = Boolean(enemy.commander);
+	const enraged = getEnemyDefense(state, enemy).enraged;
+	const permissive = state.difficulty === 'story';
+	const duration = commander ? 3.2 : 2.8;
+	const radius = commander ? 82 : 62;
+	const damage = (commander ? 16 : 10) * getDifficultyDefinition(state.difficulty).enemyDamage;
+	const addStrike = function (at: Point, delay: number, size = radius) {
+		state.strikes.push({ id: state.nextId++, x: at.x, y: at.y, life: delay, duration: delay, radius: size, damage });
+	};
+	// Every marker commits now. Neither movement nor destruction of the firing
+	// frame can move or erase incoming ordnance.
+	const pulses = permissive ? 1 : commander ? 3 : 2;
+	for (let pulse = 0; pulse < pulses; pulse++) addStrike(target, duration + pulse * 0.7);
+	if (commander && !permissive) {
+		const offsets = enraged ? [-Math.PI / 2, 0, Math.PI / 2, Math.PI] : [-Math.PI / 2, Math.PI / 2];
+		for (const offset of offsets) {
+			const heading = enemy.angle + offset;
+			addStrike({ x: target.x + Math.cos(heading) * 175, y: target.y + Math.sin(heading) * 175 }, duration + 1.4, 58);
+		}
+	}
+	enemy.attack = { phase: 'committed', remaining: duration + (pulses - 1) * 0.7, cycle: enraged ? 2 : 1 };
+	state.events.push('artillery');
 };
 export const applyRefit = function (state: State, choice: RefitChoice): boolean {
 	if (state.outcome !== 'playing' || state.phase !== 'refit' || state.wave >= WAVES.length) return false;
@@ -156,7 +193,7 @@ export const step = function (state: State, input: Controls, dt: number) {
 			}).filter(function (candidate) { return candidate.along > 0 && candidate.along < reach && candidate.across < 24; }).sort(function (a, b) { return a.along - b.along; })[0];
 			const length = hit?.along ?? reach;
 			state.beam = { x: p.x + Math.cos(p.turret) * length, y: p.y + Math.sin(p.turret) * length };
-			if (hit) hurtEnemy(state, hit.enemy, 48 * dt * (1 + state.upgrades.arsenal * 0.15));
+			if (hit) hurtEnemy(state, hit.enemy, 48 * dt * (1 + state.upgrades.arsenal * 0.15), p);
 			p.heat += 44 * dt;
 		}
 	}
@@ -184,17 +221,24 @@ export const step = function (state: State, input: Controls, dt: number) {
 		if (enemy.hp <= 0) continue;
 		const stats = ENEMY_STATS[enemy.kind];
 		const target = enemy.commander || distance(enemy, p) < stats.aggro ? p : { x: ARENA.relayX, y: ARENA.relayY };
-		enemy.angle = Math.atan2(target.y - enemy.y, target.x - enemy.x);
+		if (enemy.attack) {
+			enemy.attack.remaining -= dt;
+			if (enemy.attack.remaining <= 0) {
+				if (enemy.attack.phase === 'committed') { enemy.attack.phase = 'recovery'; enemy.attack.remaining = enemy.commander ? 4.2 : 3.2; }
+				else { delete enemy.attack; enemy.cooldown = enemy.commander ? getEnemyDefense(state, enemy).enraged ? 1.2 : 2.2 : stats.reload; }
+			}
+			continue;
+		}
+		const targetAngle = Math.atan2(target.y - enemy.y, target.x - enemy.x);
+		enemy.angle = enemy.kind === 'siege' ? enemy.angle + clamp(angleDelta(enemy.angle, targetAngle), -dt * 0.65, dt * 0.65) : targetAngle;
 		const range = enemy.commander ? 690 : stats.range;
 		if (distance(enemy, target) > range) { enemy.x += Math.cos(enemy.angle) * dt * stats.speed; enemy.y += Math.sin(enemy.angle) * dt * stats.speed; }
 		enemy.cooldown -= dt;
-		if (enemy.cooldown <= 0 && distance(enemy, target) < range + 50) {
+		if (enemy.cooldown <= 0 && distance(enemy, target) < range + 50 && Math.abs(angleDelta(enemy.angle, targetAngle)) < 0.3) {
 			if (enemy.kind === 'siege') {
-				const duration = enemy.commander ? 3 : 2.8;
-				state.strikes.push({ id: state.nextId++, x: target.x, y: target.y, life: duration, duration, radius: enemy.commander ? 85 : 62, damage: (enemy.commander ? 16 : 10) * difficulty.enemyDamage });
-				state.events.push('artillery');
+				commitBarrage(state, enemy, target);
 			} else launch(state, 'enemy', enemy, enemy.angle, undefined, stats.damage * difficulty.enemyDamage);
-			enemy.cooldown = enemy.commander ? enemy.hp < enemy.maxHp * 0.5 ? 3.4 : 4.4 : stats.reload;
+			enemy.cooldown = stats.reload;
 		}
 	}
 	for (const strike of state.strikes) {
@@ -229,7 +273,7 @@ export const step = function (state: State, input: Controls, dt: number) {
 		} else {
 			const hit = state.enemies.filter(function (enemy) { return enemy.hp > 0; }).map(function (enemy) { return { enemy, entry: hitFraction(origin, shot, enemy, 25) }; }).filter(function (candidate): candidate is { enemy: Unit; entry: number } { return candidate.entry !== undefined; }).sort(function (a, b) { return a.entry - b.entry || a.enemy.id - b.enemy.id; })[0];
 			if (hit) {
-				hurtEnemy(state, hit.enemy, shot.damage); state.stats.shotsHit++; shot.life = 0;
+				hurtEnemy(state, hit.enemy, shot.damage, origin); state.stats.shotsHit++; shot.life = 0;
 				burst(state, hit.enemy, shot.kind === 'cannon' ? 45 : 32, '#ffd28b'); state.shake = 2; state.events.push('impact');
 			}
 		}

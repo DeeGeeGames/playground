@@ -1,5 +1,5 @@
 import { BoxGeometry, BufferGeometry, CircleGeometry, Color, CylinderGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Material, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, RingGeometry, Scene, SphereGeometry, Vector3 } from 'three';
-import { ARENA, type State } from './simulation';
+import { ARENA, getEnemyDefense, type State } from './simulation';
 import { mechScale } from './gait';
 import { createEnvironment } from './environment-3d';
 
@@ -93,6 +93,7 @@ export const createWorldObjects = function (scene: Scene) {
 	const wrecks: PooledObject[] = []; const salvages: ReturnType<typeof createSalvage>[] = [];
 	const warnings: PooledObject[] = []; const shots: ReturnType<typeof createShot>[] = []; const effects: ReturnType<typeof createEffect>[] = [];
 	const strikes: ReturnType<typeof createStrike>[] = [];
+	const defenses: ReturnType<typeof createDefense>[] = [];
 	const shadows: PooledObject[] = [];
 	const sync = function <T extends PooledObject>(pool: T[], count: number, create: () => T, update: (value: T, index: number) => void) {
 		while (pool.length > count) { const value = pool.pop(); value?.root.removeFromParent(); value?.dispose?.(); }
@@ -105,6 +106,17 @@ export const createWorldObjects = function (scene: Scene) {
 		const repairHalo = disc(value, repairHaloMaterial, 27); const coolantHalo = disc(value, coolantHaloMaterial, 27);
 		repairHalo.position.y = 0.06; coolantHalo.position.y = 0.06;
 		return { root: value, repairBox, coolantBox, repairHalo, coolantHalo };
+	};
+	const armorArc = geometry(new RingGeometry(0.9, 1, 32, 1, -Math.PI / 3, Math.PI * 2 / 3));
+	const armorSurface = glow('#eec58b', 0.8); const exposedSurface = glow('#a2f0d2', 0.9);
+	const committedSurface = glow('#ff8f61', 0.8);
+	const createDefense = function () {
+		const value = new Group(); value.name = 'siege-defense';
+		const shield = new Mesh(armorArc, armorSurface); shield.rotation.x = -Math.PI / 2; shield.position.y = 0.3;
+		const exposed = disc(value, exposedSurface, 1, true); exposed.position.y = 0.32;
+		const commitment = disc(value, committedSurface, 1, true); commitment.position.y = 0.34;
+		value.add(shield);
+		return { root: value, shield, exposed, commitment };
 	};
 	const enemyTrail = glow('#ff8866'); const playerTrail = glow('#ffd290'); const missileTrail = glow('#d7d6c6', 0.53);
 	const createShot = function () {
@@ -148,8 +160,20 @@ export const createWorldObjects = function (scene: Scene) {
 			if (disposed) return;
 			beaconSurface.color.set(state.relay < 30 ? '#ff865e' : '#b9fff0');
 			beacon.scale.setScalar(reducedMotion ? 4 : 4 + Math.sin(state.time * 2.4) * 0.6);
+			const siege = state.enemies.filter(function (enemy) { return enemy.kind === 'siege'; });
+			sync(defenses, siege.length, createDefense, function (value, index) {
+				const enemy = siege[index]; if (!enemy) return;
+				const defense = getEnemyDefense(state, enemy); const radius = (enemy.commander ? 67 : 56) * mechScale(enemy.kind);
+				value.root.position.set(enemy.x, 0, enemy.y); value.root.rotation.y = -enemy.angle;
+				value.shield.scale.setScalar(radius); value.shield.visible = !defense.exposed;
+				value.exposed.scale.setScalar(radius); value.exposed.visible = defense.exposed;
+				value.commitment.scale.setScalar(radius + 8); value.commitment.visible = enemy.attack?.phase === 'committed';
+			});
 			sync(wrecks, state.wrecks.length, function () {
-				const value = new Group(); value.name = 'wreck'; disc(value, shadow, 40).position.y = 0.04; box(value, dark, 0, 0, 0, 32, 29, 8); return { root: value };
+				const value = new Group(); value.name = 'wreck'; disc(value, shadow, 40).position.y = 0.04;
+				box(value, dark, 0, 0, 0, 32, 29, 8); box(value, steel, -8, 8, 0, 19, 23, 7).rotation.z = -0.2;
+				box(value, dark, 24, 0, -19, 24, 7, 5).rotation.y = 0.5; box(value, dark, -21, 0, 22, 17, 10, 4).rotation.y = -0.3;
+				return { root: value };
 			}, function (value, index) { const wreck = state.wrecks[index]; if (!wreck) return; value.root.position.set(wreck.x, 0, wreck.y); value.root.rotation.y = -wreck.angle; });
 			sync(salvages, state.salvage.length, createSalvage, function (value, index) {
 				const salvage = state.salvage[index]; if (!salvage) return;

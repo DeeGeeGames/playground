@@ -38,6 +38,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 	const enemies = new Map<number, ReturnType<typeof makeUnit>>();
 	let player: ReturnType<typeof makeUnit> | undefined;
 	let width = 1; let height = 1; let disposed = false; let previousStateTime = 0;
+	let relayHp: number | undefined; let relayHitAt = -10;
 	const dispose = async function () {
 		if (disposed) return; disposed = true;
 		try { await world.dispose(); }
@@ -72,9 +73,14 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 		resize,
 		toGround: function (point: Point) { return toGround(point, camera, width, height); },
 		toScreen: function (point: Point, elevation = 0) { return toScreen(point, camera, width, height, elevation); },
-		render: function (state: State, aim: Point, gaits: Gaits, reducedMotion: boolean, attract = false, obstructions: readonly ScreenRect[] = []) {
+		render: function (state: State, aim: Point, gaits: Gaits, reducedMotion: boolean, attract = false, obstructions: readonly ScreenRect[] = [], couchMode = false) {
 			if (disposed || width <= 0 || height <= 0) return;
-			if (state.time < previousStateTime && player) { player.damage.hp = undefined; player.damage.hitAt = -10; }
+			if (state.time < previousStateTime) {
+				if (player) { player.damage.hp = undefined; player.damage.hitAt = -10; }
+				relayHp = undefined; relayHitAt = -10;
+			}
+			if (relayHp !== undefined && state.relay < relayHp) relayHitAt = state.time;
+			relayHp = state.relay;
 			previousStateTime = state.time;
 			resize(state, width, height, reducedMotion);
 			sun.position.set(state.player.x - 420, 900, state.player.y - 500); sun.target.position.set(state.player.x, 0, state.player.y);
@@ -106,7 +112,8 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 			const positions = barrelGeometry.getAttribute('position'); const p = state.player;
 			positions.setXYZ(0, p.x, 0.25, p.y); positions.setXYZ(1, p.x + Math.cos(p.turret) * 110, 0.25, p.y + Math.sin(p.turret) * 110); positions.needsUpdate = true;
 			world.update(0);
-			drawOverlay(ctx, width, height, state, aim, { reducedMotion, showRadar: width > 700 && height > 520, gaits, camera, obstructions });
+			drawOverlay(ctx, width, height, state, aim, { reducedMotion, showRadar: width > 700 && height > 520, gaits, camera, obstructions, couchMode,
+				armorHit: Math.max(0, 1 - (state.time - (player?.damage.hitAt ?? -10)) / 0.9), relayHit: Math.max(0, 1 - (state.time - relayHitAt) / 1.6) });
 		},
 		diagnostics: function () { return { calls: renderer.info.render.calls, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures }; },
 		dispose,
