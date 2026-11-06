@@ -71,6 +71,7 @@ from a hidden window cannot resume the operation.
 | Neutral; momentum decays | X | X / square | STOP |
 | Turn hull | A/D or left/right | Left stick left/right | Turn arrows |
 | Aim independent turret | Mouse | Right stick, in screen direction | Tap battlefield |
+| Camera zoom | Mouse wheel | — | — |
 | Fire mount 1 | Left mouse / hold 1 or Space | RT / R2 | Hold mount 1 |
 | Fire mount 2 | Right mouse / hold 2 or E | LT / L2 | Hold mount 2 |
 | Fire mount 3 | Middle mouse / hold 3 or Q | RB / R1 | Hold mount 3 |
@@ -84,6 +85,11 @@ its cooldown; all mounts track the same turret and share reactor heat. The
 mouse thumb binding uses the browser's back-button input (button 3). Keyboard
 bindings provide every firing slot on mice without extra buttons. Context menus
 and middle-click actions are suppressed over the battlefield.
+
+Wheel up zooms in and wheel down zooms out, from 0.5× to 2.5×, while keeping
+the frame centered. Zoom survives pauses and viewport resizing; a new operation
+or training session restores the default view. Menus keep their normal scrolling,
+and Ctrl/Command + wheel remains available for browser zoom.
 
 The active input device changes weapon and menu prompts. Controller use
 automatically enables the larger interface; Settings can also enable it for

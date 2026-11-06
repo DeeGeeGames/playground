@@ -142,6 +142,7 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const start = function () {
 		if (contextLost) return;
+		presentation.resetZoom();
 		training = undefined;
 		state = createState({ difficulty: profile.settings.difficulty, starter, seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1 }); gaits = createGaits(state); screen = 'playing'; auxiliary = undefined;
 		aim = { x: 900, y: 450 }; pointer = undefined; message = 'WARDEN ONLINE. PROTECT RELAY 09.'; messageUntil = 5; tipDismissed = false;
@@ -149,12 +150,14 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const startTraining = function () {
 		if (contextLost) return;
+		presentation.resetZoom();
 		training = createTraining(); state = training.state; gaits = createGaits(state);
 		screen = 'playing'; auxiliary = undefined; pointer = undefined; aim = { x: 900, y: 450 };
 		message = ''; messageUntil = 0; tipDismissed = true; terminalUntil = 0;
 		audio.reset(); syncScreen(); unlockSound();
 	};
 	const toBriefing = function () {
+		presentation.resetZoom();
 		training = undefined;
 		screen = 'brief'; auxiliary = undefined; state = createState({ difficulty: profile.settings.difficulty }); gaits = createGaits(state);
 		aim = { x: 900, y: 450 }; pointer = undefined; audio.reset(); updateRecordSummary(); syncScreen();
@@ -328,6 +331,10 @@ const shutdown = await mountGame('game', async function (container) {
 		setInputMode(event.pointerType === 'touch' ? 'touch' : 'keyboard');
 	};
 	canvas.addEventListener('pointermove', updatePointer, listenerOptions);
+	canvas.addEventListener('wheel', function (event) {
+		if (!playing() || event.ctrlKey || event.metaKey) return;
+		event.preventDefault(); presentation.zoomWithWheel(event); setInputMode('keyboard');
+	}, { ...listenerOptions, passive: false });
 	canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); }, listenerOptions);
 	canvas.addEventListener('auxclick', function (event) { event.preventDefault(); }, listenerOptions);
 	canvas.addEventListener('pointerdown', function (event) {

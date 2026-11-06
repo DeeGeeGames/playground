@@ -33,6 +33,10 @@ projectiles; violet tells announce a lance that point defense cannot intercept.
 | Pause / resume | Escape | Menu / Start |
 | Menu navigation | Tab or arrows; Enter; Escape back | D-pad / left stick; A select; B back |
 
+Wheel up zooms in and wheel down zooms out, from 0.5× to 2.5×, while keeping
+the cruiser centered. Menus keep their normal scrolling, and Ctrl/Command +
+wheel remains available for browser zoom.
+
 Touch has simultaneous on-screen helm, weapons and defense controls. Standard
 Gamepad API mappings are supported. Buttons change prompts with the active input.
 Disconnecting pauses combat; reconnecting requires an explicit resume. Menu, refit,
