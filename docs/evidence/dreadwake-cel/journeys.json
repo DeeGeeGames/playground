@@ -1,0 +1,19 @@
+{
+  "results": [
+    "Flight school remains available",
+    "Escape pauses training",
+    "Settings back restores pause modal",
+    "Existing campaign schema restores refit",
+    "Refit deploy advances existing campaign",
+    "Simulated controller confirms focused Continue",
+    "Simulated controller pauses",
+    "Simulated controller resumes",
+    "Controller disconnect pauses",
+    "WebGL context loss reports recovery state",
+    "WebGL context restoration succeeds",
+    "WebGL initialization failure uses playable Canvas fallback",
+    "No uncaught browser errors during journeys"
+  ],
+  "errors": [],
+  "limits": "Simulated controller and software WebGL; no physical input/audio/performance acceptance."
+}
