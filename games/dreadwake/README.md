@@ -1,127 +1,112 @@
-# Dreadwake · The Lyra Campaign · Alpha 02
+# Dread Wake · The Lyra Passage
 
-An isometric starship combat game about committing a heavy cruiser to a slow turn,
-coordinating rail broadsides, bow torpedoes, and point defense while timing defenses
-against incoming volleys.
-Break fourteen hostile ships across five linked missions in the Lyra Passage. Hull damage carries forward; each victory offers one repair or permanent upgrade.
+A browser capital-ship combat demo. Commit a heavy cruiser to slow turns, bring its
+flanks to bear, and combine independent rail broadsides with bow torpedoes, a beam
+lance, and all-aspect guided missiles. Survive five linked encounters; hull damage
+carries forward, and each victory buys one repair or permanent upgrade.
 
-Open `games/dreadwake/` through the launcher. The alpha replaces the original deck-like
-placeholders with closed pressure hulls, split prows, separate drive nacelles,
-armored rail arrays, maneuvering jets, and distinct enemy silhouettes. The setting
-uses a cached procedural nebula and gas giant, parallax stars, unpowered wrecks,
-projectile trails, impact sparks, and expanding explosion fronts. All art and sound
-are created in code, with no external assets or network services.
+Open `games/dreadwake/` through the workspace launcher. The game stays self-contained
+and browser-only; it does not include Steam or desktop packaging.
 
-| Action | Keyboard / pointer | Touch |
+## Playing
+
+Flight school is a safe seven-step introduction covering handling, all four weapon
+systems, and both defenses. It never reads or replaces your campaign checkpoint.
+The campaign starts with a patrol, then introduces flankers, missile cruisers,
+close-range brawlers, and a beam-armed command ship. Red firing tells announce
+projectiles; violet tells announce a lance that point defense cannot intercept.
+
+| Command | Keyboard / mouse | Standard controller |
 | --- | --- | --- |
-| Adjust persistent throttle | Hold W/S or up/down | Hold +/− |
-| Set neutral; coast to a stop | X | Neutral |
-| Turn | Right-click to set heading; A/D or left/right cancels it | Hold turn arrows |
-| Port / starboard broadside | Hold Q/E | Hold either array; simultaneous touches supported |
-| Toggle both broadside crews: manual / auto | Tap G | Tap Broadside crews |
-| Bow torpedo salvo | Tap T | Tap Bow torpedoes |
-| Point defense | Always automatic | Always automatic |
-| Armor lock | Hold Space | Hold Armor lock |
-| Aegis shield pulse | Tap F | Tap Aegis pulse |
-| Designate priority target | Click a hostile; R cycles | Tap a hostile |
-| Clear priority target | Click empty space, Clear, or cycle past the last target | Tap empty space |
-| Zoom in / out | Mouse wheel up / down over the battlefield | — |
-| Pause / controls | Escape | Pause |
-| Mute / unmute | Sound button | Sound button |
+| Persistent throttle | W / S, or up / down | D-pad up / down |
+| Neutral / coast | X | D-pad left |
+| Steer | A / D; right-click orders a heading | Left stick horizontal |
+| Port / starboard rail array | Hold Q / E | Hold LT / RT |
+| Automatic broadside crews | G | D-pad right |
+| Heavy bow torpedoes | T | Y |
+| Beam lance | Hold C | Hold RB |
+| Guided missiles | V | X |
+| Armor lock | Hold Space | Hold LB |
+| Aegis pulse | F | A |
+| Priority target | Click a hostile; R cycles | B cycles, including auto acquisition |
+| Zoom | Mouse wheel | Right stick vertical |
+| Pause / resume | Escape | Menu / Start |
+| Menu navigation | Tab or arrows; Enter; Escape back | D-pad / left stick; A select; B back |
 
-## Combat and handling
+Touch has simultaneous on-screen helm, weapons and defense controls. Standard
+Gamepad API mappings are supported. Buttons change prompts with the active input.
+Disconnecting pauses combat; reconnecting requires an explicit resume. Menu, refit,
+and launch transitions require the controller to return to neutral before arming.
+Optional dual-rumble is used only where the browser/controller supports it.
 
-Throttle stays set after release, including reverse (limited to 35%). Full thrust
-is 86 world units/second. The drive takes several seconds to answer; velocity lags
-behind heading through a turn. Right-click heading orders retain the selected bearing until manual steering, pause, or restart. Turn rate builds to 13.8 degrees/second over two
-seconds and unwinds gradually. A cyan dashed line and arrow show the ordered bearing while the order is active. Right-clicking also works over hostiles without changing the priority target. Left-clicking only selects or clears targets. Neutral changes the engine order without cancelling
-momentum. The HUD reports signed forward speed separately from commanded throttle.
+## Weapon and defense decisions
 
-Each array fires six 58-damage rounds, 0.14 seconds apart, and reloads independently
-in 7.5 seconds. Guns acquire within 690 units and 30 degrees either side of the beam.
-They lead target motion but cannot fire forward or aft. Designating a target makes
-it the preferred solution only while it is inside that array's arc; otherwise the
-nearest valid hostile is selected. A committed salvo retains its target even if
-you change priority; if the target dies, the remaining guns fire abeam. You can fire
-without a solution and miss. Holding an array repeats when ready.
+- Each rail array commits six rounds, leads a target within its side arc, and reloads
+  independently in 7.5 seconds. Auto crews fire only with a valid solution; manual
+  firing can waste a salvo. Committed shots retain their designated target.
+- Torpedoes ripple three heavy homing rounds from a broad bow cone, with a 14-second
+  reload. They cannot acquire behind the ship.
+- The beam lance sustains a narrow bow ray for up to 2.4 seconds. It hits the first
+  hull along its line, recharges while released, and overheats for 10 seconds after
+  a full burn. Holding a firing solution matters.
+- Missiles launch four lighter homing rounds at any bearing within 1,200 m, with a
+  12-second reload. Their separate rack lets them pressure contacts during a turn.
+- Automatic point defense intercepts approaching projectiles, including hostile
+  missiles. It cannot intercept a beam.
+- Armor lock reduces damage by 65%, slows handling/reloads, and prevents new salvos
+  and beam fire. Aegis gives 85% protection for three seconds without that penalty,
+  followed by an 18-second base recharge. The defenses do not stack.
 
-Broadside crews start in manual mode. Tap G or the crew button to order **both**
-arrays to fire automatically whenever ready with a valid side solution. Each array
-still chooses and reloads independently. Q/E still commit manual salvos, including
-without a solution. Returning to manual prevents new automatic salvos; committed
-salvos finish. Crew orders survive pause and contact changes, and reset on restart.
+Campaign-only enemies have more hull than the legacy three-wave skirmish to account
+for the expanded arsenal. Repairs restore 35% maximum hull. Rail calibration adds
+15% base broadside damage; capacitor upgrades reduce Aegis recharge by three seconds.
+There is no automatic repair. Refit selection is explicit and combat stays frozen.
 
-Bow torpedoes are a separate **manual** commitment: tap T to ripple three 72-damage
-rounds at 0.22-second intervals, with a 14-second reload. Launch requires a live
-hostile within 1,000 units and 60 degrees either side of the bow. Priority wins
-inside this cone; otherwise the nearest valid hostile is used. Gold solution rings
-and the torpedo panel show the current bow lock. The salvo keeps its initial target;
-changing designation never redirects it. Rounds travel at 220 units/second, turn at
-most 0.8 radians/second, expire after six seconds, and continue straight if their
-target dies. They hit the nearest swept hull, so another hostile can intercept them.
-Holding T does not repeat or queue a launch, including if the initial press had no
-solution. Release and press again. These rounds can pressure a contact ahead of you
-while the heavy side arrays reload, but a frigate survives one full torpedo salvo.
+## Presentation and settings
 
-Point defense is **always automatic**. It intercepts one threatening hostile round
-every 0.38 seconds within 240 units, prioritizing the earliest predicted hull hit
-using relative motion. It ignores friendly rounds, expired rounds, flybys, and
-rounds already inside the hull. Thin white tracers and sparks show interceptions;
-the desktop panel and after-action screen count them. Its limited cadence thins
-volleys while leaving evasion, armor lock, and Aegis useful. It remains active under
-armor lock. There is no weapon selection cycle: all three systems operate together.
+The battlefield uses Three.js with an orthographic camera matched to targeting and
+heading projection. Layered armored hulls, gun housings, drive glow, hull scars,
+shield volumes, wrecks and debris sit under a Canvas annotation layer for targeting,
+weapon trails, beams, warning tells and offscreen contacts. A Canvas compatibility
+renderer retains combat feedback when WebGL cannot initialize.
 
-Armor lock reduces incoming damage by 65%, lowers drive and turn rate, slows reload
-to 45%, and prevents new broadsides and torpedo salvos. Committed salvos finish.
-Aegis is a separate active choice: 85% damage reduction for three seconds, with an 18-second cooldown from
-activation, and no movement or weapon penalty. Hold does not automatically retrigger
-Aegis; release and press again once charged. The stronger protection applies when
-both defenses are active; reductions do not stack. Both protect against projectile
-and hull-contact damage. The capacitor and button show remaining uptime or cooldown.
+The interface includes a title scene, route chart, concise combat strip, pause
+reference, refit selection, results and checkpoint retry. Large HUD, screen shake,
+controller vibration, and independent master/music/effects levels persist under
+`dreadwake.preferences.v1`. Device reduced-motion preferences suppress shake.
+Original synthesized music changes between command, combat, refit and results;
+rail impacts, torpedoes, missiles, the sustained beam and defenses have separate cues.
 
-Red enemy tells commit a predicted firing solution for 1.8 seconds before launching.
-Change course to dodge or time a defense to absorb the volley. Frigates orbit faster;
-the final cruiser has more hull and heavier fire. Close hull contact pushes ships
-apart and damages both. The radar and edge indicators reveal distant contacts.
+Browser autoplay rules may require one real click or keypress before sound can
+start. The interface reports this as **Enable audio · click or key**. Gamepad input
+alone cannot override browser policy. Unsupported audio degrades to silent play.
 
-Defeat fourteen ships over five missions (2 / 3 / 3 / 2 / 4). After six seconds of clearance, combat freezes for refit. Choose one: restore 35% maximum hull, add 15% base broadside damage, or reduce Aegis recharge by three seconds (six-second minimum). Upgrades stack for the campaign. There is no automatic hull repair. Deploying resets movement orders and reloads, preserving hull damage, upgrades, and crew mode. Lose at zero hull. The after-action
-screen reports kills, time, broadside and torpedo salvos, intercepted rounds, and
-damage prevented by armor and shields. Restart resets the campaign, upgrades, designation, and capacitor. Mission launches and refit screens save a local checkpoint. Continue restores that checkpoint, including hull, upgrades, statistics, and crew orders; leaving mid-battle restarts that mission. Starting over asks before replacing an existing checkpoint. Victory or defeat clears the run. Storage failures are reported and play remains available without saving. There is no time limit, ammo inventory, or collision with decorative debris.
+## Checkpoints and compatibility
 
-Outer picket teaches the weapon rhythm. Crossfire frigates seek bow/stern blind spots. Heavy escort introduces a standoff cruiser outside broadside range: close distance or use bow torpedoes. The hammer sends two aggressive cruisers into close range. The final gate combines those roles around a command cruiser. Tactical role labels identify each behavior.
+Campaign checkpoints retain the existing `dreadwake.campaign.v1` schema and validate
+untrusted storage. They are written at mission launch and refit. Continue restarts
+a mid-battle mission from its launch checkpoint; it does not save individual shots.
+Defeat preserves that checkpoint for retry. Victory clears it. New campaigns require
+confirmation before replacing an existing run. Storage failures are reported while
+play and an in-memory retry remain available. Flight school leaves saves untouched.
 
-The route chart previews the campaign. Refit shows the next briefing, current hull and upgrades, and the exact effect of each choice before deployment. Modal focus is contained and combat controls are disabled while choosing. `createState()` retains the original three-contact skirmish for existing simulation callers; the game uses `createCampaignState()`.
+`createState()` preserves the original skirmish for existing callers;
+`createCampaignState()` initializes the revised campaign. Beam and missile control
+fields are optional for existing simulation callers. Simulation runs at a fixed
+60 Hz independently of rendering. Gamepad polling is separate from rendering and
+queues discrete actions. Blur/hiding pauses and clears input. Cleanup releases
+listeners, polling, animation, GPU objects, annotation canvas and audio scheduling.
 
-## Runtime and validation
+## Validation
 
-Simulation runs at 60 Hz independently of Canvas rendering; oriented swept collisions
-resolve the nearest hull first. Responsive DOM controls keep the center clear in
-portrait and compact landscape layouts, including 667×375. Reduced motion suppresses
-camera shake. Focus loss and tab hiding pause simulation, silence audio, and clear
-held inputs while preserving throttle. The lifecycle disposer releases listeners,
-audio nodes, and animation. Only the workspace lifecycle helper is shared; no new
-dependency or ECS change is involved.
+Run `bun run check`, then validate the built game using `bun run preview`.
+Meaningful regression checks cover weapon acquisition, first-hull beam blocking,
+heat/cooldown, missile commitment/guidance/interception, shields, campaign/refits,
+save validation, projected picking, and controller transition/input safety.
 
-Mouse wheel zoom stays centered on the cruiser, from 0.5× to 2.5× the responsive
-default view. It preserves target picking and resets on restart. Zoom only responds
-over the battlefield during play; Ctrl/Command-wheel retains browser zoom. Firing
-arcs remain part of weapon acquisition, with solution rings and array-panel feedback
-instead of cone overlays.
-
-Layered synthesized Web Audio provides engine/sub-drive hum, rail discharge, filtered
-impact/explosion noise, torpedo exhaust, point-defense bursts, shield activation
-and hits, incoming alerts, contact changes,
-and capacitor-ready cues. It unlocks on a gesture, supports mute, silences on pause,
-and degrades to a playable silent game if unavailable. A compressor limits overlapping
-combat peaks. Browser measurements verify signal and silence; physical speakers and
-subjective mix quality require separate listening.
-
-From the workspace root, run `bun run check`, then `bun run preview`. Deterministic
-checks cover handling, swept hits, independent salvos, a viable full-engagement
-strategy, shield timing/hold behavior/non-stacking/contact protection, priority
-fallback/committed targets/cycling, auto-crew orders, torpedo locks/guidance/hold
-behavior, threat prediction and interception limits, and projected picking at
-multiple viewports.
-Production Playwright checks exercise keyboard and simulated multi-touch input,
-audio output/mute/pause, focus loss, terminal/restart flows, and responsive layouts.
-Physical touch hardware and owner acceptance of gameplay feel remain separate.
+Production browser journeys cover controller-operated flight school, campaign,
+pause/settings, reconnect, refit/deploy, save isolation and responsive layouts.
+Audio probes establish independent channel output and pause/mute silence.
+Simulated input, software-rendered timing, and signal measurements do not establish
+physical controller feel, rumble, TV readability, speaker mix, human difficulty,
+commercial acceptance, or Steam-client behavior.
