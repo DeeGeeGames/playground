@@ -1,4 +1,6 @@
 import { KEPLER_PASSAGES, OPERATIONS, type OperationId } from './operations';
+import type { DoctrineId } from './doctrines';
+import type { RefitSupportReceipt } from './refit-support';
 import { FORMATION, FORMATION_SLOTS, HULLS, type Formation, type HullKind } from './formation';
 export { FORMATION, FORMATION_SLOTS, FORMATION_RADII, HULLS, type Formation, type HullKind } from './formation';
 import { CAPITAL_SPEED_SCALE, ENEMIES } from './enemy-config';
@@ -60,12 +62,15 @@ export interface Platform { id: number; slot: Formation; hull: HullKind; hp: num
 export const PASSAGES = KEPLER_PASSAGES;
 export const PASSAGE_SECONDS = 45;
 export const PLATFORM_HP = 240;
+export interface WeaponActivity { mount: number; platform?: number; weapon: Weapon; shots: number; beamSeconds: number }
 export interface PassageReport {
 	name: string; survived: boolean; hullBefore: number; hullAfter: number; kills: number; salvageEarned: number;
 	disabledPlatforms: number[]; weaponsLost: number; recoveryHull: number; recoverySalvage: number;
+	support?: RefitSupportReceipt;
+	weaponActivity?: WeaponActivity[];
 }
 export interface State {
-	convoy?: { operation?: OperationId; platforms: Platform[]; elapsed: number; reports?: PassageReport[]; departure?: { hull: number; kills: number; salvageEarned: number; weapons: number } };
+	convoy?: { operation?: OperationId; doctrine?: DoctrineId; initialFitChanged?: boolean; platforms: Platform[]; elapsed: number; reports?: PassageReport[]; departure?: { hull: number; kills: number; salvageEarned: number; weapons: number; weaponActivity?: WeaponActivity[] } };
 
 	coverage: EscortCoverage;
 	fightersScrambled: boolean;
@@ -143,6 +148,9 @@ const positionPlatforms = function (state: State) {
 		}
 	}
 };
+const markInitialFitChanged = function (state: State) {
+	if (state.convoy && state.wave === 0 && state.status === 'fitting') state.convoy.initialFitChanged = true;
+};
 // A hull cannot consume the last funds needed to arm the convoy and launch.
 export const constructionCostRequirement = function (state: State, hull: HullKind): number {
 	const weaponReserve = state.mounts.some(function (mount) { return !!mount.weapon; }) ? 0 : Math.min(...Object.values(WEAPONS).map(function (weapon) { return weapon.cost; }));
@@ -158,6 +166,7 @@ export const constructPlatform = function (state: State, slot: Formation, hull: 
 	convoy.platforms.push({ id, slot, hull, hp: config.hp });
 	for (let mount = 0; mount < config.mounts; mount++) state.mounts.push({ platform: id, x: 0, y: 0, integrity: 100, weapon: undefined, level: 0, cooldown: 0, aim: 0 });
 	state.salvage -= config.cost;
+	markInitialFitChanged(state);
 	positionPlatforms(state);
 	notify(state, `${config.name} constructed. Select its ${config.mounts} turret ${config.mounts === 1 ? 'mount' : 'mounts'} to fit weapons.`);
 	return true;
@@ -168,12 +177,15 @@ export const arrangePlatform = function (state: State, id: number, slot: Formati
 	if (!platform || platform.slot === slot) return false;
 	const occupant = state.convoy?.platforms.find(function (other) { return other.slot === slot; });
 	if (occupant) occupant.slot = platform.slot;
-	platform.slot = slot; positionPlatforms(state); return true;
+	platform.slot = slot; positionPlatforms(state); markInitialFitChanged(state); return true;
 };
 export const launchPassage = function (state: State): boolean {
 	const convoy = state.convoy; const passage = passagesFor(state)[state.wave];
 	if (!canOrder(state) || state.status !== 'fitting' || !convoy || !passage || !state.mounts.some(function (mount) { return !!mount.weapon; })) return false;
-	convoy.departure = { hull: state.hull, kills: state.kills, salvageEarned: 0, weapons: state.mounts.filter(function (mount) { return !!mount.weapon; }).length };
+	const weaponActivity = state.mounts.flatMap(function (mount, index): WeaponActivity[] {
+		return mount.weapon ? [{ mount: index, ...(mount.platform === undefined ? {} : { platform: mount.platform }), weapon: mount.weapon, shots: 0, beamSeconds: 0 }] : [];
+	});
+	convoy.departure = { hull: state.hull, kills: state.kills, salvageEarned: 0, weapons: weaponActivity.length, weaponActivity };
 	state.status = 'running'; state.wave++; convoy.elapsed = 0; state.cleared = false;
 	for (const threat of passage.threats) {
 		const config = ENEMIES[threat.kind]; const point = worldPoint(state, threat);
@@ -229,6 +241,7 @@ export const setAllocation = function (state: State, allocation: Readonly<Alloca
 	if (POWER_CHANNELS.reduce(function (sum, channel) { return sum + allocation[channel]; }, 0) !== REACTOR_UNITS) return false;
 	if (POWER_CHANNELS.every(function (channel) { return systems.allocation[channel] === allocation[channel]; })) return false;
 	systems.allocation = { engines: allocation.engines, weapons: allocation.weapons, shields: allocation.shields };
+	markInitialFitChanged(state);
 	systems.powerChanges++;
 	return true;
 };
@@ -241,13 +254,14 @@ export const build = function (state: State, index: number, weapon: Weapon): boo
 	const mount = state.mounts[index]; const config = WEAPONS[weapon];
 	if (!canFit(state, mount) || !mount || mount.weapon || state.salvage < config.cost) return false;
 	state.salvage -= config.cost; mount.weapon = weapon; mount.level = 1; mount.cooldown = 0;
+	markInitialFitChanged(state);
 	return true;
 };
 export const upgradeCost = function (mount: Mount): number { return mount.weapon ? Math.round(WEAPONS[mount.weapon].cost * (mount.level === 1 ? 0.8 : 1.2)) : 0; };
 export const upgrade = function (state: State, index: number): boolean {
 	const mount = state.mounts[index];
 	if (!canFit(state, mount) || !mount?.weapon || mount.level >= 3 || state.salvage < upgradeCost(mount)) return false;
-	state.salvage -= upgradeCost(mount); mount.level += 1; return true;
+	state.salvage -= upgradeCost(mount); mount.level += 1; markInitialFitChanged(state); return true;
 };
 export const coverageFor = function (state: State, mount: Mount) {
 	return { range: mount.weapon ? WEAPONS[mount.weapon].range * (1 + (mount.level - 1) * 0.12) : 0,
@@ -264,12 +278,13 @@ export const invested = function (mount: Mount): number {
 };
 export const sell = function (state: State, index: number): boolean {
 	const mount = state.mounts[index]; if (!canFit(state, mount) || !mount?.weapon) return false;
-	state.salvage += Math.floor(invested(mount) * (state.convoy ? 1 : 0.7)); mount.weapon = undefined; mount.level = 0; delete state.repairs[`mount:${index}`]; return true;
+	state.salvage += Math.floor(invested(mount) * (state.convoy ? 1 : 0.7)); mount.weapon = undefined; mount.level = 0; delete state.repairs[`mount:${index}`]; markInitialFitChanged(state); return true;
 };
 export const deploy = function (state: State, kind: EscortKind): boolean {
 	const config = ESCORTS[kind];
 	if (!canOrder(state) || state.salvage < config.cost || craftCount(state) + config.count > 9) return false;
 	state.salvage -= config.cost;
+	markInitialFitChanged(state);
 	if (kind === 'interceptor') {
 		const wing: Wing = { id: state.nextId++, phase: 'ready', timer: 0, craft: [], assignment: 'port' };
 		wing.craft = Array.from({ length: 3 }, function () { return makeFighter(state, wing.id); }); state.wings.push(wing); updateEscortCoverage(state); return true;
@@ -616,14 +631,21 @@ export const step = function (state: State, dt: number) {
 		const travel = config.rotationSpeed * dt;
 		mount.aim += Math.max(-travel, Math.min(travel, error));
 		if (Math.abs(error) > travel) continue;
+		const activity = state.convoy?.departure?.weaponActivity?.find(function (entry) { return entry.mount === mountIndex; });
 		if (mount.weapon === 'beam') {
 			const damage = config.damage * dt * weaponRate * (1 + (mount.level - 1) * 0.55) * (1 + (mount.level - 1) * 0.12);
 			damageEnemy(target, damage, 'beam');
+			if (activity) activity.beamSeconds += dt;
 			state.shots.push({ id: state.nextId++, x: target.x, y: target.y, z: target.z ?? 0, beamFrom: origin, vx: 0, vy: 0, damage: 0, side: 'player', weapon: 'beam', target: target.id, life: 4 });
 			if (mount.cooldown <= 0) { enemyFeedback(state, target, damage, 'beam'); mount.cooldown = config.reload; }
 			continue;
 		}
-		if (mount.cooldown <= 0) { fire(state, origin, aim, config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id, carrierVelocity); mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12); state.effects.push({ ...origin, radius: 1, life: 0.18, maxLife: 0.18, color: '#ffffff', feedback: { kind: 'muzzle', mount: mountIndex, weapon: mount.weapon, aim: mount.aim } }); }
+		if (mount.cooldown <= 0) {
+			fire(state, origin, aim, config.damage * (1 + (mount.level - 1) * 0.55), config.speed, 'player', mount.weapon, target.id, carrierVelocity);
+			if (activity) activity.shots++;
+			mount.cooldown = config.reload / (1 + (mount.level - 1) * 0.12);
+			state.effects.push({ ...origin, radius: 1, life: 0.18, maxLife: 0.18, color: '#ffffff', feedback: { kind: 'muzzle', mount: mountIndex, weapon: mount.weapon, aim: mount.aim } });
+		}
 	}
 	updateWings(state, dt);
 	updateEscortCoverage(state);
@@ -809,6 +831,7 @@ export const step = function (state: State, dt: number) {
 			kills: state.kills - departure.kills, salvageEarned: departure.salvageEarned,
 			disabledPlatforms: convoy.platforms.filter(function (platform) { return platform.hp <= 0; }).map(function (platform) { return platform.id; }),
 			weaponsLost: departure.weapons - state.mounts.filter(function (mount) { return !!mount.weapon; }).length,
+			...(departure.weaponActivity ? { weaponActivity: departure.weaponActivity.map(function (entry) { return { ...entry }; }) } : {}),
 			recoveryHull: recovering ? Math.min(120, MAX_HULL - state.hull) : 0, recoverySalvage: recovering ? 200 : 0,
 		};
 		convoy.reports = [...(convoy.reports ?? []), report];
