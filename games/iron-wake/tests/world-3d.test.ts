@@ -11,13 +11,14 @@ test('world pools track live combat state and restart removes transient objects'
 	state.shots.push({ x: 100, y: 120, vx: 200, vy: 100, life: 1, kind: 'cannon', target: undefined, damage: 38 });
 	state.effects.push({ x: 100, y: 120, life: 0.4, size: 30, color: '#ff8866' });
 	state.wrecks.push({ x: 60, y: 90, angle: 0.4, kind: 'striker' });
+	state.enemies.push({ id: 3, x: 300, y: 320, angle: 0, hp: 125, maxHp: 125, cooldown: 0, heavy: true, kind: 'siege', attack: { phase: 'committed', remaining: 2, cycle: 1 } });
 	state.player.heat = 80; state.beam = { x: 300, y: 400 };
 	try {
 		presentation.update(state, false);
-		for (const name of ['salvage', 'inbound-warning', 'artillery-warning', 'projectile', 'impact-effect', 'wreck']) expect(scene.getObjectByName(name)).toBeDefined();
+		for (const name of ['salvage', 'inbound-warning', 'artillery-warning', 'projectile', 'impact-effect', 'wreck', 'siege-defense']) expect(scene.getObjectByName(name)).toBeDefined();
 		expect(scene.getObjectByName('laser')?.visible).toBe(true); expect(scene.getObjectByName('reactor-vent')?.visible).toBe(true);
 		presentation.update(createState(), false);
-		for (const name of ['salvage', 'inbound-warning', 'artillery-warning', 'projectile', 'impact-effect', 'wreck']) expect(scene.getObjectByName(name)).toBeUndefined();
+		for (const name of ['salvage', 'inbound-warning', 'artillery-warning', 'projectile', 'impact-effect', 'wreck', 'siege-defense']) expect(scene.getObjectByName(name)).toBeUndefined();
 		expect(scene.getObjectByName('laser')?.visible).toBe(false); expect(scene.getObjectByName('reactor-vent')?.visible).toBe(false);
 		expect(scene.getObjectByName('relay')).toBeDefined();
 		const floor = scene.getObjectByName('industrial-apron');
@@ -30,6 +31,7 @@ test('transparent world effects retain depth tests without writing depth and dis
 	const scene = new Scene(); const presentation = createWorldObjects(scene); const state = createState();
 	state.effects.push({ x: 100, y: 120, life: 0.4, size: 30, color: '#ff8866' });
 	state.strikes.push({ id: 1, x: 180, y: 200, life: 1.8, duration: 2.8, radius: 62, damage: 13 });
+	state.enemies.push({ id: 2, x: 300, y: 320, angle: 0, hp: 125, maxHp: 125, cooldown: 0, heavy: true, kind: 'siege' });
 	presentation.update(state, false);
 	const geometries = new Set<BufferGeometry>(); const materials = new Set<Material>(); const disposed = new Map<BufferGeometry | Material, number>();
 	scene.traverse(function (object) {

@@ -1,9 +1,24 @@
 import { describe, expect, test } from 'bun:test';
-import { applyRefit, getOperationReport, angleDelta, createState, distance, ENEMY_STATS, step, type Controls, type EnemyKind, type State } from '../src/simulation';
-import { getWaveDefinition, TOTAL_HOSTILES, WAVES } from '../src/operation';
+import { applyRefit, getEnemyDefense, getOperationReport, angleDelta, createState, distance, ENEMY_STATS, step, type Controls, type EnemyKind, type State } from '../src/simulation';
+import { getWaveDefinition, TOTAL_HOSTILES, WAVES, type Difficulty } from '../src/operation';
 const idle: Controls = { drive: 0, stop: false, turn: 0, aim: { x: 900, y: 200 }, cannon: false, laser: false, missile: false, coolant: false };
 const run = function (state: State, seconds: number, input = idle) { for (let i = 0; i < seconds * 60; i++) step(state, input, 1 / 60); };
 const target = function (state: State, x = 900, y = 580) { state.enemies.push({ id: state.nextId++, x, y, angle: 0, cooldown: 100, hp: 100, maxHp: 100, heavy: false, kind: 'striker' }); };
+const flyOperation = function (difficulty: Difficulty, moving: boolean) {
+	const state = createState({ difficulty });
+	for (let tick = 0; tick < 60 * 600 && state.outcome === 'playing'; tick++) {
+		if (state.phase === 'refit') applyRefit(state, 'arsenal');
+		const p = state.player;
+		const target = [...state.enemies].sort(function (a, b) { return distance(a, p) - distance(b, p); })[0];
+		// A simple orbit exercises ordinary throttle and turning. It has no
+		// perfect artillery dodge, invulnerability, or special boss knowledge.
+		const radial = Math.atan2(p.y - 600, p.x - 900);
+		const heading = radial + Math.PI / 2 + Math.atan((Math.hypot(p.x - 900, p.y - 600) - 300) / 160);
+		step(state, { ...idle, drive: moving ? 1 : 0, turn: moving ? Math.max(-1, Math.min(1, angleDelta(p.angle, heading) * 2)) : 0,
+			aim: target ?? idle.aim, cannon: Boolean(target), laser: Boolean(target) && p.heat < 75, missile: Boolean(target), coolant: p.heat > 85 }, 1 / 60);
+	}
+	return state;
+};
 describe('Iron Wake combat', function () {
 	test('heavy drive accelerates gradually and turning uses the shortest angle', function () {
 		const state = createState(); run(state, 0.1, { ...idle, drive: 1 });
@@ -114,17 +129,16 @@ describe('Iron Wake combat', function () {
 		step(state, { ...idle, cannon: true }, 0.04);
 		expect(state.enemies[0]?.hp).toBe(100); expect(state.enemies[1]?.hp).toBe(62); expect(state.player.speed).toBe(0);
 	});
-	test('a heat-managed operation can complete all five waves and destroy the commander', function () {
-		const state = createState();
-		for (let tick = 0; tick < 60 * 600 && state.outcome === 'playing'; tick++) {
-			if (state.phase === 'refit') expect(applyRefit(state, 'arsenal')).toBe(true);
-			const target = [...state.enemies].sort(function (a, b) { return distance(a, state.player) - distance(b, state.player); })[0];
-			step(state, { ...idle, aim: target ?? idle.aim, cannon: Boolean(target), laser: Boolean(target) && state.player.heat < 75, missile: Boolean(target), coolant: state.player.heat > 85 }, 1 / 60);
+	test('maneuvering and heat management can complete Standard and Veteran; the same stationary policy loses', function () {
+		for (const difficulty of ['standard', 'veteran'] as const) {
+			const state = flyOperation(difficulty, true);
+			expect(state.outcome).toBe('won'); expect(state.kills).toBe(TOTAL_HOSTILES); expect(state.relay).toBeGreaterThan(0);
+			const report = getOperationReport(state);
+			expect(report.commanderDestroyed).toBe(true); expect(report.score).toBeGreaterThan(10000);
+			expect(report.damageDealt).toBeGreaterThan(3000); expect(report.accuracy).toBeGreaterThan(0); expect(report.accuracy).toBeLessThanOrEqual(100);
+			expect(flyOperation(difficulty, false).outcome).toBe('lost');
 		}
-		expect(state.outcome).toBe('won'); expect(state.kills).toBe(TOTAL_HOSTILES); expect(state.relay).toBeGreaterThan(0);
-		const report = getOperationReport(state);
-		expect(report.commanderDestroyed).toBe(true); expect(report.score).toBeGreaterThan(10000);
-		expect(report.damageDealt).toBeGreaterThan(3000); expect(report.accuracy).toBeGreaterThan(0); expect(report.accuracy).toBeLessThanOrEqual(100);
+		expect(flyOperation('story', false).outcome).toBe('won');
 	});
 
 	test('refit freezes the entire fight until a single explicit upgrade is applied', function () {
@@ -156,17 +170,62 @@ describe('Iron Wake combat', function () {
 
 	test('artillery announces a fixed impact point and gives a neutral mech time to escape', function () {
 		const state = createState(); state.spawnIn = 100;
-		state.enemies.push({ id: 1, x: 850, y: 800, hp: 125, maxHp: 125, angle: 0, cooldown: 0, heavy: true, kind: 'siege' });
+		state.enemies.push({ id: 1, x: 850, y: 800, hp: 125, maxHp: 125, angle: Math.atan2(-20, 50), cooldown: 0, heavy: true, kind: 'siege' });
 		step(state, idle, 1 / 60);
 		const strike = state.strikes[0]; if (!strike) throw new Error('Missing artillery warning');
 		expect(strike.x).toBe(900); expect(strike.y).toBe(780); expect(state.player.hp).toBe(100);
 		run(state, 0.3); // Reaction time before raising throttle.
-		run(state, 2.6, { ...idle, drive: 1 });
+		run(state, 3.3, { ...idle, drive: 1 });
 		expect(state.strikes).toHaveLength(0); expect(state.player.hp).toBe(100);
 		const stationary = createState(); stationary.spawnIn = 100;
-		stationary.enemies.push({ id: 1, x: 850, y: 800, hp: 125, maxHp: 125, angle: 0, cooldown: 0, heavy: true, kind: 'siege' });
+		stationary.enemies.push({ id: 1, x: 850, y: 800, hp: 125, maxHp: 125, angle: Math.atan2(-20, 50), cooldown: 0, heavy: true, kind: 'siege' });
 		run(stationary, 2.9);
 		expect(stationary.player.hp).toBe(90); expect(stationary.stats.damageTaken).toBe(10);
+	});
+
+	test('siege armor rewards side hits and its cooling window exposes the front', function () {
+		const hit = function (rear: boolean, recovering: boolean) {
+			const state = createState(); state.spawnIn = 100;
+			const enemy = { id: 1, x: 900, y: 580, hp: 125, maxHp: 125, angle: Math.PI / 2, cooldown: 100, heavy: true, kind: 'siege' as const,
+				...(recovering ? { attack: { phase: 'recovery' as const, remaining: 3, cycle: 1 } } : {}) };
+			state.enemies.push(enemy);
+			state.shots.push({ x: 900, y: rear ? 530 : 630, vx: 0, vy: rear ? 4000 : -4000, life: 1, kind: 'cannon', target: undefined, damage: 38 });
+			step(state, idle, 0.04);
+			return 125 - enemy.hp;
+		};
+		expect(hit(false, false)).toBeCloseTo(38 * 0.35);
+		expect(hit(true, false)).toBeCloseTo(38);
+		expect(hit(false, true)).toBeCloseTo(38 * 1.35);
+	});
+
+	test('barrage commitment fixes facing and impact positions, and ordnance survives its shooter', function () {
+		const state = createState(); state.spawnIn = 100; state.player.y = 600;
+		state.enemies.push({ id: 1, x: 400, y: 600, hp: 420, maxHp: 420, angle: 0, cooldown: 0, heavy: true, kind: 'siege', commander: true });
+		step(state, idle, 1 / 60);
+		const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing commander');
+		const positions = state.strikes.map(function (strike) { return { x: strike.x, y: strike.y }; });
+		expect(positions.length).toBeGreaterThan(1);
+		state.player.x = 500; state.player.y = 200;
+		run(state, 1);
+		expect(enemy.angle).toBe(0); expect(enemy.x).toBe(400); expect(enemy.y).toBe(600);
+		expect(state.strikes.map(function (strike) { return { x: strike.x, y: strike.y }; })).toEqual(positions);
+		enemy.hp = 0; step(state, idle, 1 / 60);
+		expect(state.enemies).toHaveLength(0); expect(state.strikes).toHaveLength(positions.length);
+	});
+
+	test('both commander patterns allow a neutral frame to escape after reaction time and then expose armor', function () {
+		for (const enraged of [false, true]) for (let direction = 0; direction < 8; direction++) {
+			const state = createState(); state.spawnIn = 100; state.player.y = 600; state.player.angle = direction * Math.PI / 4;
+			state.enemies.push({ id: 1, x: 400, y: 600, hp: enraged ? 200 : 420, maxHp: 420, angle: 0, cooldown: 0, heavy: true, kind: 'siege', commander: true });
+			step(state, idle, 1 / 60);
+			const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing commander');
+			expect(getEnemyDefense(state, enemy).enraged).toBe(enraged); expect(getEnemyDefense(state, enemy).exposed).toBe(false);
+			run(state, 0.3); // Leave time to notice the committed pattern.
+			run(state, 4.7, { ...idle, drive: 1 });
+			expect(state.player.hp).toBe(100); expect(state.strikes).toHaveLength(0);
+			expect(enemy.attack?.phase).toBe('recovery'); expect(getEnemyDefense(state, enemy).exposed).toBe(true);
+			expect(enemy.attack?.remaining).toBeGreaterThan(3);
+		}
 	});
 
 	test('incoming artillery resolves before the refit can open and can still lose the relay', function () {
@@ -182,7 +241,7 @@ describe('Iron Wake combat', function () {
 			state.spawnIn = 100;
 			state.warnings.push({ kind: 'siege', x: 850, y: 800, life: 0.01 });
 			step(state, idle, 1 / 60);
-			const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing hostile'); enemy.cooldown = 0;
+			const enemy = state.enemies[0]; if (!enemy) throw new Error('Missing hostile'); enemy.cooldown = 0; enemy.angle = Math.atan2(state.player.y - enemy.y, state.player.x - enemy.x);
 			run(state, 2.9);
 		}
 		expect(story.enemies[0]?.hp).toBeLessThan(veteran.enemies[0]?.hp ?? 0);

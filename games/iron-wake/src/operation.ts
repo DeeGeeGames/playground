@@ -41,10 +41,10 @@ const siege: EnemySpawn = { kind: 'siege' };
 const commander: EnemySpawn = { kind: 'siege', commander: true };
 export const WAVES: readonly WaveDefinition[] = [
 	{ number: 1, name: 'First contact', briefing: 'Recon frames are crossing the perimeter. Keep moving and get a feel for the guns.', interval: 5, bearing: 1.6, enemies: [scout, scout, striker, scout, striker] },
-	{ number: 2, name: 'Crossfire', briefing: 'Two assault groups are closing in. Break their firing lines before they surround the relay.', interval: 6, bearing: 3.2, enemies: [scout, striker, scout, striker, siege, scout, striker] },
-	{ number: 3, name: 'Hammerfall', briefing: 'Artillery signatures confirmed. Red ground markers are incoming strikes. Intercept the siege frames.', interval: 6, bearing: 4.8, enemies: [siege, scout, striker, siege, striker, scout, siege, striker] },
+	{ number: 2, name: 'Crossfire', briefing: 'Armored artillery is joining the assault. Flank its shielded front, or strike while its armor vents after firing.', interval: 6, bearing: 3.2, enemies: [scout, striker, scout, striker, siege, scout, striker] },
+	{ number: 3, name: 'Hammerfall', briefing: 'Artillery braces for repeated impacts. Clear the orange markers, then punish the exposed cooling cycle.', interval: 6, bearing: 4.8, enemies: [siege, scout, striker, siege, striker, scout, siege, striker] },
 	{ number: 4, name: 'Breaking point', briefing: 'The main assault is committing. Recover salvage and keep a coolant charge in reserve.', interval: 6, bearing: 0.8, enemies: [striker, scout, siege, striker, scout, striker, siege, striker, siege] },
-	{ number: 5, name: 'Iron crown', briefing: 'Their command frame is entering the yard. Destroy the Crown and its escort. Hold the signal.', interval: 5, bearing: 2.4, enemies: [striker, siege, scout, striker, commander, scout, siege, striker, siege, striker] },
+	{ number: 5, name: 'Iron crown', briefing: 'The Crown is deploying a siege barrage. Leave its marked impact field, then attack the open armor. Below half integrity, its barrage spreads.', interval: 5, bearing: 2.4, enemies: [striker, siege, scout, striker, commander, scout, siege, striker, siege, striker] },
 ];
 export const TOTAL_HOSTILES = WAVES.reduce(function (total, wave) { return total + wave.enemies.length; }, 0);
 export const getWaveDefinition = function (wave: number): WaveDefinition {
