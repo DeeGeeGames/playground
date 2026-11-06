@@ -23,7 +23,7 @@ const axis = function (value = 0) {
 
 // Transitions require a neutral controller before arming. A held trigger can never
 // carry a salvo through a menu, reconnect, refit or new campaign.
-export const createController = function () {
+export const createController = function (autonomousWeapons = false) {
 	let previous = new Set<number>();
 	let blocked = true;
 	let lastDirection: PadFrame['direction'];
@@ -46,8 +46,8 @@ export const createController = function () {
 			lastDirection = direction;
 			const frame: PadFrame = {
 				turn: x, drive: Number(down(12)) - Number(down(13)), zoom: -zoom,
-				port: down(6), starboard: down(7), brace: down(4), beam: down(5),
-				pulse: pressed(0), target: pressed(1), missile: pressed(2), torpedo: pressed(3),
+				port: !autonomousWeapons && down(6), starboard: !autonomousWeapons && down(7), brace: down(4), beam: !autonomousWeapons && down(5),
+				pulse: pressed(0), target: !autonomousWeapons && pressed(1), missile: !autonomousWeapons && pressed(2), torpedo: !autonomousWeapons && pressed(3),
 				neutral: pressed(14), autoFire: pressed(15), pause: pressed(9),
 				confirm: pressed(0), cancel: pressed(1), direction: move ? direction : undefined, used,
 			};

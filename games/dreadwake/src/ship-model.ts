@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CEL } from './visual-theme';
+import { MOUNT_SOCKETS, WEAPONS, WEAPON_IDS, type WeaponId } from './weapons';
 
 export type HullKind = 'player' | 'frigate' | 'cruiser' | 'command';
 type Outline = readonly (readonly [number, number])[];
@@ -70,7 +71,7 @@ export const createShipModels = function () {
 			hull(mirror([[-0.56, 0.29], [-0.535, 0.22], [-0.405, 0.22], [-0.38, 0.29], [-0.38, 0.42], [-0.405, 0.49], [-0.535, 0.49], [-0.56, 0.42]], sign), 4, 23 * h, side, dark);
 			block(-length * 0.561, 12 * h, sign * width * 0.355, 0.7, 12 * h, width * 0.15, shadow, false);
 			block(-length * 0.565, 12 * h, sign * width * 0.355, 0.6, 8 * h, width * 0.105, emitter, false);
-			for (let i = 0; i < (small ? 4 : player ? 6 : 4); i++) {
+			for (let i = 0; i < (player ? 0 : 4); i++) {
 				const x = player ? 64 - i * 25 : length * (0.28 - i * (small ? 0.15 : 0.18)); const z = sign * width * 0.405;
 				const size = small ? 7 : player ? 11 : 9;
 				const turret = new THREE.CylinderGeometry(size * 0.65, size * 0.7, 7 * h, 8); turret.translate(x, 23 * h, z); add(turret, side);
@@ -89,7 +90,15 @@ export const createShipModels = function () {
 		block(length * 0.141, 37 * h, 0, 0.8, 3 * h, width * 0.052, emitter, false);
 		block(length * 0.572, 10 * h, 0, 0.8, 7 * h, width * 0.09, amber, false);
 		if (command) for (const sign of [-1, 1]) block(-length * 0.21, 38, sign * width * 0.11, length * 0.1, 12, 4, amber);
+		if (player) for (const socket of MOUNT_SOCKETS) {
+			const recess = new THREE.CylinderGeometry(6.7, 7.7, 2.4, 12); recess.translate(socket.forward, 22.5, socket.across); add(recess, shadow, dark);
+			const ring = new THREE.RingGeometry(5.1, 7.1, 12); ring.rotateX(-Math.PI / 2); ring.translate(socket.forward, 24, socket.across); add(ring, side, side, false);
+		}
 		const group = new THREE.Group();
+		if (player) for (const socket of MOUNT_SOCKETS) {
+			const mount = new THREE.Group(); mount.name = `mount-${socket.index}`;
+			mount.position.set(socket.forward, 24, socket.across); group.add(mount);
+		}
 		for (const [paint, pieces] of bins) {
 			const merged = mergeGeometries(pieces);
 			for (const piece of pieces) piece.dispose();
@@ -119,5 +128,59 @@ export const createShipModels = function () {
 		return group;
 	};
 	const prototypes: Record<HullKind, THREE.Group> = { player: make('player'), frigate: make('frigate'), cruiser: make('cruiser'), command: make('command') };
-	return { prototypes, dispose: function () { for (const geometry of geometries) geometry.dispose(); for (const value of materials) value.dispose(); } };
+	// One shared prototype per family. Fitting a socket clones objects, never GPU
+	// storage, and empty sockets contain only their permanent recessed ring.
+	const turretPrototypes = new Map<WeaponId, THREE.Group>();
+	for (const id of WEAPON_IDS) {
+		const turret = new THREE.Group(); const body = material(CEL.top); const dark = material(CEL.dark);
+		const accent = material(WEAPONS[id].color); const recess = material(CEL.ink);
+		const bins = new Map<THREE.Material, THREE.BufferGeometry[]>();
+		const part = function (geometry: THREE.BufferGeometry, paint: THREE.Material) {
+			const pieces = bins.get(paint) ?? []; pieces.push(geometry); bins.set(paint, pieces);
+		};
+		const box = function (x: number, y: number, z: number, length: number, height: number, width: number, paint: THREE.Material) {
+			const geometry = new THREE.BoxGeometry(length, height, width); geometry.translate(x, y, z); part(geometry, paint);
+		};
+		const tube = function (x: number, y: number, z: number, radius: number, length: number, paint: THREE.Material) {
+			const geometry = new THREE.CylinderGeometry(radius, radius, length, 8); geometry.rotateZ(-Math.PI / 2); geometry.translate(x, y, z); part(geometry, paint);
+		};
+		const base = new THREE.CylinderGeometry(5, 5.8, 4, 8); base.translate(0, 2, 0); part(base, dark);
+		if (id === 'rail') {
+			box(0, 6, 0, 12, 6, 10, body);
+			for (const z of [-3.3, 3.3]) { box(13, 6, z, 24, 2.7, 2.8, dark); box(13, 7.5, z, 20, 0.7, 1, accent); }
+		} else if (id === 'rattler') {
+			box(-1, 5, 0, 10, 5, 9, body);
+			for (const [y, z] of [[5, -2], [5, 2], [8, 0]] as const) { tube(10, y, z, 1.4, 18, dark); tube(19.5, y, z, 1.5, 1, accent); }
+		} else if (id === 'flak') {
+			box(-1, 5, 0, 11, 5, 13, body);
+			for (const z of [-4, 4]) { tube(8, 7, z, 2.8, 10, dark); tube(13.5, 7, z, 3.2, 1.7, accent); }
+		} else if (id === 'seeker') {
+			box(0, 6, 0, 13, 8, 12, body);
+			for (const x of [-3.3, 3.3]) for (const z of [-3, 3]) { box(x, 10.2, z, 4.5, 0.6, 4.2, recess); box(x, 10.6, z, 2.2, 0.4, 2, accent); }
+		} else if (id === 'torpedo') {
+			box(4, 6, 0, 23, 8, 10, body); box(16, 6, 0, 1, 6.2, 8.2, recess); tube(16.6, 6, 0, 2.2, 0.8, accent);
+			box(0, 10.3, 0, 15, 0.6, 2, dark);
+		} else if (id === 'spark') {
+			box(0, 6, 0, 10, 7, 8, body); tube(9, 7, 0, 2.5, 12, dark); tube(15.5, 7, 0, 3, 1.4, accent);
+		} else if (id === 'helios') {
+			box(0, 6, 0, 13, 8, 11, body);
+			for (const z of [-5, 5]) { box(8, 8, z, 21, 5, 3.4, dark); box(6, 10.7, z, 13, 0.6, 2, accent); }
+			tube(8, 7, 0, 3.4, 11, body); tube(14, 7, 0, 3.1, 1, accent);
+		} else {
+			box(-1, 5, 0, 10, 5, 9, body); tube(7, 7, 0, 1.8, 14, dark);
+			for (const x of [4, 9, 14]) {
+				const coil = new THREE.TorusGeometry(3.7, 1.05, 5, 10); coil.rotateY(Math.PI / 2); coil.translate(x, 7, 0); part(coil, accent);
+			}
+		}
+		const edgeParts: THREE.BufferGeometry[] = [];
+		for (const [paint, pieces] of bins) {
+			const merged = mergeGeometries(pieces); for (const piece of pieces) piece.dispose();
+			if (!merged) throw new Error(`Could not assemble ${id} turret`);
+			turret.add(new THREE.Mesh(ownGeometry(merged), paint)); edgeParts.push(new THREE.EdgesGeometry(merged, 30));
+		}
+		const edgeGeometry = mergeGeometries(edgeParts); for (const edge of edgeParts) edge.dispose();
+		if (edgeGeometry) turret.add(new THREE.LineSegments(ownGeometry(edgeGeometry), ink));
+		turretPrototypes.set(id, turret);
+	}
+	return { prototypes, turretPrototypes, dispose: function () { for (const geometry of geometries) geometry.dispose(); for (const value of materials) value.dispose(); } };
 };

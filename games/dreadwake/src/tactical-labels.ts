@@ -6,7 +6,7 @@ export interface LabelObstacle { left: number; top: number; right: number; botto
 // Both renderers use these bounds so labels cannot disappear behind a DOM card.
 export const hudObstacles = function (canvas: HTMLCanvasElement): LabelObstacle[] {
 	const origin = canvas.getBoundingClientRect();
-	const nodes = canvas.parentElement?.querySelectorAll<HTMLElement>('.mission, .utility, .hull, .target-panel, .cockpit, .field-message, .training-guide, .save-notice');
+	const nodes = canvas.parentElement?.querySelectorAll<HTMLElement>('.mission, .utility, .hull, .target-panel, .arsenal-readout, .cockpit, .field-message, .training-guide, .save-notice');
 	if (!nodes) return [];
 	return Array.from(nodes).filter(function (node) { return node.getClientRects().length > 0 && getComputedStyle(node).visibility !== 'hidden'; }).map(function (node) {
 		const rect = node.getBoundingClientRect();

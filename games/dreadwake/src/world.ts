@@ -2,12 +2,14 @@ import * as THREE from 'three';
 import { createShipModels, type HullKind } from './ship-model';
 import { hudObstacles, clearLabelPosition, type LabelObstacle } from './tactical-labels';
 import { CEL } from './visual-theme';
-import { drawCombatEffects } from './combat-effects';
+import { createCombatEffectsRenderer } from './combat-effects';
 import { cameraFor, worldToScreen, type Camera } from './projection';
 import { ARC, clamp, distance, sideAngle, targetFor, torpedoTargetFor, type Point, type Ship, type State, type Wreck } from './simulation';
 import { createBackdrop } from './backdrop';
+import { MOUNT_SOCKETS, type WeaponId } from './weapons';
 
-interface ShipVisual { group: THREE.Group; exhaust: THREE.Group; scars: THREE.Group }
+interface SocketVisual { group: THREE.Group; weapon: WeaponId | undefined }
+interface ShipVisual { group: THREE.Group; exhaust: THREE.Group; scars: THREE.Group; sockets: Map<number, SocketVisual> }
 
 const CYAN = CEL.mint;
 const GOLD = CEL.amber;
@@ -44,13 +46,20 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 	skyTexture.colorSpace = THREE.SRGBColorSpace;
 	scene.background = skyTexture;
 	const paintSky = createBackdrop();
+	const drawCombatEffects = createCombatEffectsRenderer();
 	const models = createShipModels();
 	const prototypes = models.prototypes;
 	const instantiate = function (kind: HullKind): ShipVisual {
 		const group = prototypes[kind].clone(true);
 		const exhaust = group.getObjectByName('exhaust'); const scars = group.getObjectByName('scars');
 		if (!(exhaust instanceof THREE.Group) || !(scars instanceof THREE.Group)) throw new Error('Incomplete cruiser model');
-		scene.add(group); return { group, exhaust, scars };
+		const sockets = new Map<number, SocketVisual>();
+		if (kind === 'player') for (const socket of MOUNT_SOCKETS) {
+			const mount = group.getObjectByName(`mount-${socket.index}`);
+			if (!(mount instanceof THREE.Group)) throw new Error('Incomplete turret socket');
+			sockets.set(socket.index, { group: mount, weapon: undefined });
+		}
+		scene.add(group); return { group, exhaust, scars, sockets };
 	};
 	const ships = new Map<number, ShipVisual>();
 	const wrecks = new Map<Wreck, ShipVisual>();
@@ -69,6 +78,7 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 	let lastWidth = 0; let lastHeight = 0; let disposed = false;
 	let lastState: State | undefined; let lastTime = -1; let lastBriefing = false; let lastZoom = 0;
 	let lastHeading: number | undefined; let lastReduced = false; let lastFrameAt = 0;
+	let lastFit = '';
 	let frameAverage = 16.7; let slowFrames = 0; let economyResolution = false;
 	const invalidate = function () { lastState = undefined; lastFrameAt = 0; };
 	canvas.addEventListener('webglcontextrestored', invalidate);
@@ -101,13 +111,27 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 		for (const nozzle of visual.exhaust.children) nozzle.scale.x = (0.35 + power * 0.8 + Math.hypot(ship.vx, ship.vy) / 120) * pulse;
 		visual.exhaust.visible = ship.hp > 0;
 		for (const [index, scar] of visual.scars.children.entries()) scar.visible = 1 - ship.hp / ship.maxHp > (index + 1) / 8;
+		if (ship.id === 0) for (const socket of MOUNT_SOCKETS) {
+			const slot = visual.sockets.get(socket.index); if (!slot) continue;
+			const mount = state.arsenal?.mounts[socket.index];
+			const weapon = state.arsenal ? mount?.weapon : 'rail';
+			if (slot.weapon !== weapon) {
+				slot.group.clear(); slot.weapon = weapon;
+				const prototype = weapon ? models.turretPrototypes.get(weapon) : undefined;
+				if (prototype) slot.group.add(prototype.clone(true));
+			}
+			const direction = mount ? mount.locked ? mount.lockHeading : mount.heading : sideAngle(ship, socket.side);
+			slot.group.rotation.y = -(direction - ship.angle);
+			const recoil = reducedMotion ? 0 : Math.min(2.4, (mount?.flash ?? 0) * 15);
+			for (const fitted of slot.group.children) fitted.position.x = -recoil;
+		}
 	};
 	const drawTactical = function (view: Camera, state: State, width: number, height: number, heading: number | undefined) {
 		occupied = hudObstacles(canvas);
 		const p = state.player; const compact = width < 700; const font = compact ? 10 : 12;
 		const center = worldToScreen(p, view, 20);
 		// Short arc sectors explain the broadside orientation without filling the field.
-		for (const side of ['port', 'starboard'] as const) {
+		for (const side of state.arsenal ? [] : ['port', 'starboard'] as const) {
 			const target = targetFor(state, side); const ready = state.batteries[side].reload === 0 && !p.braced;
 			const bearing = sideAngle(p, side); const radius = 215;
 			ink.beginPath();
@@ -122,18 +146,30 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 				ring(at, target.length * view.scale * 0.66, ready ? '#edc182b0' : '#90bac147', ready ? 1.5 : 1);
 			}
 		}
+		if (state.arsenal) for (const side of ['port', 'starboard'] as const) {
+			const hasGuns = MOUNT_SOCKETS.some(function (socket) { const mount = state.arsenal?.mounts[socket.index]; return socket.side === side && mount && mount.weapon !== 'seeker'; });
+			if (!hasGuns) continue;
+			const bearing = sideAngle(p, side); const radius = 165;
+			ink.beginPath();
+			for (let i = 0; i <= 32; i++) {
+				const angle = bearing - Math.PI / 2 + Math.PI * i / 32;
+				const at = worldToScreen({ x: p.x + Math.cos(angle) * radius, y: p.y + Math.sin(angle) * radius }, view);
+				if (i === 0) ink.moveTo(at.x, at.y); else ink.lineTo(at.x, at.y);
+			}
+			ink.strokeStyle = state.fireControl.automatic && !p.braced ? `${CEL.mint}35` : `${CEL.muted}25`; ink.lineWidth = 1; ink.stroke();
+		}
 		for (let i = 1; i <= 10; i++) {
 			const at = worldToScreen({ x: p.x + p.vx * i * 0.5, y: p.y + p.vy * i * 0.5 }, view);
 			ink.fillStyle = '#99dfde55'; ink.fillRect(at.x - 1, at.y - 1, 2, 2);
 		}
-		const torpedoTarget = torpedoTargetFor(state);
+		const torpedoTarget = state.arsenal ? undefined : torpedoTargetFor(state);
 		for (const enemy of state.enemies) {
 			const hull = worldToScreen(enemy, view, 20);
 			const at = { x: hull.x, y: hull.y - (enemy.length * 0.38 + 33) * view.scale - 18 };
-			const selected = enemy.id === state.priorityTarget;
+			const selected = state.arsenal ? state.arsenal.mounts.some(function (mount) { return mount?.target === enemy.id; }) : enemy.id === state.priorityTarget;
 			const color = selected || enemy.command ? GOLD : '#d8a69e';
 			const safeTop = height < 500 ? 80 : compact ? 180 : 145;
-			const safeBottom = height - (height < 500 ? 170 : compact ? 335 : 245);
+			const safeBottom = height - (state.arsenal ? height < 500 ? 120 : compact ? 250 : 180 : height < 500 ? 170 : compact ? 335 : 245);
 			const behindLeftPanel = !compact && hull.x < 250 && hull.y < 335;
 			const behindRightPanel = !compact && hull.x > width - 270 && hull.y < 285;
 			const onScreen = hull.x > 55 && hull.x < width - 55 && at.y > safeTop && hull.y < safeBottom && !behindLeftPanel && !behindRightPanel;
@@ -197,7 +233,8 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 			const resized = width !== lastWidth || height !== lastHeight;
 			// Briefing, pause, and refit scenes are static: retain their last frame
 			// instead of spending GPU time redrawing an identical ship behind menus.
-			if (!resized && state === lastState && state.time === lastTime && briefing === lastBriefing && zoom === lastZoom && heading === lastHeading && reducedMotion === lastReduced) { lastFrameAt = 0; return; }
+			const fit = state.arsenal ? `${state.fireControl.automatic}/${state.player.braced}/${state.player.hp}/${state.arsenal.mounts.map(function (mount) { return mount ? `${mount.weapon}:${mount.rank}` : '-'; }).join(',')}` : 'legacy';
+			if (!resized && state === lastState && state.time === lastTime && briefing === lastBriefing && zoom === lastZoom && heading === lastHeading && reducedMotion === lastReduced && fit === lastFit) { lastFrameAt = 0; return; }
 			const now = performance.now();
 			if (lastFrameAt > 0 && !briefing) {
 				frameAverage = frameAverage * 0.95 + Math.min(200, now - lastFrameAt) * 0.05;
@@ -207,7 +244,7 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 			lastFrameAt = now;
 			const nextPixelRatio = Math.min(Math.max(window.devicePixelRatio, 1.25), briefing ? 1.75 : economyResolution ? 1 : 1.5);
 			if (pixelRatio !== nextPixelRatio) { pixelRatio = nextPixelRatio; renderer.setPixelRatio(pixelRatio); }
-			lastState = state; lastTime = state.time; lastBriefing = briefing; lastZoom = zoom; lastHeading = heading; lastReduced = reducedMotion;
+			lastState = state; lastTime = state.time; lastBriefing = briefing; lastZoom = zoom; lastHeading = heading; lastReduced = reducedMotion; lastFit = fit;
 			const view = cameraFor(width, height, state.player, zoom);
 			if (resized) {
 				lastWidth = width; lastHeight = height; renderer.setSize(width, height, false);

@@ -1,6 +1,10 @@
+import { createArsenal, prepareDraft, type Arsenal } from './arsenal';
+import { resetTurrets, updateTurretProjectiles, updateTurrets } from './turret-combat';
+import type { WeaponId } from './weapons';
+
 export interface Point { x: number; y: number }
 export type Side = 'port' | 'starboard';
-export type CombatEvent = 'cannon' | 'torpedo' | 'intercept' | 'hit' | 'damage' | 'explosion' | 'wave' | 'shield' | 'shield-hit' | 'alert' | 'ready' | 'beam' | 'missile';
+export type CombatEvent = 'cannon' | 'torpedo' | 'intercept' | 'hit' | 'damage' | 'explosion' | 'wave' | 'shield' | 'shield-hit' | 'alert' | 'ready' | 'beam' | 'missile' | 'rail' | 'flak' | 'rattler' | 'spark' | 'helios' | 'ion';
 export interface Ship extends Point {
 	id: number; angle: number; vx: number; vy: number; hp: number; maxHp: number;
 	length: number; width: number;
@@ -8,29 +12,35 @@ export interface Ship extends Point {
 export interface Enemy extends Ship {
 	kind: 'frigate' | 'cruiser'; tactic?: 'flanker' | 'brawler' | 'standoff'; command?: boolean; cooldown: number; warning: number; aim: Point; orbit: number;
 	training?: boolean; weapon?: 'rail' | 'beam' | 'missile'; beamRemaining?: number; beamHeading?: number;
+	slowRemaining?: number; slowFactor?: number;
 }
 export interface Battery { reload: number; remaining: number; next: number; target: number | undefined }
-export interface Shell extends Point { vx: number; vy: number; life: number; hostile: boolean; damage: number; projectile?: 'rail' | 'torpedo' | 'missile'; guidance?: { target: number | undefined } }
-export interface Effect extends Point { kind: 'muzzle' | 'impact' | 'explosion' | 'shield' | 'intercept'; life: number; duration: number }
-export interface BeamTrace { from: Point; to: Point; hostile: boolean; life: number }
+export interface Shell extends Point {
+	vx: number; vy: number; life: number; hostile: boolean; damage: number; projectile?: 'rail' | 'torpedo' | 'missile';
+	guidance?: { target: number | undefined; turnRate?: number; speed?: number };
+	weaponId?: WeaponId; hitIds?: number[]; pierceRemaining?: number; blastRadius?: number; interceptionLimit?: number; fuse?: number;
+}
+export interface Effect extends Point { kind: 'muzzle' | 'impact' | 'explosion' | 'shield' | 'intercept'; life: number; duration: number; weaponId?: WeaponId; radius?: number }
+export interface BeamTrace { from: Point; to: Point; hostile: boolean; life: number; weaponId?: WeaponId }
 export interface DefenseTrace { from: Point; to: Point; life: number }
 export interface Wreck extends Point { angle: number; length: number; width: number; life: number }
 export const CAMPAIGN_MISSIONS = [
-	{ name: 'Outer picket', location: 'Lyra outskirts', briefing: 'Break the patrol. Turn your flank toward each contact and learn the rhythm of the arrays.', enemies: ['frigate', 'frigate'], bearings: [-1.55, 1.45], tactics: [] },
-	{ name: 'Crossfire', location: 'The broken relay', briefing: 'Flanking frigates hunt your bow and stern blind spots. Turn across their approach to bring the arrays to bear.', enemies: ['frigate', 'frigate', 'frigate'], bearings: [-1.9, 0.9, 2.1], tactics: ['flanker', 'flanker', 'flanker'] },
-	{ name: 'Heavy escort', location: 'Ash corridor', briefing: 'A missile cruiser holds beyond broadside range behind a frigate screen. Use your all-angle missiles to pressure it, then close for a bow lance. Point defense can thin its guided salvos.', enemies: ['frigate', 'frigate', 'cruiser'], bearings: [-1.4, 1.5, 3], tactics: ['flanker', 'flanker', 'standoff'] },
+	{ name: 'Outer picket', location: 'Lyra outskirts', briefing: 'Break the patrol. Bring your fitted flank toward a contact. Damage earns salvage choices to grow the battery.', enemies: ['frigate', 'frigate'], bearings: [-1.55, 1.45], tactics: [] },
+	{ name: 'Crossfire', location: 'The broken relay', briefing: 'Flanking frigates cross your bow and stern. Turn to keep contacts inside your fitted weapons’ range and coverage. The close screen rewards area fire.', enemies: ['frigate', 'frigate', 'frigate'], bearings: [-1.9, 0.9, 2.1], tactics: ['flanker', 'flanker', 'flanker'] },
+	{ name: 'Heavy escort', location: 'Ash corridor', briefing: 'A missile cruiser holds behind a frigate screen. Line up the screen for piercing or area fire, and close if your battery needs range. Fitted flak can thin guided salvos; evasive movement and Aegis remain available to every build.', enemies: ['frigate', 'frigate', 'cruiser'], bearings: [-1.4, 1.5, 3], tactics: ['flanker', 'flanker', 'standoff'] },
 	{ name: 'The hammer', location: 'Inner passage', briefing: 'Two brawlers drive into close range with rapid volleys. Keep thrust available: a stationary armor lock invites a collision.', enemies: ['cruiser', 'cruiser'], bearings: [-1.2, 1.6], tactics: ['brawler', 'brawler'] },
 	{ name: 'Dreadwake', location: 'Lyra gate', briefing: 'The command cruiser charges a sustained beam while missile escorts screen it. Its beam cannot be intercepted: change course during the violet tell, or time Aegis for impact.', enemies: ['frigate', 'frigate', 'cruiser', 'cruiser'], bearings: [-1.7, 1.6, -0.6, 0.6], tactics: ['flanker', 'flanker', 'brawler', 'standoff'] },
 ] as const;
 export type RefitChoice = 'repair' | 'rails' | 'capacitor';
 export const REFIT_CHOICES: readonly { id: RefitChoice; name: string; description: string }[] = [
 	{ id: 'repair', name: 'Hull restoration', description: 'Restore 35% of maximum hull. Damage otherwise carries into the next mission.' },
-	{ id: 'rails', name: 'Rail calibration', description: 'Increase broadside damage by 15% of base damage for the rest of the campaign.' },
+	{ id: 'rails', name: 'Battery calibration', description: 'Add 15% base damage to every fitted weapon for the rest of the campaign.' },
 	{ id: 'capacitor', name: 'Capacitor overhaul', description: 'Reduce Aegis recharge by 3 seconds for the rest of the campaign (minimum 6 seconds).' },
 ];
 export interface Campaign { phase: 'combat' | 'refit'; completedMissions: number; upgrades: { rails: number; capacitor: number } }
 export interface State {
 	campaign?: Campaign;
+	arsenal?: Arsenal;
 	player: Ship & { throttle: number; yaw: number; braced: boolean };
 	batteries: Record<Side, Battery>; enemies: Enemy[]; shells: Shell[]; effects: Effect[]; wrecks: Wreck[];
 	time: number; wave: number; intermission: number; kills: number; nextId: number;
@@ -118,12 +128,17 @@ const spawnWave = function (state: State) {
 	const mission = state.campaign ? CAMPAIGN_MISSIONS[state.wave - 1] : undefined;
 	const bearings = mission?.bearings ?? (state.wave === 1 ? [-1.55, 1.45] : state.wave === 2 ? [-1.9, 0.9, 2.1] : [-1.4, 1.5, 3]);
 	for (const [index, bearing] of bearings.entries()) {
-		const angle = p.angle + bearing;
+		// The fitted campaign gives area weapons deliberate screen pairs while
+		// preserving dispersed flankers and the route's existing enemy roles.
+		const formations: readonly (readonly number[])[] = [[], [-1.4, -1.05, 1.55], [-1.4, -1.25, -1.4], [-1.25, -0.98], [-1.4, -1.1, 1.4, 1.2]];
+		const fittedBearing = state.arsenal ? formations[state.wave - 1]?.[index] : undefined;
+		const angle = p.angle + (fittedBearing ?? bearing);
 		const tactic = mission?.tactics[index];
-		const radius = tactic === 'standoff' ? 830 : 460 + index * 70;
+		const radius = state.arsenal ? state.wave === 1 ? 340 + index * 25 : tactic === 'standoff' ? 730 : 350 + index * 55
+			: tactic === 'standoff' ? 830 : 460 + index * 70;
 		const kind = mission?.enemies[index] ?? (state.wave === 3 && index === 2 ? 'cruiser' : 'frigate');
 		const command = Boolean(state.campaign && state.wave === CAMPAIGN_MISSIONS.length && index === 3);
-		const hp = state.campaign ? command ? 2400 : kind === 'cruiser' ? 1400 : 720 : kind === 'cruiser' ? 600 : 280;
+		const hp = state.arsenal && state.wave === 1 ? 360 : state.campaign ? command ? 2400 : kind === 'cruiser' ? 1400 : 720 : kind === 'cruiser' ? 600 : 280;
 		const x = p.x + Math.cos(angle) * radius; const y = p.y + Math.sin(angle) * radius;
 		state.enemies.push({ id: state.nextId++, x, y, angle: angle + Math.PI / 2, vx: 0, vy: 0,
 			hp, maxHp: hp, kind, ...(tactic ? { tactic } : {}), command, length: kind === 'cruiser' ? 170 : 115, width: kind === 'cruiser' ? 58 : 42,
@@ -155,9 +170,15 @@ export const createCampaignState = function (): State {
 	state.enemies = []; state.nextId = 1; spawnWave(state); state.events = [];
 	return state;
 };
+export const createArsenalCampaign = function (): State {
+	const state = createCampaignState();
+	state.arsenal = createArsenal(); state.fireControl.automatic = true;
+	state.enemies = []; state.nextId = 1; spawnWave(state); state.events = [];
+	return state;
+};
 export const chooseRefit = function (state: State, choice: RefitChoice): boolean {
 	const campaign = state.campaign;
-	if (!campaign || campaign.phase !== 'refit' || state.outcome !== 'playing' || state.wave >= CAMPAIGN_MISSIONS.length) return false;
+	if (!campaign || campaign.phase !== 'refit' || state.outcome !== 'playing' || state.wave >= CAMPAIGN_MISSIONS.length || (state.arsenal?.pending ?? 0) > 0) return false;
 	if (choice === 'repair') state.player.hp = Math.min(state.player.maxHp, state.player.hp + state.player.maxHp * 0.35);
 	else if (choice === 'rails') campaign.upgrades.rails++;
 	else if (choice === 'capacitor') campaign.upgrades.capacitor++;
@@ -172,6 +193,7 @@ export const chooseRefit = function (state: State, choice: RefitChoice): boolean
 	state.torpedoes.held = false; state.missiles.held = false; state.fireControl.held = false;
 	state.beam = { charge: BEAM_DURATION, cooldown: 0, firing: false, target: undefined }; state.beams = [];
 	state.pointDefense.reload = 0; state.pointDefense.traces = [];
+	resetTurrets(state);
 	spawnWave(state);
 	return true;
 };
@@ -311,6 +333,8 @@ const updatePointDefense = function (state: State, dt: number) {
 	effect(state, threat.shell, 'intercept'); state.events.push('intercept');
 };
 const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
+	enemy.slowRemaining = Math.max(0, (enemy.slowRemaining ?? 0) - dt);
+	const movementFactor = enemy.slowRemaining > 0 ? 1 - (enemy.slowFactor ?? 0) : 1;
 	if (enemy.training) return;
 	const p = state.player; const range = distance(enemy, p);
 	const bearing = Math.atan2(p.y - enemy.y, p.x - enemy.x);
@@ -319,9 +343,9 @@ const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 		: enemy.tactic === 'standoff' ? bearing + enemy.orbit * (range > 850 ? 0.4 : range < 720 ? 2.7 : Math.PI / 2)
 		: enemy.tactic === 'brawler' ? bearing + enemy.orbit * (range > 230 ? 0.15 : 1.3)
 		: bearing + enemy.orbit * (range > 680 ? 0.3 : range < 330 ? 2.2 : 1.4);
-	const turnRate = enemy.tactic === 'flanker' ? 0.65 : 0.42;
+	const turnRate = (enemy.tactic === 'flanker' ? 0.65 : 0.42) * movementFactor;
 	enemy.angle += clamp(angleDelta(enemy.angle, desired), -dt * turnRate, dt * turnRate);
-	const speed = enemy.tactic === 'flanker' ? 66 : enemy.tactic === 'brawler' ? 44 : enemy.kind === 'cruiser' ? 30 : 48;
+	const speed = (enemy.tactic === 'flanker' ? 66 : enemy.tactic === 'brawler' ? 44 : enemy.kind === 'cruiser' ? 30 : 48) * movementFactor;
 	enemy.vx = Math.cos(enemy.angle) * speed; enemy.vy = Math.sin(enemy.angle) * speed;
 	enemy.x += enemy.vx * dt; enemy.y += enemy.vy * dt;
 	if ((enemy.beamRemaining ?? 0) > 0) {
@@ -372,6 +396,7 @@ const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 export const step = function (state: State, input: Controls, elapsed: number) {
 	state.events = [];
 	if (state.outcome !== 'playing' || state.campaign?.phase === 'refit' || !Number.isFinite(elapsed) || elapsed <= 0) return;
+	if (state.arsenal && (state.arsenal.pending > 0 || !state.arsenal.mounts.some(function (mount) { return mount !== null; }))) return;
 	const dt = Math.min(elapsed, 1 / 30); const p = state.player;
 	state.beams = state.beams.filter(function (beam) { beam.life -= dt; return beam.life > 0; });
 	state.time += dt; state.shake = Math.max(0, state.shake - dt * 12);
@@ -396,13 +421,19 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	p.vx += (Math.cos(p.angle) * speed - p.vx) * dt * 0.22;
 	p.vy += (Math.sin(p.angle) * speed - p.vy) * dt * 0.22;
 	p.x += p.vx * dt; p.y += p.vy * dt;
-	updateBattery(state, 'port', input.port, dt); updateBattery(state, 'starboard', input.starboard, dt);
-	updateTorpedoes(state, input.torpedo, dt);
-	updateMissiles(state, input.missile ?? false, dt); updateBeam(state, input.beam ?? false, dt);
+	if (state.arsenal) updateTurrets(state, dt);
+	else {
+		updateBattery(state, 'port', input.port, dt); updateBattery(state, 'starboard', input.starboard, dt);
+		updateTorpedoes(state, input.torpedo, dt);
+		updateMissiles(state, input.missile ?? false, dt); updateBeam(state, input.beam ?? false, dt);
+	}
 	for (const enemy of state.enemies) if (enemy.hp > 0) updateEnemy(state, enemy, dt);
-	updatePointDefense(state, dt);
+	if (state.arsenal) {
+		state.pointDefense.traces = state.pointDefense.traces.filter(function (trace) { trace.life -= dt; return trace.life > 0; });
+		updateTurretProjectiles(state, dt);
+	} else updatePointDefense(state, dt);
 	for (const shell of state.shells) {
-		if (shell.life <= 0) continue;
+		if (shell.life <= 0 || shell.weaponId) continue;
 		if (shell.guidance) {
 			const target = shell.hostile ? p : state.enemies.find(function (enemy) { return enemy.id === shell.guidance?.target && enemy.hp > 0; });
 			if (target) {
@@ -436,13 +467,18 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 		state.wrecks.push({ x: enemy.x, y: enemy.y, angle: enemy.angle, length: enemy.length, width: enemy.width, life: 35 });
 	}
 	state.enemies = state.enemies.filter(function (enemy) { return enemy.hp > 0; });
+	if (state.arsenal) {
+		if (state.campaign && state.wave === CAMPAIGN_MISSIONS.length && state.enemies.length === 0) {
+			state.arsenal.pending = 0; state.arsenal.offers = [];
+		} else if (p.hp > 0) prepareDraft(state);
+	}
 	if (!state.enemies.some(function (enemy) { return enemy.id === state.priorityTarget; })) state.priorityTarget = undefined;
 	state.effects = state.effects.filter(function (fx) { fx.life -= dt; return fx.life > 0; });
 	state.wrecks = state.wrecks.filter(function (wreck) { wreck.life -= dt; return wreck.life > 0; });
 	p.hp = Math.max(0, p.hp);
 	if (p.hp <= 0) {
 		state.outcome = 'lost'; effect(state, p, 'explosion'); state.events.push('explosion');
-	} else if (state.enemies.length === 0) {
+	} else if (state.enemies.length === 0 && (state.arsenal?.pending ?? 0) === 0) {
 		state.intermission += dt;
 		if (state.intermission >= 6) {
 			if (state.campaign) {

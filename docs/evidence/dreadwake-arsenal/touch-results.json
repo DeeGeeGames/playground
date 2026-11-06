@@ -1,0 +1,16 @@
+{
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "checks": [
+    "touch starter/socket/deploy",
+    "touch fire policy",
+    "held touch throttle and persistence",
+    "touch neutral",
+    "earned draft and second install",
+    "paused battery inspection"
+  ],
+  "errors": [],
+  "limitation": "Automated touch events, not physical device feel."
+}
