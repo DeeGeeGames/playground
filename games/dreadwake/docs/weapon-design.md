@@ -68,7 +68,7 @@ at most fourteen rewards. Incremental costs are `180 + 100 × rewardsAlreadyEarn
 180, 280, 380, ..., 1,480; total 11,620. Initial patrol hull is 360 per ship so it
 provides two rewards; the remaining encounters retain a useful late-game HP pool.
 The full campaign supplies approximately 13,760 damage salvage, leaving roughly
-2,140 HP after the final threshold. Never open a draft after the final campaign enemy dies. Earlier mission-clearing kills still award drafts before refit.
+2,140 HP after the final threshold. Timed missions now bound salvage to these original per-sector budgets. Never open a draft after final timed extraction. Earlier last-tick rewards still resolve before refit. Destroying the roster does not end a timed sector.
 
 Crossing a threshold queues a fully paused three-card draft, including incoming
 shots, timers and momentum. Resolve queued drafts before a mission transition;

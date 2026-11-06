@@ -1,0 +1,13 @@
+{
+  "liveJourney": "Starter selection, countdown, pause/draft clock freeze, first timed extraction to saved refit",
+  "restoreJourney": "Injected validated version-2 refit checkpoint, reload, Continue, repair, mission-two timer",
+  "restored": "Transit reached \u00b7 choose a field refit",
+  "next": "SURVIVE 75s \u00b7 3 hostile signatures \u00b7 0 ships broken",
+  "viewports": [
+    "1440x900",
+    "390x844",
+    "568x320"
+  ],
+  "pageErrors": [],
+  "limitation": "Reload in the live journey with Playwright virtual clock timed out waiting for Continue. Restore UI was verified separately in a fresh browser using a validated refit fixture."
+}

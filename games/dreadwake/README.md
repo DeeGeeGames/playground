@@ -1,7 +1,7 @@
 # Dread Wake · The Lyra Passage
 
 A browser capital-ship combat demo. Keep a heavy cruiser moving through five linked
-encounters, beginning with one chosen turret and eleven empty sockets. Weapons
+timed encounters, beginning with one chosen turret and eleven empty sockets. Weapons
 acquire and fire autonomously. Damage earns paused salvage choices: install another
 weapon, strengthen a fitted turret, or repair the hull.
 
@@ -83,6 +83,20 @@ opportunity. Repair restores 15% maximum hull instead of taking a weapon; skippi
 is also explicit. Choosing a reward spends it once. Simulation, projectiles,
 charges and momentum remain frozen throughout the choice.
 
+Each sector ends when its combat timer expires: 60, 75, 90, 90 and 90 seconds
+(6 minutes 45 seconds of combat, plus paused decisions). Destroying the opening
+fleet does not end a sector. Reinforcements arrive every 12–15 seconds from ahead
+of the ship, alternating sides, with at most 3–5 active enemies. Full screens skip
+arrivals instead of accumulating a burst. Transit clears surviving contacts and
+projectiles without awarding kills or salvage. Death on the last tick is defeat.
+The final mission also ends on survival; killing its commander is optional.
+
+Salvage per sector is capped at the old roster's damage budget: 720, 2,160, 2,840,
+2,800 and 5,240. Reinforcements cannot accelerate the economy without limit. The
+HUD reports when a sector's salvage is exhausted. Unused sector budget does not
+carry forward; earned salvage does. Drafts still pause combat and the timer;
+last-tick choices resolve before refit, and final extraction discards unusable drafts.
+
 The five encounters introduce flankers, missile cruisers, close brawlers and a
 beam-armed command ship. Violet charge tells announce enemy beams that flak cannot
 intercept. Hull damage persists. Each of the first four victories also offers one
@@ -96,7 +110,8 @@ Its temporary training loadouts and rewards never change campaign saves.
 
 ## Checkpoints and compatibility
 
-Checkpoints remain under `dreadwake.campaign.v1`. Validated loadout, turret ranks,
+Checkpoints remain under `dreadwake.campaign.v1`, using version 2 for timed runs.
+Version 1 checkpoints retain their route and build and resume with timed missions. Validated loadout, turret ranks,
 salvage, reward count and offer seed are saved together at mission launch and refit.
 **Retry and Continue restore the launch build and salvage along with the mission.**
 Mid-mission choices roll back; replaying a checkpoint cannot retain upgrades while
@@ -105,7 +120,7 @@ checkpoint intact until the starter and socket are confirmed.
 
 Existing checkpoints preserve route, hull, statistics, upgrade counts and fire
 policy. They receive a compatible six-mount fit: two rails, Seeker, Helios, Breach
-and Bulwark. New runs always begin with one chosen turret. Legacy simulation entry
+and Bulwark. New runs always begin with one chosen turret. Legacy untimed simulation entry
 points remain available for existing callers. Invalid or unavailable storage is
 reported; play and an in-memory retry remain available.
 
