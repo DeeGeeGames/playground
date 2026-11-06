@@ -107,6 +107,10 @@ export const createMech = function (kind?: EnemyKind, commander = false) {
 		box(turret, -21, -20, 74, 2, 2, kind === 'scout' ? 24 : 19, dark);
 		box(turret, -21, -20, kind === 'scout' ? 98 : 93, 3, 3, 2, glass);
 	}
+	// Rock the upper assembly about the waist, keeping the planted-leg rig intact.
+	const waistHeight = 48 * size;
+	for (const part of turret.children) part.position.y -= waistHeight;
+	turret.rotation.order = 'YXZ';
 	const legs = [0, 1].map(function () {
 		const foot = new Group(); root.add(foot);
 		box(foot, 0, 0, 0, 38, 18, 7, dark);
@@ -149,6 +153,14 @@ export const createMech = function (kind?: EnemyKind, commander = false) {
 		root,
 		pose: function (gait: WalkerGait, heading: number, feedback?: MechFeedback) {
 			hull.rotation.y = -gait.body.angle; turret.rotation.y = -heading;
+			const motion = feedback?.reducedMotion ? 0 : 1;
+			const sway = gait.motion.roll * 26 * size * motion;
+			turret.position.set(-Math.sin(gait.body.angle) * sway, waistHeight + gait.motion.lift * size * motion, Math.cos(gait.body.angle) * sway);
+			// Express chassis-relative lean in turret space so aiming does not
+			// rotate the weight shift away from the supporting foot.
+			const relativeHeading = gait.body.angle - heading;
+			turret.rotation.x = (Math.cos(relativeHeading) * gait.motion.roll - Math.sin(relativeHeading) * gait.motion.pitch) * motion;
+			turret.rotation.z = (Math.sin(relativeHeading) * gait.motion.roll + Math.cos(relativeHeading) * gait.motion.pitch) * motion;
 			const recoil = feedback?.reducedMotion ? 0 : feedback?.recoil ?? 0;
 			for (const barrel of barrels) barrel.part.position.x = barrel.x - recoil * 7 * size;
 			const hit = feedback?.hit ?? 0;

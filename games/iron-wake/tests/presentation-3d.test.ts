@@ -113,3 +113,28 @@ test('render batches follow planted pose handles when ECS synchronizes the root 
 		} finally { model.dispose(); }
 	}
 });
+
+test('reduced motion restores the torso without changing feet or independent turret aim', function () {
+	for (const kind of [undefined, 'scout', 'striker', 'siege'] as const) {
+		const size = kind ? mechScale(kind) : 1; const model = createMech(kind);
+		let gait = createGait({ x: 0, y: 0, angle: 0 }, size);
+		for (let i = 1; i <= 40; i++) gait = advanceGait(gait, { x: i * size, y: 0, angle: 0 }, 1 / 60, size);
+		try {
+			const turret = model.root.getObjectByName('turret');
+			if (!turret) throw new Error('Missing turret');
+			model.pose(createGait(gait.body, size), Math.PI / 2);
+			const rest = turret.matrix.clone();
+			model.pose(gait, Math.PI / 2);
+			const walking = turret.matrix.clone();
+			const feet = model.root.children.filter(function (child) { return child.children.length === 3; });
+			const footTransforms = feet.map(function (foot) { return foot.matrix.clone(); });
+			expect(walking.equals(rest)).toBe(false);
+			expect(turret.rotation.y).toBe(-Math.PI / 2);
+			model.pose(gait, Math.PI / 2, { recoil: 0, hit: 0, heat: 0, time: 0, reducedMotion: true });
+			expect(turret.matrix.equals(rest)).toBe(true);
+			expect(feet.map(function (foot) { return foot.matrix; })).toEqual(footTransforms);
+			model.pose(gait, Math.PI / 2);
+			expect(turret.matrix.equals(walking)).toBe(true);
+		} finally { model.dispose(); }
+	}
+});
