@@ -83,5 +83,7 @@
     "Ratings are subjective design judgments, not gameplay, hardware, performance, or shipping acceptance."
   ],
   "productionFilesChanged": false,
-  "ownerApproval": "Approved by owner before production overhaul"
+  "ownerApproval": "Approved by owner before production overhaul",
+  "archivedSha256": "4d33fd33ae4c4f476076ecb985f3b3048ec59647afdb38950221c57a7c2de26e",
+  "archivalChange": "Trailing whitespace removed after approval; rendered artwork is unchanged. reviewedSha256 records the exact originally reviewed file."
 }

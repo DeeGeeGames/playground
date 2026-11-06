@@ -208,12 +208,12 @@ const target = function(t,x,y) {
 const combat = function(t) {
 	let out=backdrop(t)+rock(t,87,437,1.1)+rock(t,170,501,.35)+rock(t,1087,320,.5);
 	out+=cruiser(t,774,168,.60,Math.PI/2,true,true);
-	
+
 	out+='<ellipse cx="517" cy="388" rx="187" ry="86" fill="none" stroke="'+t.side+'" stroke-width="1.5" stroke-dasharray="5 11"/>';
-	
+
 	out+=cruiser(t,500,348,1.02,-Math.PI/2,false,false,false);
 	out+=cruiser(t,930,420,.67,Math.PI/2,true,false,false);
-	
+
 	out+='<g class="salvo">';
 	for(let i=0;i<3;i++) {
 		const a=[597+i*25,370-i*14], b=[820+i*18,461-i*16];
