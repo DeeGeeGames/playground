@@ -89,9 +89,10 @@ export const createRenderer = function () {
 		}
 		for (const enemy of state.enemies) if (enemy.warning > 0) {
 			const at = worldToScreen(enemy, camera, 20); const aim = worldToScreen(enemy.aim, camera);
-			ctx.setLineDash([6, 8]); line(ctx, at, aim, '#eb8f7450'); ctx.setLineDash([]);
-			ring(ctx, aim, (35 + enemy.warning * 40) * camera.scale, '#ed987a95');
-			label(ctx, 'INCOMING', { x: aim.x, y: aim.y + 30 * camera.scale }, '#eaa184', 9);
+			const beam = enemy.weapon === 'beam';
+			ctx.setLineDash([6, 8]); line(ctx, at, aim, beam ? '#d8a5ff9c' : '#eb8f7450'); ctx.setLineDash([]);
+			ring(ctx, aim, (35 + enemy.warning * 40) * camera.scale, beam ? '#dda6ffce' : '#ed987a95');
+			label(ctx, beam ? 'LANCE CHARGING' : enemy.weapon === 'missile' ? 'MISSILE SALVO' : 'INCOMING', { x: aim.x, y: aim.y + 30 * camera.scale }, beam ? '#e8c8ff' : '#eaa184', 11);
 		}
 		for (const wreck of state.wrecks) {
 			ctx.globalAlpha = Math.min(0.55, wreck.life / 12);
@@ -123,12 +124,23 @@ export const createRenderer = function () {
 			}
 		}
 		if (heading !== undefined) drawHeading(ctx, camera, p, heading);
+		for (const beam of state.beams) {
+			const from = worldToScreen(beam.from, camera, 22); const to = worldToScreen(beam.to, camera, 22);
+			ctx.globalAlpha = Math.min(1, beam.life / 0.03);
+			line(ctx, from, to, beam.hostile ? '#fb72942a' : '#73e8ff23', reducedMotion ? 8 : 14);
+			line(ctx, from, to, beam.hostile ? '#ef8abbbb' : '#83e9f8aa', 5);
+			line(ctx, from, to, beam.hostile ? '#ffe2eb' : '#efffff', 1.8);
+			ctx.globalAlpha = 1;
+		}
 		for (const shell of state.shells) {
 			const at = worldToScreen(shell, camera, 22);
-			const trail = shell.guidance ? 0.22 : 0.085;
+			const missile = shell.projectile === 'missile';
+			const trail = missile ? 0.35 : shell.guidance ? 0.22 : 0.085;
 			const tail = worldToScreen({ x: shell.x - shell.vx * trail, y: shell.y - shell.vy * trail }, camera, 22);
-			line(ctx, tail, at, shell.hostile ? '#ff6c8b90' : shell.guidance ? '#f1b566b0' : '#77edff90', shell.guidance ? 4 : shell.hostile ? 2 : 3);
-			ctx.fillStyle = shell.hostile ? '#ffc0cf' : shell.guidance ? '#ffe6b1' : '#d6ffff'; ctx.beginPath(); ctx.arc(at.x, at.y, shell.guidance ? 3.5 : shell.hostile ? 2 : 2.8, 0, Math.PI * 2); ctx.fill();
+			if (missile) ctx.setLineDash([2, 3]);
+			line(ctx, tail, at, shell.hostile ? '#ff6c8b90' : missile ? '#dbe9c5b0' : shell.guidance ? '#f1b566b0' : '#ffe2a090', missile ? 1.4 : shell.guidance ? 4 : shell.hostile ? 2 : 3);
+			ctx.setLineDash([]);
+			ctx.fillStyle = shell.hostile ? '#ffc0cf' : shell.guidance ? '#ffe6b1' : '#fff5dc'; ctx.beginPath(); ctx.arc(at.x, at.y, missile ? 2 : shell.guidance ? 3.5 : shell.hostile ? 2 : 2.8, 0, Math.PI * 2); ctx.fill();
 		}
 		for (const trace of state.pointDefense.traces) {
 			ctx.globalAlpha = trace.life / 0.16;
