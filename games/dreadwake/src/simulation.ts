@@ -1,3 +1,4 @@
+import { MISSION_PACING, createMissionClock, type MissionClock } from './pacing';
 import { hullMuzzle } from './effect-motion';
 import { createArsenal, prepareDraft, type Arsenal } from './arsenal';
 import { resetTurrets, updateTurretProjectiles, updateTurrets } from './turret-combat';
@@ -27,7 +28,7 @@ export interface BeamTrace { from: Point; to: Point; hostile: boolean; life: num
 export interface DefenseTrace { from: Point; to: Point; life: number }
 export interface Wreck extends Point { angle: number; length: number; width: number; life: number }
 export const CAMPAIGN_MISSIONS = [
-	{ name: 'Outer picket', location: 'Lyra outskirts', briefing: 'Break the patrol. Bring your fitted flank toward a contact. Damage earns salvage choices to grow the battery.', enemies: ['frigate', 'frigate'], bearings: [-1.55, 1.45], tactics: [] },
+	{ name: 'Outer picket', location: 'Lyra outskirts', briefing: 'Survive until the transit window opens. Reinforcements arrive during combat. Bring your fitted flank toward a contact. Damage earns salvage choices to grow the battery.', enemies: ['frigate', 'frigate'], bearings: [-1.55, 1.45], tactics: [] },
 	{ name: 'Crossfire', location: 'The broken relay', briefing: 'Flanking frigates cross your bow and stern. Turn to keep contacts inside your fitted weapons’ range and coverage. The close screen rewards area fire.', enemies: ['frigate', 'frigate', 'frigate'], bearings: [-1.9, 0.9, 2.1], tactics: ['flanker', 'flanker', 'flanker'] },
 	{ name: 'Heavy escort', location: 'Ash corridor', briefing: 'A missile cruiser holds behind a frigate screen. Line up the screen for piercing or area fire, and close if your battery needs range. Fitted flak can thin guided salvos; evasive movement and Aegis remain available to every build.', enemies: ['frigate', 'frigate', 'cruiser'], bearings: [-1.4, 1.5, 3], tactics: ['flanker', 'flanker', 'standoff'] },
 	{ name: 'The hammer', location: 'Inner passage', briefing: 'Two brawlers drive into close range with rapid volleys. Keep thrust available: a stationary armor lock invites a collision.', enemies: ['cruiser', 'cruiser'], bearings: [-1.2, 1.6], tactics: ['brawler', 'brawler'] },
@@ -39,7 +40,7 @@ export const REFIT_CHOICES: readonly { id: RefitChoice; name: string; descriptio
 	{ id: 'rails', name: 'Battery calibration', description: 'Add 15% base damage to every fitted weapon for the rest of the campaign.' },
 	{ id: 'capacitor', name: 'Capacitor overhaul', description: 'Reduce Aegis recharge by 3 seconds for the rest of the campaign (minimum 6 seconds).' },
 ];
-export interface Campaign { phase: 'combat' | 'refit'; completedMissions: number; upgrades: { rails: number; capacitor: number } }
+export interface Campaign { clock?: MissionClock; phase: 'combat' | 'refit'; completedMissions: number; upgrades: { rails: number; capacitor: number } }
 export interface State {
 	campaign?: Campaign;
 	arsenal?: Arsenal;
@@ -125,18 +126,19 @@ const effect = function (state: State, at: Point, kind: Effect['kind'], elevatio
 	const duration = kind === 'explosion' ? 1.8 : kind === 'impact' ? 0.65 : 0.32;
 	state.effects.push({ ...at, kind, life: duration, duration, elevation, ...(source ? { source } : {}) });
 };
-const spawnWave = function (state: State) {
+const spawnWave = function (state: State, reinforcement?: number) {
 	const p = state.player;
 	const mission = state.campaign ? CAMPAIGN_MISSIONS[state.wave - 1] : undefined;
 	const bearings = mission?.bearings ?? (state.wave === 1 ? [-1.55, 1.45] : state.wave === 2 ? [-1.9, 0.9, 2.1] : [-1.4, 1.5, 3]);
 	for (const [index, bearing] of bearings.entries()) {
+		if (reinforcement !== undefined && index !== reinforcement % (state.wave === CAMPAIGN_MISSIONS.length ? 3 : bearings.length)) continue;
 		// The fitted campaign gives area weapons deliberate screen pairs while
 		// preserving dispersed flankers and the route's existing enemy roles.
 		const formations: readonly (readonly number[])[] = [[], [-1.4, -1.05, 1.55], [-1.4, -1.25, -1.4], [-1.25, -0.98], [-1.4, -1.1, 1.4, 1.2]];
 		const fittedBearing = state.arsenal ? formations[state.wave - 1]?.[index] : undefined;
-		const angle = p.angle + (fittedBearing ?? bearing);
+		const angle = p.angle + (reinforcement === undefined ? fittedBearing ?? bearing : (reinforcement % 2 === 0 ? -0.65 : 0.65));
 		const tactic = mission?.tactics[index];
-		const radius = state.arsenal ? state.wave === 1 ? 340 + index * 25 : tactic === 'standoff' ? 730 : 350 + index * 55
+		const radius = reinforcement !== undefined ? 650 : state.arsenal ? state.wave === 1 ? 340 + index * 25 : tactic === 'standoff' ? 730 : 350 + index * 55
 			: tactic === 'standoff' ? 830 : 460 + index * 70;
 		const kind = mission?.enemies[index] ?? (state.wave === 3 && index === 2 ? 'cruiser' : 'frigate');
 		const command = Boolean(state.campaign && state.wave === CAMPAIGN_MISSIONS.length && index === 3);
@@ -175,6 +177,7 @@ export const createCampaignState = function (): State {
 export const createArsenalCampaign = function (): State {
 	const state = createCampaignState();
 	state.arsenal = createArsenal(); state.fireControl.automatic = true;
+	if (state.campaign) state.campaign.clock = createMissionClock();
 	state.enemies = []; state.nextId = 1; spawnWave(state); state.events = [];
 	return state;
 };
@@ -186,6 +189,8 @@ export const chooseRefit = function (state: State, choice: RefitChoice): boolean
 	else if (choice === 'capacitor') campaign.upgrades.capacitor++;
 	else return false;
 	campaign.phase = 'combat'; state.wave++; state.intermission = 0;
+	if (campaign.clock) campaign.clock = createMissionClock();
+	state.enemies = [];
 	state.player.vx = 0; state.player.vy = 0; state.player.yaw = 0; state.player.throttle = 0; state.player.braced = false;
 	state.shells = []; state.effects = []; state.wrecks = []; state.priorityTarget = undefined;
 	for (const battery of [state.batteries.port, state.batteries.starboard, state.torpedoes, state.missiles]) {
@@ -401,6 +406,9 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	if (state.outcome !== 'playing' || state.campaign?.phase === 'refit' || !Number.isFinite(elapsed) || elapsed <= 0) return;
 	if (state.arsenal && (state.arsenal.pending > 0 || !state.arsenal.mounts.some(function (mount) { return mount !== null; }))) return;
 	const dt = Math.min(elapsed, 1 / 30); const p = state.player;
+	const clock = state.campaign?.clock;
+	const pacing = clock ? MISSION_PACING[state.wave - 1] : undefined;
+	if (clock && pacing) clock.elapsed = Math.min(pacing.duration, clock.elapsed + dt);
 	state.beams = state.beams.filter(function (beam) { beam.life -= dt; return beam.life > 0; });
 	state.time += dt; state.shake = Math.max(0, state.shake - dt * 12);
 	const cooling = state.shield.cooldown > 0;
@@ -471,7 +479,7 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	}
 	state.enemies = state.enemies.filter(function (enemy) { return enemy.hp > 0; });
 	if (state.arsenal) {
-		if (state.campaign && state.wave === CAMPAIGN_MISSIONS.length && state.enemies.length === 0) {
+		if (state.campaign && state.wave === CAMPAIGN_MISSIONS.length && (clock && pacing ? clock.elapsed >= pacing.duration : state.enemies.length === 0)) {
 			state.arsenal.pending = 0; state.arsenal.offers = [];
 		} else if (p.hp > 0) prepareDraft(state);
 	}
@@ -481,10 +489,24 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	p.hp = Math.max(0, p.hp);
 	if (p.hp <= 0) {
 		state.outcome = 'lost'; effect(state, p, 'explosion'); state.events.push('explosion');
+	} else if (clock && pacing) {
+		if (clock.elapsed >= pacing.duration) {
+			// Extraction is atomic: no surviving volley can damage the refit screen.
+			state.enemies = []; state.shells = []; state.beams = [];
+			if (state.campaign && (state.arsenal?.pending ?? 0) === 0) {
+				state.campaign.completedMissions = state.wave;
+				if (state.wave === CAMPAIGN_MISSIONS.length) state.outcome = 'won';
+				else state.campaign.phase = 'refit';
+			}
+		} else if (clock.elapsed >= clock.reinforcement * pacing.interval) {
+			// Full screens skip this arrival; they never bank a later burst.
+			if (state.enemies.length < pacing.activeLimit) spawnWave(state, clock.reinforcement);
+			clock.reinforcement++;
+		}
 	} else if (state.enemies.length === 0 && (state.arsenal?.pending ?? 0) === 0) {
 		state.intermission += dt;
 		if (state.intermission >= 6) {
-			if (state.campaign) {
+			if (state.campaign && (state.arsenal?.pending ?? 0) === 0) {
 				state.campaign.completedMissions = state.wave;
 				if (state.wave === CAMPAIGN_MISSIONS.length) state.outcome = 'won';
 				else state.campaign.phase = 'refit';

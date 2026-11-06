@@ -1,10 +1,11 @@
+import { MISSION_PACING } from './pacing';
 import { CAMPAIGN_MISSIONS, MAX_HULL, chooseRefit, createArsenalCampaign, type State } from './simulation';
 import { createArsenal, draftCost, MAX_DRAFTS } from './arsenal';
 import { createMount, isWeaponId, isWeaponRank, MOUNT_SOCKETS, type WeaponId, type WeaponRank } from './weapons';
 
 export const CAMPAIGN_SAVE_KEY = 'dreadwake.campaign.v1';
 export interface CampaignSave {
-	version: 1;
+	version: 1 | 2;
 	wave: number;
 	phase: 'combat' | 'refit';
 	hull: number;
@@ -50,22 +51,26 @@ const parseArsenal = function (value: unknown): ArsenalSave | undefined {
 	return { version: 1, mounts, salvage: value['salvage'], rewards: value['rewards'], seed: value['seed'], legacy: value['legacy'] };
 };
 const parseSave = function (value: unknown): CampaignSave | undefined {
-	if (!record(value) || value['version'] !== 1 || !integer(value['wave'], 1, CAMPAIGN_MISSIONS.length)
+	if (!record(value) || (value['version'] !== 1 && value['version'] !== 2) || !integer(value['wave'], 1, CAMPAIGN_MISSIONS.length)
 		|| (value['phase'] !== 'combat' && value['phase'] !== 'refit') || !number(value['hull'], Number.MIN_VALUE, MAX_HULL)
 		|| !integer(value['rails'], 0, value['wave'] - 1) || !integer(value['capacitor'], 0, value['wave'] - 1)
 		|| value['rails'] + value['capacitor'] > value['wave'] - 1 || !number(value['time'], 0, 360000)
-		|| !integer(value['kills'], 0, 14) || typeof value['automatic'] !== 'boolean' || !record(value['stats'])) return undefined;
+		|| !integer(value['kills'], 0, value['version'] === 1 ? 14 : 100) || typeof value['automatic'] !== 'boolean' || !record(value['stats'])) return undefined;
 	if (value['phase'] === 'refit' && value['wave'] === CAMPAIGN_MISSIONS.length) return undefined;
 	const completed = CAMPAIGN_MISSIONS.slice(0, value['wave'] - (value['phase'] === 'combat' ? 1 : 0))
 		.reduce(function (total, mission) { return total + mission.enemies.length; }, 0);
-	if (value['kills'] !== completed) return undefined;
+	if (value['version'] === 1 && value['kills'] !== completed) return undefined;
+	const completedCount = value['wave'] - (value['phase'] === 'combat' ? 1 : 0);
+	const maxTimedKills = completed + MISSION_PACING.slice(0, completedCount)
+		.reduce(function (sum, pacing) { return sum + Math.ceil(pacing.duration / pacing.interval) - 1; }, 0);
+	if (value['version'] === 2 && value['kills'] > maxTimedKills) return undefined;
 	const stats = value['stats'];
 	if (!integer(stats['salvos'], 0, 1000000) || !integer(stats['torpedoSalvos'], 0, 1000000)
 		|| !integer(stats['interceptions'], 0, 1000000) || !integer(stats['hits'], 0, 10000000)
 		|| !number(stats['damageBlocked'], 0, 100000000)) return undefined;
 	const arsenal = value['arsenal'] === undefined ? undefined : parseArsenal(value['arsenal']);
 	if (value['arsenal'] !== undefined && !arsenal) return undefined;
-	return { version: 1, wave: value['wave'], phase: value['phase'], hull: value['hull'], rails: value['rails'],
+	return { version: value['version'], wave: value['wave'], phase: value['phase'], hull: value['hull'], rails: value['rails'],
 		capacitor: value['capacitor'], time: value['time'], kills: value['kills'], automatic: value['automatic'],
 		stats: { salvos: stats['salvos'], torpedoSalvos: stats['torpedoSalvos'], interceptions: stats['interceptions'], hits: stats['hits'], damageBlocked: stats['damageBlocked'] },
 		...(arsenal ? { arsenal } : {}) };
@@ -75,9 +80,10 @@ const parseSave = function (value: unknown): CampaignSave | undefined {
 export const captureCampaign = function (state: State): CampaignSave | undefined {
 	if (!state.campaign || state.outcome !== 'playing') return undefined;
 	const arsenal = state.arsenal;
+	if (state.campaign.phase === 'combat' && (state.campaign.clock?.elapsed ?? 0) > 0) return undefined;
 	if (arsenal && (arsenal.pending > 0 || (state.campaign.phase === 'combat' &&
 		(state.shells.length > 0 || state.enemies.some(function (enemy) { return enemy.hp !== enemy.maxHp; }))))) return undefined;
-	return parseSave({ version: 1, wave: state.wave, phase: state.campaign.phase, hull: state.player.hp,
+	return parseSave({ version: state.campaign.clock ? 2 : 1, wave: state.wave, phase: state.campaign.phase, hull: state.player.hp,
 		rails: state.campaign.upgrades.rails, capacitor: state.campaign.upgrades.capacitor,
 		time: state.time, kills: state.kills, automatic: state.fireControl.automatic, stats: { ...state.stats },
 		...(arsenal ? { arsenal: { version: 1, mounts: arsenal.mounts.map(function (mount) { return mount ? { weapon: mount.weapon, rank: mount.rank } : null; }),

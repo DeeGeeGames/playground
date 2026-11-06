@@ -1,0 +1,8 @@
+{"weapon":"seeker","outcome":"won","wave":5,"hp":977,"rewards":14,"stages":[{"wave":1,"hp":1192,"rewards":2},{"wave":2,"hp":1150,"rewards":6},{"wave":3,"hp":1150,"rewards":9},{"wave":4,"hp":1150,"rewards":11}]}
+{"weapon":"rail","outcome":"won","wave":5,"hp":985,"rewards":14,"stages":[{"wave":1,"hp":1005,"rewards":2},{"wave":2,"hp":1119,"rewards":6},{"wave":3,"hp":1007,"rewards":9},{"wave":4,"hp":942,"rewards":11}]}
+{"weapon":"flak","outcome":"won","wave":5,"hp":568,"rewards":14,"stages":[{"wave":1,"hp":1213,"rewards":2},{"wave":2,"hp":1184,"rewards":6},{"wave":3,"hp":875,"rewards":9},{"wave":4,"hp":843,"rewards":11}]}
+{"weapon":"rattler","outcome":"won","wave":5,"hp":276,"rewards":14,"stages":[{"wave":1,"hp":360,"rewards":2},{"wave":2,"hp":732,"rewards":6},{"wave":3,"hp":500,"rewards":9},{"wave":4,"hp":261,"rewards":11}]}
+{"weapon":"spark","outcome":"won","wave":5,"hp":385,"rewards":14,"stages":[{"wave":1,"hp":984,"rewards":2},{"wave":2,"hp":1327,"rewards":6},{"wave":3,"hp":1105,"rewards":9},{"wave":4,"hp":648,"rewards":11}]}
+{"weapon":"helios","outcome":"won","wave":5,"hp":846,"rewards":14,"stages":[{"wave":1,"hp":880,"rewards":2},{"wave":2,"hp":1089,"rewards":6},{"wave":3,"hp":1296,"rewards":9},{"wave":4,"hp":838,"rewards":11}]}
+{"weapon":"torpedo","outcome":"won","wave":5,"hp":755,"rewards":14,"stages":[{"wave":1,"hp":984,"rewards":2},{"wave":2,"hp":1166,"rewards":6},{"wave":3,"hp":949,"rewards":9},{"wave":4,"hp":730,"rewards":11}]}
+{"weapon":"ion","outcome":"won","wave":5,"hp":239,"rewards":14,"stages":[{"wave":1,"hp":677,"rewards":2},{"wave":2,"hp":1136,"rewards":6},{"wave":3,"hp":414,"rewards":9},{"wave":4,"hp":431,"rewards":11}]}

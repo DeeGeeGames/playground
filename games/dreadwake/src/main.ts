@@ -1,3 +1,4 @@
+import { MISSION_PACING } from './pacing';
 import { mountGame } from '../../../shared/lifecycle';
 import { createArsenalCampaign, CAMPAIGN_MISSIONS, REFIT_CHOICES, chooseRefit, distance, MAX_HULL, SHIELD_COOLDOWN, step, type Controls, type State } from './simulation';
 import { WEAPONS, WEAPON_IDS, MOUNT_SOCKETS, type WeaponId, type WeaponRank } from './weapons';
@@ -103,7 +104,6 @@ const shutdown = await mountGame('game', async function (container) {
 	const active = function (action: string) { return [...keys].some(function (code) { return bindings.get(code) === action; }) || pending.has(action) || [...pointers.values()].includes(action) || (action === 'brace' && padFrame.brace); };
 	const playable = function () { return running && !graphicsLost && !paused && !settingsOpen && !confirmingRestart && !fitting && (state.arsenal?.pending ?? 0) === 0 && state.outcome === 'playing' && state.campaign?.phase !== 'refit'; };
 	let refitChoice: typeof REFIT_CHOICES[number]['id'] | undefined;
-	const totalShips = CAMPAIGN_MISSIONS.reduce(function (total, mission) { return total + mission.enemies.length; }, 0);
 	const route = element('campaign-route');
 	for (const [index, mission] of CAMPAIGN_MISSIONS.entries()) {
 		const item = document.createElement('li');
@@ -255,7 +255,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (batteryLabel) batteryLabel.textContent = `BATTERY · ${installed.length} / ${MOUNT_SOCKETS.length}`;
 		element('salvage-value').textContent = arsenal.rewards >= MAX_DRAFTS ? 'BATTERY COMPLETE' : `${Math.floor(arsenal.salvage)} / ${draftCost(arsenal.rewards)}`;
 		element('salvage-fill').style.width = `${arsenal.rewards >= MAX_DRAFTS ? 100 : Math.min(100, arsenal.salvage / draftCost(arsenal.rewards) * 100)}%`;
-		element('salvage-hint').textContent = arsenal.rewards >= MAX_DRAFTS ? 'All salvage rewards recovered' : `Damage earns choice ${arsenal.rewards + 1} / ${MAX_DRAFTS}`;
+		element('salvage-hint').textContent = arsenal.rewards >= MAX_DRAFTS ? 'All salvage rewards recovered' : state.campaign?.clock && state.campaign.clock.salvageEarned >= (MISSION_PACING[state.wave - 1]?.salvageBudget ?? Infinity) ? 'Sector salvage recovered · survive to transit' : `Damage earns choice ${arsenal.rewards + 1} / ${MAX_DRAFTS}`;
 		for (const [index, indicator] of socketIndicators.entries()) {
 			const mount = arsenal.mounts[index]; const socket = MOUNT_SOCKETS[index];
 			indicator.classList.toggle('occupied', !!mount); indicator.style.setProperty('--weapon-color', mount ? WEAPONS[mount.weapon].color : 'var(--line)');
@@ -291,7 +291,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const showRefit = function () {
 		clearInput(); accumulator = 0; refitChoice = undefined; audio.update(0, false, []);
 		const nextMission = CAMPAIGN_MISSIONS[state.wave];
-		element('refit-summary').textContent = `${CAMPAIGN_MISSIONS[state.wave - 1]?.name ?? 'Mission'} secured. Hull ${Math.ceil(state.player.hp / state.player.maxHp * 100)}%. Battery calibrations ${state.campaign?.upgrades.rails ?? 0} · capacitor upgrades ${state.campaign?.upgrades.capacitor ?? 0}.`;
+		element('refit-summary').textContent = `${CAMPAIGN_MISSIONS[state.wave - 1]?.name ?? 'Mission'} survived. Hull ${Math.ceil(state.player.hp / state.player.maxHp * 100)}%. Battery calibrations ${state.campaign?.upgrades.rails ?? 0} · capacitor upgrades ${state.campaign?.upgrades.capacitor ?? 0}.`;
 		element('next-mission-number').textContent = `NEXT / MISSION ${String(state.wave + 1).padStart(2, '0')}`;
 		element('next-mission-title').textContent = nextMission?.name ?? 'Passage secured';
 		element('next-mission-intel').textContent = nextMission?.briefing ?? '';
@@ -551,7 +551,7 @@ const shutdown = await mountGame('game', async function (container) {
 			marker.classList.toggle('active', i + 1 === state.wave); marker.classList.toggle('complete', i + 1 < state.wave);
 		}
 		ui.phase.textContent = training ? 'FLIGHT SCHOOL / LIVE PRACTICE' : paused ? 'CAMPAIGN PAUSED' : `MISSION ${String(state.wave).padStart(2, '0')} / ${String(CAMPAIGN_MISSIONS.length).padStart(2, '0')} · ${CAMPAIGN_MISSIONS[state.wave - 1]?.name.toUpperCase() ?? ''}`;
-		ui.objective.textContent = training ? 'Safe training · No campaign progress is changed' : state.intermission > 0 ? state.wave === CAMPAIGN_MISSIONS.length ? 'Final contact clear. Securing the passage.' : 'Contact clear. Preparing field refit.' : `${state.enemies.length} hostile signatures · ${state.kills} / ${totalShips} ships broken`;
+		ui.objective.textContent = training ? 'Safe training · No campaign progress is changed' : state.campaign?.phase === 'refit' ? 'Transit reached · choose a field refit' : `SURVIVE ${Math.max(0, Math.ceil((MISSION_PACING[state.wave - 1]?.duration ?? 0) - (state.campaign?.clock?.elapsed ?? 0)))}s · ${state.enemies.length} hostile signatures · ${state.kills} ships broken`;
 		ui.hull.textContent = String(Math.ceil(p.hp / MAX_HULL * 100)); ui.hullFill.style.width = `${p.hp / MAX_HULL * 100}%`;
 		ui.hullFill.style.background = p.hp < MAX_HULL * 0.3 ? 'var(--danger)' : 'var(--cyan)';
 		ui.throttle.textContent = Math.abs(p.throttle) < 0.001 ? 'NEUTRAL' : p.throttle < 0 ? `ASTERN ${Math.round(-p.throttle / 0.35 * 100)}%` : `AHEAD ${Math.round(p.throttle * 100)}%`;
@@ -571,8 +571,8 @@ const shutdown = await mountGame('game', async function (container) {
 		element('retry').hidden = state.outcome !== 'lost' || !savedCampaign;
 		clearInput(); syncPanels(); audio.update(0, false, []);
 		element('result-title').textContent = state.outcome === 'won' ? 'BLOCKADE BROKEN.' : 'SIGNAL LOST.';
-		element('result-copy').textContent = state.outcome === 'won' ? `All ${CAMPAIGN_MISSIONS.length} missions complete. The blockade commander is gone. Your cruiser leaves the Lyra Passage with ${Math.ceil(state.player.hp / state.player.maxHp * 100)}% hull.` : `Lost during ${CAMPAIGN_MISSIONS[state.wave - 1]?.name ?? 'the engagement'}. ${state.campaign?.completedMissions ?? 0} of ${CAMPAIGN_MISSIONS.length} missions secured. Change heading when hostile volleys are marked, and consider repairs before the next engagement.`;
-		element('result-stats').textContent = `${state.kills} / ${totalShips} ships broken · ${Math.floor(state.time / 60)}m ${Math.floor(state.time % 60)}s · ${state.arsenal?.mounts.filter(function (mount) { return mount !== null; }).length ?? 0} fitted turrets · ${state.arsenal?.rewards ?? 0} salvage rewards · ${state.stats.interceptions} rounds intercepted · ${Math.round(state.stats.damageBlocked)} damage prevented by armor / shields`;
+		element('result-copy').textContent = state.outcome === 'won' ? `All ${CAMPAIGN_MISSIONS.length} missions complete. The transit window is open. Your cruiser leaves the Lyra Passage with ${Math.ceil(state.player.hp / state.player.maxHp * 100)}% hull.` : `Lost during ${CAMPAIGN_MISSIONS[state.wave - 1]?.name ?? 'the engagement'}. ${state.campaign?.completedMissions ?? 0} of ${CAMPAIGN_MISSIONS.length} missions secured. Change heading when hostile volleys are marked, and consider repairs before the next engagement.`;
+		element('result-stats').textContent = `${state.kills} ships broken · ${Math.floor(state.time / 60)}m ${Math.floor(state.time % 60)}s · ${state.arsenal?.mounts.filter(function (mount) { return mount !== null; }).length ?? 0} fitted turrets · ${state.arsenal?.rewards ?? 0} salvage rewards · ${state.stats.interceptions} rounds intercepted · ${Math.round(state.stats.damageBlocked)} damage prevented by armor / shields`;
 		element(state.outcome === 'lost' && savedCampaign ? 'retry' : 'restart').focus({ preventScroll: true });
 	};
 	const tick = function (now: number) {

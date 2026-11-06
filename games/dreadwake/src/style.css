@@ -702,3 +702,10 @@ h1 em { font-style: normal; color: var(--gold); }
 	.fitting-panel { padding: 20px; }
 	.fitting-panel h2 { margin: 10px 0; }
 }
+
+/* The survival clock remains visible even when compact HUDs hide other details. */
+.mission > #objective { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-height: 600px) and (orientation: landscape) {
+	.mission-steps { display: none; }
+	.mission > #objective { font-size: 9px; line-height: 12px; }
+}

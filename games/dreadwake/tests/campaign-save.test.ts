@@ -24,7 +24,7 @@ test('checkpoint restoration rebuilds only the current fleet and retains campaig
 
 test('untrusted checkpoints reject invalid shape, impossible progress and non-finite numbers', function () {
 	const base = captureCampaign(createCampaignState());
-	for (const invalid of [null, [], 'save', {}, { ...base, version: 2 }, { ...base, hull: NaN },
+	for (const invalid of [null, [], 'save', {}, { ...base, version: 3 }, { ...base, hull: NaN },
 		{ ...base, hull: 0 }, { ...base, hull: 1401 }, { ...base, time: Infinity }, { ...base, wave: 1.5 },
 		{ ...base, wave: 6 }, { ...base, rails: 1 }, { ...base, kills: 1 }, { ...base, stats: {} },
 		{ ...base, phase: 'won' }, { ...base, phase: 'refit', wave: 5, kills: 14 },

@@ -1,3 +1,4 @@
+import { MISSION_PACING } from './pacing';
 import type { State } from './simulation';
 import { createMount, MOUNT_SOCKETS, nextRank, WEAPON_IDS, type MountState, type WeaponId, type WeaponRank } from './weapons';
 export { weaponSummary } from './weapons';
@@ -32,7 +33,11 @@ export const installStarter = function (state: State, weapon: WeaponId, slot: nu
 export const awardSalvage = function (state: State, damage: number) {
 	const arsenal = state.arsenal;
 	if (!arsenal || !state.campaign || state.outcome !== 'playing' || !Number.isFinite(damage) || damage <= 0 || arsenal.rewards >= MAX_DRAFTS) return;
-	arsenal.salvage += damage;
+	const clock = state.campaign.clock;
+	const pacing = clock ? MISSION_PACING[state.wave - 1] : undefined;
+	const earned = clock && pacing ? Math.min(damage, Math.max(0, pacing.salvageBudget - clock.salvageEarned)) : damage;
+	if (clock) clock.salvageEarned += earned;
+	arsenal.salvage += earned;
 	while (arsenal.rewards < MAX_DRAFTS && arsenal.salvage >= draftCost(arsenal.rewards)) {
 		arsenal.salvage -= draftCost(arsenal.rewards); arsenal.rewards++; arsenal.pending++;
 	}
