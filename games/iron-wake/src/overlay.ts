@@ -13,6 +13,7 @@ export interface OverlayOptions {
 	camera: OrthographicCamera;
 	couchMode?: boolean;
 	armorHit?: number;
+	armorHitHeight?: number;
 	relayHit?: number;
 }
 
@@ -91,7 +92,14 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 	};
 	const relay = { x: ARENA.relayX, y: ARENA.relayY };
 	text((options.relayHit ?? 0) > 0 ? 'UPLINK UNDER FIRE' : 'UPLINK / 09', relay, 206, (options.relayHit ?? 0) > 0 || state.relay < 30 ? '#ffac83' : '#aee2d5', 10);
-	if ((options.armorHit ?? 0) > 0) text('ARMOR HIT', state.player, 124, '#ffb697', 12);
+	if ((options.armorHit ?? 0) > 0) {
+		const elevation = options.armorHitHeight ?? 124;
+		// Taller frames can fill the view when zoomed in. Keep the entire
+		// feedback label on screen even when its model-relative anchor cannot.
+		const inset = Math.max(minimumText, 12 * scale) + 6;
+		const offset = options.armorHitHeight === undefined ? 0 : Math.max(0, inset - at(state.player, elevation).y) / scale;
+		text('ARMOR HIT', state.player, elevation, '#ffb697', 12, offset);
+	}
 	const relayLabel = at(relay, 196);
 	ctx.fillStyle = '#112329dd'; ctx.fillRect(relayLabel.x - 31, relayLabel.y, 62, 3);
 	ctx.fillStyle = state.relay < 30 ? '#f49769' : '#9bccbc'; ctx.fillRect(relayLabel.x - 31, relayLabel.y, 62 * state.relay / 100, 3);
