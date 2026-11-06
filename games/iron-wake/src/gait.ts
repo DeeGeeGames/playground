@@ -4,8 +4,10 @@ interface Body extends Point { angle: number }
 export interface Foot extends Point { lift: number; angle: number }
 type FootIndex = 0 | 1;
 interface Swing { index: FootIndex; from: Foot; elapsed: number; duration: number }
+interface BodyMotion { lift: number; roll: number; pitch: number; impact: number }
 export interface WalkerGait {
 	body: Body;
+	motion: BodyMotion;
 	feet: readonly [Foot, Foot];
 	swing: Swing | undefined;
 	nextFoot: FootIndex;
@@ -25,7 +27,23 @@ const restFoot = function (body: Body, index: FootIndex, size: number): Foot {
 	};
 };
 export const createGait = function (body: Body, size = 1): WalkerGait {
-	return { body: { ...body }, feet: [restFoot(body, 0, size), restFoot(body, 1, size)], swing: undefined, nextFoot: 0 };
+	return { body: { ...body }, motion: { lift: 0, roll: 0, pitch: 0, impact: 0 }, feet: [restFoot(body, 0, size), restFoot(body, 1, size)], swing: undefined, nextFoot: 0 };
+};
+
+const advanceBodyMotion = function (motion: BodyMotion, swing: Swing | undefined, forwardSpeed: number, dt: number): BodyMotion {
+	const progress = swing ? swing.elapsed / swing.duration : 0;
+	const weight = Math.sin(progress * Math.PI) ** 2;
+	const supportSide = swing?.index === 0 ? 1 : -1;
+	// Touchdown loads the suspension; its compression outlasts the foot swing.
+	const impact = progress === 1 ? 1 : motion.impact * Math.exp(-dt * 14);
+	const stride = clamp(forwardSpeed / 90, -1, 1);
+	const response = 1 - Math.exp(-dt * 12);
+	return {
+		lift: mix(motion.lift, weight * 2.4 - impact * 4, response),
+		roll: mix(motion.roll, supportSide * weight * 0.065, response),
+		pitch: mix(motion.pitch, -stride * (0.035 + impact * 0.025), response),
+		impact,
+	};
 };
 
 // Presentation advances on simulation steps, never render frames. Stance feet
@@ -37,6 +55,7 @@ export const advanceGait = function (gait: WalkerGait, actualBody: Body, dt: num
 	// through that change without rotating either planted foot with it.
 	const body: Body = { x: actualBody.x, y: actualBody.y, angle: gait.body.angle + clamp(angleDelta(gait.body.angle, actualBody.angle), -dt * 2.5, dt * 2.5) };
 	const dx = (body.x - gait.body.x) / dt; const dy = (body.y - gait.body.y) / dt;
+	const forwardSpeed = (dx * Math.cos(body.angle) + dy * Math.sin(body.angle)) / size;
 	const turn = angleDelta(gait.body.angle, body.angle) / dt;
 	const speed = Math.hypot(dx, dy) + Math.abs(turn) * 23 * size;
 	let swing = gait.swing;
@@ -48,7 +67,7 @@ export const advanceGait = function (gait: WalkerGait, actualBody: Body, dt: num
 			swing = { index, from: gait.feet[index], elapsed: 0, duration: clamp(26 * size / speed, 0.22, 0.65) };
 		}
 	}
-	if (!swing) return { ...gait, body: { ...body } };
+	if (!swing) return { ...gait, body, motion: advanceBodyMotion(gait.motion, undefined, forwardSpeed, dt) };
 	const elapsed = Math.min(swing.duration, swing.elapsed + dt);
 	const progress = elapsed / swing.duration;
 	// Predict touchdown from actual translation and turning. Re-evaluating this
@@ -62,7 +81,8 @@ export const advanceGait = function (gait: WalkerGait, actualBody: Body, dt: num
 		lift: progress === 1 ? 0 : Math.sin(progress * Math.PI) ** 2 * 10 * size,
 	};
 	return {
-		body: { ...body }, feet: swing.index === 0 ? [foot, gait.feet[1]] : [gait.feet[0], foot],
+		body, motion: advanceBodyMotion(gait.motion, { ...swing, elapsed }, forwardSpeed, dt),
+		feet: swing.index === 0 ? [foot, gait.feet[1]] : [gait.feet[0], foot],
 		swing: progress === 1 ? undefined : { ...swing, elapsed },
 		nextFoot: swing.index === 0 ? 1 : 0,
 	};

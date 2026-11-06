@@ -113,3 +113,24 @@ test('presentation freezes with simulation time and resets on restart; enemy pos
 	expect(gaits.enemies.size).toBe(0);
 	expect(advanceGaits(gaits, createState())).toEqual(createGaits(createState()));
 });
+
+test('upper-body weight transfer follows forward, reverse, and pivot steps and settles when stopped', function () {
+	for (const size of [0.8, 1, 1.15]) for (const direction of [-1, 0, 1]) {
+		let gait = createGait({ x: 0, y: 0, angle: 0 }, size);
+		const lifts: number[] = []; const rolls: number[] = [];
+		for (let i = 1; i <= 240; i++) {
+			gait = advanceGait(gait, { x: direction * i * dt * 60 * size, y: 0, angle: direction === 0 ? i * dt : 0 }, dt, size);
+			lifts.push(gait.motion.lift); rolls.push(gait.motion.roll);
+		}
+		expect(Math.max(...lifts)).toBeGreaterThan(0.5);
+		expect(Math.min(...lifts)).toBeLessThan(-0.1);
+		expect(Math.max(...rolls)).toBeGreaterThan(0.01);
+		expect(Math.min(...rolls)).toBeLessThan(-0.01);
+		if (direction !== 0) expect(gait.motion.pitch * direction).toBeLessThan(0);
+		expect(advanceGait(gait, gait.body, 0)).toBe(gait);
+		for (let i = 0; i < 180; i++) gait = advanceGait(gait, gait.body, dt, size);
+		for (const value of Object.values(gait.motion)) expect(Math.abs(value)).toBeLessThan(0.000001);
+		const teleported = { ...gait.body, x: gait.body.x + 500 };
+		expect(advanceGait(gait, teleported, dt, size)).toEqual(createGait(teleported, size));
+	}
+});
