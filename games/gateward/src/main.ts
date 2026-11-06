@@ -516,7 +516,7 @@ const shutdown = await mountGame('game', async function (container) {
 			accumulator += elapsed * speed;
 			while (accumulator >= 1 / 60 && state.status === 'running') { step(state, 1 / 60); syncAudio(); accumulator -= 1 / 60; if (state.status !== 'running') passageEnded(); }
 		} else accumulator = 0;
-		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches || preferences.reducedMotion, !radarOpen && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, inspector && canvas.clientWidth < 650 && canvas.clientHeight > 600 ? canvas.clientHeight * 0.18 : 0, inspector && canvas.clientWidth >= 650 ? 180 : 0, shipyard.selected(), briefing);
+		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches || preferences.reducedMotion, !radarOpen && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, inspector && canvas.clientWidth < 650 && canvas.clientHeight > 600 ? canvas.clientHeight * 0.18 : 0, inspector ? canvas.clientWidth >= 650 ? 180 : canvas.clientHeight <= 500 ? 130 : 0 : 0, shipyard.selected(), briefing);
 		syncAudio(); hud(); radar.update();
 		frame = requestAnimationFrame(tick);
 	};
