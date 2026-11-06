@@ -77,6 +77,21 @@ export const createMech = function (kind?: EnemyKind, commander = false) {
 			detail.position.set(0.035 * size, (z + 2) * size, (side * 33 + offset) * size); turret.add(detail); parts.push(detail);
 		}
 	}
+	if (kind === 'siege') {
+		// A high dorsal gun and wide armored shoulders identify artillery even
+		// when its health label is hidden or the player cannot distinguish colors.
+		if (!commander) {
+			box(turret, -17, 0, 78, 31, 26, 22, dark);
+			box(turret, 2, 0, 94, 66, 13, 13, steel);
+			box(turret, 36, 0, 93, 9, 19, 15, trim);
+			box(turret, 41, 0, 96, 1.5, 11, 9, dark);
+		}
+		for (const side of [-1, 1]) {
+			const shield = box(turret, 12, side * 48, 40, 19, 9, 38, steel); shield.rotation.z = -0.16;
+			box(turret, 22, side * 48, 46, 2, 10, 24, amber);
+			box(hull, -3, side * 28, 31, 35, 12, 10, dark);
+		}
+	}
 	if (commander) {
 		// The command frame carries a dorsal artillery mount and an ivory
 		// armored crown. It is recognizable without relying only on color.

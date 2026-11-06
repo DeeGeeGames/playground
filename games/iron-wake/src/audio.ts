@@ -1,11 +1,14 @@
 import type { CombatEvent } from './simulation';
 
 export type AudioPhase = 'briefing' | 'combat' | 'refit' | 'result';
+export type AudioCue = 'focus' | 'confirm' | 'back' | 'unavailable';
+export type AudioStatus = 'locked' | 'pending' | 'running' | 'unavailable';
 export interface AudioFrame {
 	speed: number;
 	laser: boolean;
 	heat: number;
 	active: boolean;
+	uiActive?: boolean;
 	phase?: AudioPhase;
 	intensity?: number;
 	danger?: number;
@@ -14,7 +17,7 @@ export interface AudioFrame {
 export interface AudioMix { master: number; music: number; effects: number }
 export const DEFAULT_AUDIO_MIX: Readonly<AudioMix> = { master: 0.8, music: 0.55, effects: 0.85 };
 
-type Bus = 'music' | 'effects';
+type Bus = 'music' | 'effects' | 'ui';
 interface Voice {
 	source: OscillatorNode | AudioBufferSourceNode;
 	nodes: AudioNode[];
@@ -25,6 +28,7 @@ interface Synth {
 	master: GainNode;
 	music: GainNode;
 	effects: GainNode;
+	ui: GainNode;
 	musicInput: GainNode;
 	effectsInput: GainNode;
 	engine: OscillatorNode;
@@ -82,14 +86,17 @@ export const createAudio = function () {
 	let disposed = false;
 	let muted = false;
 	let active = false;
+	let uiActive = false;
+	let unlocking = false;
+	let unavailable = false;
 	let mix: AudioMix = { ...DEFAULT_AUDIO_MIX };
 	let phase: AudioPhase = 'combat';
 	let intensity = 0;
-	let nextFootstep = 0;
 	let nextWarning = 0;
 	let nextMusic = 0;
 	let musicStep = 0;
-	let foot = 1;
+	let musicDuckUntil = 0;
+	let lastCue = -10;
 	const voices = new Set<Voice>();
 	const lastEvent = new Map<CombatEvent, number>();
 
@@ -109,7 +116,7 @@ export const createAudio = function () {
 	const register = function (voice: Voice, at: number, duration: number) {
 		// Dense battles cannot steal pad voices, and pads cannot steal gun reports.
 		const sameBus = [...voices].filter(function (entry) { return entry.bus === voice.bus; });
-		if (sameBus.length >= (voice.bus === 'music' ? 48 : 40)) {
+		if (sameBus.length >= (voice.bus === 'music' ? 48 : voice.bus === 'ui' ? 8 : 40)) {
 			const oldest = sameBus[0]; if (oldest) stopVoice(oldest);
 		}
 		voices.add(voice);
@@ -141,7 +148,7 @@ export const createAudio = function () {
 		if (sound.endCutoff !== undefined) filter.frequency.exponentialRampToValueAtTime(Math.max(30, sound.endCutoff), sound.at + sound.duration);
 		pan.pan.value = sound.pan ?? 0;
 		envelope(gain, sound.at, sound.duration, sound.volume, sound.attack, sound.hold);
-		source.connect(filter).connect(gain).connect(pan).connect(bus === 'music' ? synth.musicInput : synth.effectsInput);
+		source.connect(filter).connect(gain).connect(pan).connect(bus === 'music' ? synth.musicInput : bus === 'ui' ? synth.ui : synth.effectsInput);
 		register({ source, nodes: [filter, gain, pan], bus }, sound.at, sound.duration);
 	};
 	const noise = function (sound: Noise) {
@@ -158,20 +165,21 @@ export const createAudio = function () {
 		filter.frequency.exponentialRampToValueAtTime(Math.max(60, sound.frequency * 0.4), sound.at + sound.duration);
 		pan.pan.value = sound.pan ?? 0;
 		envelope(gain, sound.at, sound.duration, sound.volume);
-		source.connect(filter).connect(gain).connect(pan).connect(bus === 'music' ? synth.musicInput : synth.effectsInput);
+		source.connect(filter).connect(gain).connect(pan).connect(bus === 'music' ? synth.musicInput : bus === 'ui' ? synth.ui : synth.effectsInput);
 		register({ source, nodes: [filter, gain, pan], bus }, sound.at, sound.duration);
 	};
 	const mixLevels = function () {
 		if (!synth) return;
 		const at = synth.context.currentTime;
-		synth.master.gain.setTargetAtTime(active && !muted ? mix.master * 0.72 : 0, at, 0.012);
-		synth.music.gain.setTargetAtTime(mix.music, at, 0.04);
-		synth.effects.gain.setTargetAtTime(mix.effects, at, 0.025);
+		synth.master.gain.setTargetAtTime(!muted ? mix.master * 0.72 : 0, at, 0.012);
+		synth.music.gain.setTargetAtTime(active ? mix.music * (at < musicDuckUntil ? 0.55 : 1) : 0, at, 0.04);
+		synth.effects.gain.setTargetAtTime(active ? mix.effects : 0, at, 0.025);
+		synth.ui.gain.setTargetAtTime(uiActive ? mix.effects : 0, at, 0.012);
 	};
 	const setMix = function (value: AudioMix) {
 		mix = { master: clamp(value.master), music: clamp(value.music), effects: clamp(value.effects) };
 		if (mix.music === 0) clearVoices('music');
-		if (mix.effects === 0) clearVoices('effects');
+		if (mix.effects === 0) { clearVoices('effects'); clearVoices('ui'); }
 		mixLevels();
 	};
 	const setMuted = function (value: boolean) {
@@ -181,12 +189,13 @@ export const createAudio = function () {
 	};
 	const reset = function () {
 		clearVoices(); lastEvent.clear();
-		nextFootstep = 0; nextWarning = 0; nextMusic = 0; musicStep = 0; intensity = 0; foot = 1;
+		nextWarning = 0; nextMusic = 0; musicStep = 0; intensity = 0; musicDuckUntil = 0; lastCue = -10;
 	};
 
 	const unlock = async function (): Promise<boolean> {
-		if (disposed || typeof globalThis.AudioContext !== 'function') return false;
+		if (disposed || typeof globalThis.AudioContext !== 'function') { unavailable = true; return false; }
 		let opening: AudioContext | undefined;
+		unlocking = true; unavailable = false;
 		try {
 			if (!synth) {
 				const context = new AudioContext({ latencyHint: 'interactive' }); opening = context;
@@ -197,6 +206,7 @@ export const createAudio = function () {
 				master.connect(compressor).connect(context.destination);
 				const music = context.createGain(); music.gain.value = mix.music; music.connect(master);
 				const effects = context.createGain(); effects.gain.value = mix.effects; effects.connect(master);
+				const ui = context.createGain(); ui.gain.value = 0; ui.connect(master);
 				const musicInput = context.createGain(); musicInput.connect(music);
 				const effectsInput = context.createGain(); effectsInput.connect(effects);
 				// A short, filtered tempo echo gives the score space without an asset download.
@@ -225,19 +235,41 @@ export const createAudio = function () {
 				const laserFilter = context.createBiquadFilter(); laserFilter.frequency.value = 1250; laserFilter.Q.value = 2;
 				const laserGain = context.createGain(); laserGain.gain.value = 0;
 				laser.connect(laserFilter).connect(laserGain).connect(effectsInput);
-				const nodes = [master, compressor, music, effects, musicInput, effectsInput, echoSend, echo, echoFilter, feedback, engineFilter, engineGain, mechanicalFilter, mechanicalGain, laserFilter, laserGain];
-				synth = { context, master, music, effects, musicInput, effectsInput, engine, engineFilter, engineGain, mechanical, mechanicalGain, laser, laserFilter, laserGain, noise: buffer, nodes };
+				const nodes = [master, compressor, music, effects, ui, musicInput, effectsInput, echoSend, echo, echoFilter, feedback, engineFilter, engineGain, mechanicalFilter, mechanicalGain, laserFilter, laserGain];
+				synth = { context, master, music, effects, ui, musicInput, effectsInput, engine, engineFilter, engineGain, mechanical, mechanicalGain, laser, laserFilter, laserGain, noise: buffer, nodes };
 				engine.start(); mechanical.start(); laser.start();
 			}
 			const current = synth;
 			await current.context.resume();
 			return !disposed && current.context.state === 'running';
 		} catch {
+			unavailable = true;
 			if (opening && !synth && opening.state !== 'closed') {
 				try { await opening.close(); } catch { /* An unavailable device can reject cleanup. */ }
 			}
 			return false;
-		}
+		} finally { unlocking = false; }
+	};
+	const status = function (): AudioStatus {
+		if (disposed || unavailable) return 'unavailable';
+		if (synth?.context.state === 'running') return 'running';
+		return unlocking ? 'pending' : 'locked';
+	};
+	const cue = function (kind: AudioCue) {
+		if (!synth || disposed || !uiActive || muted || mix.effects === 0 || mix.master === 0 || synth.context.state !== 'running') return;
+		const at = synth.context.currentTime;
+		if (kind === 'focus' && at - lastCue < 0.07) return;
+		lastCue = at;
+		const note = kind === 'focus' ? 74 : kind === 'confirm' ? 69 : kind === 'back' ? 62 : 45;
+		tone({ at, frequency: frequency(note), endFrequency: frequency(note + (kind === 'confirm' ? 7 : kind === 'unavailable' ? -3 : 0)), duration: kind === 'focus' ? 0.055 : 0.16, volume: kind === 'focus' ? 0.065 : 0.1, type: 'triangle', cutoff: 2200, bus: 'ui' });
+		if (kind === 'confirm') tone({ at: at + 0.07, frequency: frequency(81), duration: 0.16, volume: 0.06, type: 'sine', bus: 'ui' });
+	};
+	const footstep = function (side: -1 | 1, strength = 1) {
+		if (!synth || disposed || !active || phase !== 'combat' || muted || mix.effects === 0 || mix.master === 0 || synth.context.state !== 'running') return;
+		const at = synth.context.currentTime; const weight = 0.65 + clamp(strength) * 0.35;
+		tone({ at, frequency: 74, endFrequency: 29, duration: 0.19, volume: 0.24 * weight, pan: side * 0.16 });
+		noise({ at, duration: 0.16, volume: 0.12 * weight, frequency: 560, pan: side * 0.16 });
+		tone({ at: at + 0.055, frequency: 230, endFrequency: 150, duration: 0.07, volume: 0.045 * weight, type: 'triangle', pan: side * 0.16 });
 	};
 
 	const scoreStep = function (at: number, frame: AudioFrame) {
@@ -283,6 +315,7 @@ export const createAudio = function () {
 
 	const update = function (frame: AudioFrame) {
 		active = frame.active;
+		uiActive = frame.uiActive ?? frame.active;
 		if (!synth || disposed) return;
 		const { context, engine, engineFilter, engineGain, mechanicalGain, laser, laserFilter, laserGain } = synth;
 		const at = context.currentTime;
@@ -299,7 +332,8 @@ export const createAudio = function () {
 		laser.frequency.setTargetAtTime(160 + clamp(frame.heat, 0, 100) * 0.7, at, 0.03);
 		laserFilter.frequency.setTargetAtTime(780 + clamp(frame.heat, 0, 100) * 8, at, 0.03);
 		laserGain.gain.setTargetAtTime(driving && frame.laser ? 0.09 : 0, at, 0.015);
-		if (!audible) { clearVoices(); nextFootstep = at; nextMusic = 0; return; }
+		if (!uiActive) clearVoices('ui');
+		if (!audible) { clearVoices('music'); clearVoices('effects'); nextMusic = 0; return; }
 		intensity += (clamp(frame.intensity ?? 0.3) - intensity) * 0.025;
 		if (nextMusic < at - 0.2 || nextMusic === 0) nextMusic = at + 0.035;
 		// Bound catch-up work after a slow frame; normal frames schedule 0–2 notes.
@@ -307,14 +341,7 @@ export const createAudio = function () {
 			if (mix.music > 0) scoreStep(nextMusic, frame);
 			nextMusic += SIXTEENTH; musicStep++;
 		}
-		if (driving && mix.effects > 0 && speed > 0.08 && at >= nextFootstep) {
-			foot *= -1;
-			tone({ at, frequency: 74, endFrequency: 29, duration: 0.19, volume: 0.14 + speed * 0.12, pan: foot * 0.16 });
-			noise({ at, duration: 0.16, volume: 0.12, frequency: 560, pan: foot * 0.16 });
-			tone({ at: at + 0.055, frequency: 230, endFrequency: 150, duration: 0.07, volume: 0.045, type: 'triangle', pan: foot * 0.16 });
-			nextFootstep = at + 0.65 - speed * 0.24;
-		}
-		if (driving && mix.effects > 0 && (frame.danger ?? 0) > 0.7 && at >= nextWarning) {
+		if (driving && mix.effects > 0 && (frame.danger ?? 0) > 0.4 && at >= nextWarning) {
 			tone({ at, frequency: 440, duration: 0.13, volume: 0.07, type: 'triangle' });
 			tone({ at: at + 0.18, frequency: 330, duration: 0.13, volume: 0.06, type: 'triangle' });
 			nextWarning = at + 4;
@@ -330,6 +357,16 @@ export const createAudio = function () {
 			if (at - previous < interval) continue;
 			lastEvent.set(event, at);
 			switch (event) {
+				case 'player-hit':
+					musicDuckUntil = at + 0.4;
+					tone({ at, frequency: 76, endFrequency: 27, duration: 0.3, volume: 0.4, type: 'triangle' });
+					noise({ at, duration: 0.2, volume: 0.32, frequency: 800, type: 'bandpass' });
+					break;
+				case 'relay-hit':
+					musicDuckUntil = at + 0.65;
+					tone({ at, frequency: 620, endFrequency: 430, duration: 0.12, volume: 0.12, type: 'triangle' });
+					tone({ at: at + 0.17, frequency: 620, endFrequency: 430, duration: 0.18, volume: 0.1, type: 'triangle' });
+					break;
 				case 'artillery':
 					tone({ at, frequency: 880, endFrequency: 330, duration: 0.32, volume: 0.13, type: 'triangle' });
 					tone({ at: at + 0.36, frequency: 660, endFrequency: 220, duration: 0.32, volume: 0.1, type: 'triangle' });
@@ -401,5 +438,5 @@ export const createAudio = function () {
 		for (const node of current.nodes) node.disconnect();
 		if (current.context.state !== 'closed') await current.context.close();
 	};
-	return { unlock, setMuted, setMix, reset, update, play, dispose };
+	return { unlock, status, cue, footstep, setMuted, setMix, reset, update, play, dispose };
 };
