@@ -1,5 +1,7 @@
+import { DRAFT_MILESTONES, WEAPONS, getWeapon, type WeaponId } from './arsenal';
+import { MOUNTS, mountSummary, rankLabel, weaponCard } from './loadout-ui';
 import { mountGame } from '../../../shared/lifecycle';
-import { applyRefit, createState, distance, getOperationReport, step, type Controls, type Point } from './simulation';
+import { applyRefit, chooseWeapon, createState, distance, getOperationReport, step, type Controls, type Point } from './simulation';
 import { DIFFICULTIES, getWaveDefinition, REFITS, TOTAL_HOSTILES, WAVES } from './operation';
 import { createPresentation } from './presentation';
 import { advanceGaits, createGaits } from './gait';
@@ -24,13 +26,12 @@ const inputElement = function (id: string): HTMLInputElement {
 const bindings = new Map([
 	['KeyW', 'forward'], ['ArrowUp', 'forward'], ['KeyS', 'back'], ['ArrowDown', 'back'],
 	['KeyA', 'left'], ['ArrowLeft', 'left'], ['KeyD', 'right'], ['ArrowRight', 'right'],
-	['KeyX', 'stop'], ['Space', 'cannon'], ['KeyE', 'laser'], ['KeyQ', 'missile'], ['KeyV', 'coolant'],
+	['KeyX', 'stop'], ['Space', 'mount-0'], ['KeyE', 'mount-1'], ['KeyQ', 'mount-2'], ['KeyF', 'mount-3'], ['KeyV', 'coolant'],
+	['Digit1', 'mount-0'], ['Digit2', 'mount-1'], ['Digit3', 'mount-2'], ['Digit4', 'mount-3'],
 ]);
 const formatTime = function (time: number) { return `${Math.floor(time / 60)}:${Math.floor(time % 60).toString().padStart(2, '0')}`; };
-type Screen = 'brief' | 'playing' | 'pause-panel' | 'refit' | 'result' | 'training-result';
+type Screen = 'brief' | 'playing' | 'pause-panel' | 'refit' | 'result' | 'training-result' | 'loadout' | 'requisition';
 type Auxiliary = 'settings' | 'handbook' | 'confirm';
-type Weapon = 'cannon' | 'laser' | 'missile';
-const weapons: readonly Weapon[] = ['cannon', 'laser', 'missile'];
 const shutdown = await mountGame('game', async function (container) {
 	const canvas = container.querySelector('canvas');
 	if (!canvas) throw new Error('Missing battlefield');
@@ -48,17 +49,22 @@ const shutdown = await mountGame('game', async function (container) {
 		phase: element('phase'), status: element('status'), armor: element('armor-value'), armorFill: element('armor-fill'),
 		relay: element('relay-value'), relayFill: element('relay-fill'), heat: element('heat-value'), heatFill: element('heat-fill'),
 		drive: element('drive-value'), throttleFill: element('throttle-fill'), speed: element('speed-value'),
-		cannon: element('cannon-status'), cannonFill: element('cannon-fill'), laser: element('laser-status'), laserFill: element('laser-fill'),
-		missile: element('missile-status'), missileFill: element('missile-fill'), coolant: element('coolant-value'), message: element('message'),
+		coolant: element('coolant-value'), message: element('message'),
 		sound: element('sound'), hint: element('pilot-hint'), hintCopy: element('hint-copy'), inputMode: element('input-mode'),
 	};
 	const cockpitElements = [...container.querySelectorAll<HTMLElement>('.left-instruments, .weapon-console, #touch, #training-guide')];
 	let hudObstructions: ScreenRect[] = [];
-	const weaponButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-weapon]')];
+	const weaponButtons = MOUNTS.map(function (binding) {
+		const button = document.createElement('button'); button.className = 'weapon'; button.dataset['control'] = binding.action;
+		button.innerHTML = '<span class="weapon-icon" aria-hidden="true"></span><b></b><small><kbd></kbd></small><em></em><i></i>';
+		return button;
+	});
+	element('weapon-bank').replaceChildren(...weaponButtons);
 	let training: Training | undefined;
 	let screen: Screen = 'brief'; let auxiliary: Auxiliary | undefined;
-	let selectedWeapon: Weapon = 'cannon';
-	const mousePointers = new Set<number>();
+	let starter: WeaponId = 'autocannon';
+	const mouseButtons = new Set<number>();
+	const consumedMouseButtons = new Set<number>();
 	let state = createState({ difficulty: profile.settings.difficulty }); let gaits = createGaits(state); let muted = false;
 	let aim: Point = { x: 900, y: 450 }; let pointer: Point | undefined; let aimMode: 'pointer' | 'gamepad' = 'pointer';
 	let frame = 0; let previous = 0; let accumulator = 0; let lastHud = 0;
@@ -67,9 +73,9 @@ const shutdown = await mountGame('game', async function (container) {
 	let inputMode: 'keyboard' | 'gamepad' | 'touch' = 'keyboard'; let controllerLost = false; let screenRevision = 0;
 	let currentPad: PadInput | undefined;
 	let lastSoundState = '';
-	const resetInput = function () { keys.clear(); pending.clear(); held.clear(); mousePointers.clear(); padInput.requireNeutral(); void feedback.stop(); };
+	const resetInput = function () { keys.clear(); pending.clear(); held.clear(); mouseButtons.clear(); padInput.requireNeutral(); void feedback.stop(); };
 	const playing = function () { return screen === 'playing' && !auxiliary && !contextLost && !document.hidden && focused; };
-	const active = function (action: string) { return (mousePointers.size > 0 && action === selectedWeapon) || keys.has(action) || pending.has(action) || [...held.values()].includes(action); };
+	const active = function (action: string) { return MOUNTS.some(function (binding) { return binding.action === action && mouseButtons.has(binding.button); }) || [...keys].some(function (code) { return bindings.get(code) === action; }) || pending.has(action) || [...held.values()].includes(action); };
 	const silenceAudio = function () { audio.update({ speed: 0, laser: false, heat: 0, active: false }); };
 	const motionReduced = function () { return reducedMotion.matches || profile.settings.reducedMotion; };
 	const unlockSound = function () { void audio.unlock(); };
@@ -79,15 +85,11 @@ const shutdown = await mountGame('game', async function (container) {
 		container.classList.toggle('using-gamepad', value === 'gamepad');
 		container.classList.toggle('couch-ui', value === 'gamepad' || profile.settings.couchUI);
 		ui.inputMode.textContent = value === 'gamepad' ? 'GAMEPAD' : value === 'touch' ? 'TOUCH' : 'KB / MOUSE';
-		const prompts = [
-			['#pause kbd', 'Esc', 'Menu'], ['[data-weapon="cannon"] kbd', 'Space', 'RT / R2'],
-			['[data-weapon="laser"] kbd', 'E', 'LT / L2'], ['[data-weapon="missile"] kbd', 'Q', 'RB / R1'],
-			['#coolant kbd', 'V', 'LB / L1'],
-		] as const;
+		const prompts = [['#pause kbd', 'Esc', 'Menu'], ['#coolant kbd', 'V', 'B / ○']] as const;
 		for (const [selector, keyboard, gamepad] of prompts) {
 			const prompt = container.querySelector(selector); if (prompt) prompt.textContent = value === 'gamepad' ? gamepad : keyboard;
 		}
-		element('weapon-hint').textContent = value === 'gamepad' ? 'TRIGGERS + BUMPERS' : value === 'touch' ? 'HOLD TO FIRE' : 'WHEEL / 1–3 TO SELECT';
+		element('weapon-hint').textContent = value === 'gamepad' ? 'HOLD TRIGGERS + BUMPERS' : value === 'touch' ? 'HOLD TOGETHER TO COMBINE' : 'HOLD MOUSE BUTTONS / 1–4';
 		element('menu-input-hint').textContent = value === 'gamepad' ? 'A / × SELECT · B / ○ BACK · RIGHT STICK SCROLL' : value === 'touch' ? 'TAP TO SELECT · SWIPE TO SCROLL' : 'TAB SELECT · ENTER CONFIRM · ESC BACK';
 	};
 	const save = function () {
@@ -115,7 +117,7 @@ const shutdown = await mountGame('game', async function (container) {
 		screenRevision++;
 		element('reset').textContent = training ? 'RESTART TRAINING' : 'RESTART OPERATION';
 		element('pause-copy').textContent = training ? 'Training is paused. Resume the drill or return to the briefing.' : 'Your throttle and operation are preserved.';
-		for (const id of ['brief', 'pause-panel', 'refit', 'result', 'training-result', 'settings', 'handbook', 'confirm']) {
+		for (const id of ['brief', 'pause-panel', 'refit', 'result', 'training-result', 'settings', 'handbook', 'confirm', 'loadout', 'requisition']) {
 			const node = element(id); const visible = auxiliary ? id === auxiliary : id === screen;
 			node.hidden = !visible; node.inert = !visible;
 		}
@@ -141,13 +143,13 @@ const shutdown = await mountGame('game', async function (container) {
 	const start = function () {
 		if (contextLost) return;
 		training = undefined;
-		state = createState({ difficulty: profile.settings.difficulty }); gaits = createGaits(state); selectedWeapon = 'cannon'; screen = 'playing'; auxiliary = undefined;
+		state = createState({ difficulty: profile.settings.difficulty, starter, seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1 }); gaits = createGaits(state); screen = 'playing'; auxiliary = undefined;
 		aim = { x: 900, y: 450 }; pointer = undefined; message = 'WARDEN ONLINE. PROTECT RELAY 09.'; messageUntil = 5; tipDismissed = false;
 		terminalUntil = 0; audio.reset(); syncScreen(); unlockSound();
 	};
 	const startTraining = function () {
 		if (contextLost) return;
-		training = createTraining(); state = training.state; gaits = createGaits(state); selectedWeapon = 'cannon';
+		training = createTraining(); state = training.state; gaits = createGaits(state);
 		screen = 'playing'; auxiliary = undefined; pointer = undefined; aim = { x: 900, y: 450 };
 		message = ''; messageUntil = 0; tipDismissed = true; terminalUntil = 0;
 		audio.reset(); syncScreen(); unlockSound();
@@ -172,11 +174,56 @@ const shutdown = await mountGame('game', async function (container) {
 		else syncScreen();
 	};
 	const confirm = function (action: () => void, label: string) { confirmedAction = action; element('confirm-action').textContent = label; showAuxiliary('confirm'); };
+	const starterCards = WEAPONS.map(function (weapon) {
+		return weaponCard(weapon.id, 'SELECT STARTING WEAPON', function () {
+			starter = weapon.id; updateStarter();
+		});
+	});
+	const updateStarter = function () {
+		for (const card of starterCards) {
+			const selected = card.dataset['choice'] === starter;
+			card.setAttribute('aria-pressed', String(selected));
+			const badge = card.querySelector('.weapon-badge'); if (badge) badge.textContent = selected ? '✓ EQUIPPED IN MOUNT 1' : 'SELECT STARTING WEAPON';
+		}
+		element('starter-summary').textContent = `${getWeapon(starter).name} · RANK I`;
+	};
+	element('starter-cards').replaceChildren(...starterCards); updateStarter();
+	const openLoadout = function () {
+		screen = 'loadout'; auxiliary = undefined; training = undefined; syncScreen();
+		const selected = starterCards.find(function (card) { return card.dataset['choice'] === starter; });
+		selected?.focus({ preventScroll: true }); selected?.scrollIntoView({ block: 'nearest' });
+	};
+	const finishDraft = function (id: WeaponId, slot?: number) {
+		if (screen !== 'requisition' || auxiliary || contextLost || !chooseWeapon(state, id, slot)) return;
+		if (state.phase === 'requisition') { showDraft(); return; }
+		screen = 'playing'; message = `${getWeapon(id).name.toUpperCase()} ONLINE · HOLD MULTIPLE MOUNTS TO COMBINE FIRE`; messageUntil = state.time + 4;
+		syncScreen(); unlockSound();
+	};
+	const showDraft = function () {
+		screen = 'requisition';
+		element('draft-number').textContent = `DROP ${state.draftCount + 1} / ${DRAFT_MILESTONES.length}`;
+		element('draft-copy').textContent = state.loadout.length < 4 ? `Choose a weapon for mount ${state.loadout.length + 1}. Combat is paused, including incoming artillery.` : 'Upgrade an installed weapon (+30% base damage per rank), or choose a new weapon and replace a mount. Combat is paused.';
+		element('replace-panel').hidden = true; element('draft-cards').hidden = false;
+		element('draft-loadout').replaceChildren(...mountSummary(state.loadout));
+		element('draft-cards').replaceChildren(...state.offers.map(function (id) {
+			const owned = state.loadout.find(function (mount) { return mount.weapon === id; });
+			const badge = owned ? `UPGRADE ${rankLabel(owned.level)} → ${rankLabel(owned.level + 1)} · +30% BASE DAMAGE` : state.loadout.length < 4 ? `INSTALL IN MOUNT ${state.loadout.length + 1}` : 'NEW WEAPON · CHOOSE MOUNT';
+			return weaponCard(id, badge, function () {
+				if (owned || state.loadout.length < 4) { finishDraft(id); return; }
+				element('replace-title').textContent = `INSTALL ${getWeapon(id).name.toUpperCase()} · REPLACE WHICH MOUNT?`;
+				element('replace-cards').replaceChildren(...mountSummary(state.loadout, function (slot) { finishDraft(id, slot); }));
+				element('draft-cards').hidden = true; element('replace-panel').hidden = false;
+				element('replace-cards').querySelector('button')?.focus();
+			});
+		}));
+		syncScreen();
+	};
 	const listen = function (id: string, callback: () => void) { element(id).addEventListener('click', callback, listenerOptions); };
-	listen('training', startTraining); listen('training-deploy', start); listen('training-briefing', toBriefing);
-	listen('start', start); listen('restart', start); listen('resume', function () { setPaused(false); });
+	listen('deploy-loadout', start); listen('loadout-back', toBriefing); listen('replace-back', showDraft);
+	listen('training', startTraining); listen('training-deploy', openLoadout); listen('training-briefing', toBriefing);
+	listen('start', openLoadout); listen('restart', openLoadout); listen('resume', function () { setPaused(false); });
 	listen('pause', function () { setPaused(true); });
-	listen('reset', function () { confirm(training ? startTraining : start, training ? 'RESTART TRAINING' : 'RESTART OPERATION'); });
+	listen('reset', function () { confirm(training ? startTraining : openLoadout, training ? 'RESTART TRAINING' : 'RESTART OPERATION'); });
 	listen('leave', function () { confirm(toBriefing, 'RETURN TO BRIEFING'); });
 	listen('result-briefing', toBriefing);
 	listen('confirm-action', function () { const action = confirmedAction; confirmedAction = undefined; action?.(); });
@@ -236,7 +283,7 @@ const shutdown = await mountGame('game', async function (container) {
 		element('result-rank').textContent = report.rank; element('result-score').textContent = report.score.toLocaleString();
 		const stats = [[`${report.kills}/${TOTAL_HOSTILES}`, 'HOSTILES'], [formatTime(report.time), 'FIELD TIME'], [`${Math.ceil(report.relay)}%`, 'RELAY'], [`${report.accuracy}%`, 'BALLISTIC HITS']];
 		element('result-stats').replaceChildren(...stats.map(function ([value, label]) { const node = document.createElement('div'); const strong = document.createElement('b'); const small = document.createElement('small'); strong.textContent = value ?? ''; small.textContent = label ?? ''; node.append(strong, small); return node; }));
-		element('result-upgrades').textContent = `REFITS · ARSENAL ${state.upgrades.arsenal} / COOLING ${state.upgrades.cooling} / BASTION ${state.upgrades.bastion}`;
+		element('result-upgrades').textContent = `LOADOUT · ${state.loadout.map(function (mount) { return `${getWeapon(mount.weapon).name} ${rankLabel(mount.level)}`; }).join(' / ')} · REFITS · ARSENAL ${state.upgrades.arsenal} / COOLING ${state.upgrades.cooling} / BASTION ${state.upgrades.bastion}`;
 		const oldBest = Math.max(0, ...profile.bests.filter(function (record) { return record.difficulty === state.difficulty; }).map(function (record) { return record.score; }));
 		profile = addOperationRecord(profile, { difficulty: state.difficulty, won, score: report.score, rank: report.rank, kills: report.kills, wave: state.wave, time: report.time, relay: report.relay });
 		const saved = saveProfile(profile);
@@ -245,8 +292,11 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	window.addEventListener('keydown', function (event) {
 		setInputMode('keyboard'); if (event.isTrusted) unlockSound();
-		if (event.code === 'Escape') { event.preventDefault(); if (event.repeat) return; if (auxiliary) closeAuxiliary(); else setPaused(screen === 'playing'); return; }
+		if (event.code === 'Escape') { event.preventDefault(); if (event.repeat) return; if (auxiliary) closeAuxiliary(); else if (screen === 'loadout') toBriefing(); else if (screen === 'requisition' && !element('replace-panel').hidden) showDraft(); else setPaused(screen === 'playing'); return; }
 		const root = menu();
+		// Every paused choice needs a fresh confirmation, even when multi-kills
+		// queue several drafts and the next card receives focus immediately.
+		if (root && event.repeat && (event.code === 'Enter' || event.code === 'Space')) { event.preventDefault(); return; }
 		if (root && event.code === 'Tab') {
 			const items = focusable(root); const first = items[0]; const last = items.at(-1);
 			if (event.shiftKey && (document.activeElement === first || !root.contains(document.activeElement))) { event.preventDefault(); last?.focus(); }
@@ -255,11 +305,10 @@ const shutdown = await mountGame('game', async function (container) {
 		}
 		if (!playing()) return;
 		if (event.target instanceof HTMLButtonElement || event.target instanceof HTMLInputElement) return;
-		if (event.code === 'Digit1' || event.code === 'Digit2' || event.code === 'Digit3') { selectedWeapon = weapons[Number(event.code.slice(-1)) - 1] ?? 'cannon'; event.preventDefault(); return; }
 		const action = bindings.get(event.code); if (!action) return;
-		event.preventDefault(); keys.add(action); if (!event.repeat) pending.add(action);
+		event.preventDefault(); if (event.repeat && !keys.has(event.code)) return; keys.add(event.code); if (!event.repeat) pending.add(action);
 	}, listenerOptions);
-	window.addEventListener('keyup', function (event) { const action = bindings.get(event.code); if (action) keys.delete(action); }, listenerOptions);
+	window.addEventListener('keyup', function (event) { const action = bindings.get(event.code); if (action) keys.delete(event.code); }, listenerOptions);
 	container.addEventListener('pointerdown', function (event) { setInputMode(event.pointerType === 'touch' ? 'touch' : 'keyboard'); if (event.isTrusted) unlockSound(); }, listenerOptions);
 	container.addEventListener('click', function (event) {
 		if (!(event.target instanceof Element) || !event.target.closest('button') || !menu()) return;
@@ -280,36 +329,38 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	canvas.addEventListener('pointermove', updatePointer, listenerOptions);
 	canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); }, listenerOptions);
-	canvas.addEventListener('wheel', function (event) {
-		if (!playing() || event.ctrlKey || event.deltaY === 0) return;
-		event.preventDefault(); const index = weapons.indexOf(selectedWeapon); selectedWeapon = weapons[(index + (event.deltaY > 0 ? 1 : 2)) % weapons.length] ?? 'cannon';
-	}, { ...listenerOptions, passive: false });
+	canvas.addEventListener('auxclick', function (event) { event.preventDefault(); }, listenerOptions);
 	canvas.addEventListener('pointerdown', function (event) {
-		if ((!event.isPrimary && event.pointerType !== 'touch') || event.button !== 0 || !playing()) return;
-		updatePointer(event); canvas.focus({ preventScroll: true }); canvas.setPointerCapture(event.pointerId);
-		if (event.pointerType !== 'touch') { mousePointers.add(event.pointerId); pending.add(selectedWeapon); }
+		if (!playing()) return;
+		updatePointer(event); canvas.focus({ preventScroll: true });
+		if (event.pointerType === 'touch') canvas.setPointerCapture(event.pointerId);
 	}, listenerOptions);
-	const release = function (event: PointerEvent) { held.delete(event.pointerId); mousePointers.delete(event.pointerId); };
-	window.addEventListener('pointerup', release, listenerOptions); window.addEventListener('pointercancel', release, listenerOptions); canvas.addEventListener('lostpointercapture', release, listenerOptions);
-	for (const button of container.querySelectorAll<HTMLButtonElement>('[data-control], [data-weapon]')) {
-		const action = button.dataset['control'] ?? button.dataset['weapon']; if (!action) continue;
+	// Pointerdown only fires for the first mouse button in a chord. Mouse events
+	// report every press/release, so all four mounts remain independent.
+	canvas.addEventListener('mousedown', function (event) {
+		const binding = MOUNTS.find(function (mount) { return mount.button === event.button; });
+		if (!binding || !playing()) return;
+		event.preventDefault(); mouseButtons.add(event.button); consumedMouseButtons.add(event.button); pending.add(binding.action);
+	}, listenerOptions);
+	window.addEventListener('mouseup', function (event) {
+		// Chromium handles side-button history on mouseup, before auxclick.
+		if (consumedMouseButtons.has(event.button) || event.target === canvas) event.preventDefault();
+		mouseButtons.delete(event.button); consumedMouseButtons.delete(event.button);
+	}, listenerOptions);
+	const release = function (event: PointerEvent) { held.delete(event.pointerId); if (event.type === 'pointercancel') mouseButtons.clear(); };
+	window.addEventListener('pointerup', release, listenerOptions); window.addEventListener('pointercancel', release, listenerOptions);
+	for (const button of container.querySelectorAll<HTMLButtonElement>('[data-control]')) {
+		const action = button.dataset['control']; if (!action) continue;
 		button.addEventListener('pointerdown', function (event) {
 			if (!playing() || event.button !== 0) return;
 			event.preventDefault(); button.setPointerCapture(event.pointerId); held.set(event.pointerId, action); pending.add(action);
-			if (action === 'cannon' || action === 'laser' || action === 'missile') selectedWeapon = action;
 		}, listenerOptions);
 		button.addEventListener('click', function (event) { if (event.detail === 0 && playing()) { pending.add(action); canvas.focus({ preventScroll: true }); } }, listenerOptions);
 		button.addEventListener('lostpointercapture', release, listenerOptions);
 	}
-	const weaponState = function (label: HTMLElement, fill: HTMLElement, cooldown: number, duration: number, firing: boolean) {
-		label.textContent = state.player.overheated ? 'HEAT LOCK' : cooldown > 0 ? `${cooldown.toFixed(1)}s` : firing ? 'FIRING' : 'READY';
-		fill.style.width = `${Math.max(0, 1 - cooldown / duration) * 100}%`;
-		label.closest('button')?.classList.toggle('firing', firing && !state.player.overheated); label.closest('button')?.classList.toggle('locked', state.player.overheated);
-	};
 	const updateHud = function () {
 		hudObstructions = cockpitElements.filter(function (node) { return node.offsetWidth > 0; }).map(function (node) { const rect = node.getBoundingClientRect(); return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom }; });
 		const p = state.player;
-		for (const button of weaponButtons) { const selected = button.dataset['weapon'] === selectedWeapon; button.classList.toggle('selected', selected); if (button.classList.contains('weapon')) button.setAttribute('aria-current', String(selected)); }
 		ui.phase.textContent = `${String(state.wave).padStart(2, '0')} / ${getWaveDefinition(state.wave).name.toUpperCase()}`;
 		ui.status.textContent = state.intermission > 0 ? 'ASSAULT CLEAR · SECURING THE YARD' : `${state.enemies.length} ACTIVE · ${state.warnings.length} INBOUND · ${state.kills}/${TOTAL_HOSTILES} ELIMINATED`;
 		element('training-guide').hidden = !training || screen !== 'playing';
@@ -326,19 +377,29 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.heat.textContent = p.overheated ? 'LOCKOUT' : `${Math.ceil(p.heat)}%`; ui.heatFill.style.width = `${p.heat}%`; ui.heatFill.style.background = p.heat > 80 ? 'var(--danger)' : 'var(--amber)';
 		ui.drive.textContent = `${p.throttle < -0.005 ? 'REV' : p.throttle > 0.005 ? 'FWD' : 'N'} ${Math.round(Math.abs(p.throttle) * 100)}%`;
 		ui.throttleFill.style.left = `${p.throttle < 0 ? 50 + p.throttle * 50 : 50}%`; ui.throttleFill.style.width = `${Math.abs(p.throttle) * 50}%`; ui.speed.textContent = `SPD ${Math.round(p.speed / (p.speed < 0 ? 48 : 90) * 100)}%`;
-		weaponState(ui.cannon, ui.cannonFill, state.cannonIn, 0.65, active('cannon') || currentPad?.cannon === true); weaponState(ui.missile, ui.missileFill, state.missileIn, 4.5, active('missile') || currentPad?.missile === true); weaponState(ui.laser, ui.laserFill, 0, 1, !!state.beam);
-		if (training) {
-			const available = training.stage === 'cannon' ? 'cannon' : training.stage === 'missiles' ? 'missile' : training.stage === 'heat' ? 'laser' : training.stage === 'coolant' ? 'coolant' : undefined;
-			for (const button of weaponButtons) {
-				button.disabled = button.dataset['weapon'] !== available;
-				const status = button.querySelector('em');
-				if (button.disabled && status) status.textContent = 'DRILL LOCK';
-			}
-		} else for (const button of weaponButtons) button.disabled = false;
+		for (const [index, button] of weaponButtons.entries()) {
+			const mount = state.loadout[index]; const binding = MOUNTS[index]; if (!binding) continue;
+			const weapon = mount ? getWeapon(mount.weapon) : undefined;
+			const drillSlot = training?.stage === 'cannon' ? 0 : training?.stage === 'missiles' ? 2 : training?.stage === 'heat' ? 1 : -1;
+			button.disabled = !mount || Boolean(training && training.stage !== 'combined' && index !== drillSlot);
+			const firing = Boolean(mount && !button.disabled && !p.overheated && playing() && (mount.firing || active(binding.action) || currentPad?.fire[index]));
+			button.classList.toggle('empty', !mount); button.classList.toggle('firing', firing); button.classList.toggle('locked', p.overheated);
+			button.setAttribute('aria-label', mount && weapon ? `Fire mount ${index + 1}: ${weapon.name}, rank ${rankLabel(mount.level)}. ${binding.mouse} mouse or hold ${binding.key}; controller ${binding.pad}.` : `Mount ${index + 1} empty. Earn weapons from eliminations.`);
+			const title = button.querySelector('b'); if (title) title.textContent = mount && weapon ? weapon.name : 'EMPTY';
+			const icon = button.querySelector('.weapon-icon'); if (icon) icon.textContent = `${String(index + 1).padStart(2, '0')}${mount ? ` · ${rankLabel(mount.level)}` : ''}`;
+			const prompt = button.querySelector('kbd'); if (prompt) prompt.textContent = inputMode === 'gamepad' ? binding.pad : inputMode === 'touch' ? `HOLD ${index + 1}` : `${binding.mouse} / ${binding.key}`;
+			const label = button.querySelector('em'); if (label) label.textContent = !mount ? 'EARN A DROP' : button.disabled ? 'DRILL LOCK' : p.overheated ? 'HEAT LOCK' : firing ? 'FIRING' : mount.cooldown > 0 ? `${mount.cooldown.toFixed(1)}s` : 'READY';
+			const fill = button.querySelector('i'); if (fill) fill.style.width = `${mount && weapon ? Math.max(0, 1 - mount.cooldown / Math.max(.01, weapon.interval)) * 100 : 0}%`;
+			button.style.setProperty('--weapon-color', weapon?.color ?? 'var(--muted)');
+		}
+		const threshold = DRAFT_MILESTONES[state.draftCount]; const lastThreshold = DRAFT_MILESTONES[state.draftCount - 1] ?? 0;
+		element('draft-progress-label').textContent = threshold ? `NEXT DROP · ${state.kills} / ${threshold} ELIMINATIONS` : 'ALL DROPS RECOVERED';
+		element('draft-progress-fill').style.width = `${threshold ? Math.min(100, (state.kills - lastThreshold) / (threshold - lastThreshold) * 100) : 100}%`;
+		element('coolant').toggleAttribute('disabled', Boolean(training && training.stage !== 'coolant'));
 		ui.coolant.textContent = `${state.coolantCharges} ${state.coolantCharges === 1 ? 'CHARGE' : 'CHARGES'}`;
 		ui.message.textContent = !playing() ? '' : inputMode === 'gamepad' && currentPad?.connected && !currentPad.ready ? 'RELEASE STICKS AND TRIGGERS TO ARM CONTROLS' : p.overheated ? 'REACTOR LOCKOUT / VENT COOLANT OR CEASE FIRE' : state.time < messageUntil ? message : state.relay < 30 ? 'RELAY INTEGRITY CRITICAL' : '';
 		ui.hint.hidden = tipDismissed || state.time > 35 || screen !== 'playing';
-		ui.hintCopy.textContent = inputMode === 'gamepad' ? 'Left stick sets throttle. X / □ stops. Right stick aims; RT fires.' : inputMode === 'touch' || coarsePointer.matches || profile.settings.touchControls ? 'Tap the field to aim. Hold + to move; STOP sets neutral. Hold a weapon to fire.' : state.time < 14 ? 'W / S set throttle. Release to cruise. X sets neutral; A / D steer.' : 'Mouse aims. Click fires. E laser · Q missiles · V coolant. Watch your heat.';
+		ui.hintCopy.textContent = inputMode === 'gamepad' ? 'Left stick sets throttle; X / □ stops. Right stick aims. RT / LT / RB / LB combine fire; B / ○ vents.' : inputMode === 'touch' || coarsePointer.matches || profile.settings.touchControls ? 'Tap the field to aim. Hold + to move; STOP sets neutral. Hold a weapon to fire.' : state.time < 14 ? 'W / S set throttle. Release to cruise. X sets neutral; A / D steer.' : 'Hold left / right / middle / thumb to combine mounts. Hold 1–4 also fires. V vents coolant.';
 		const audioState = audio.status(); const needsGesture = audioState === 'locked' || audioState === 'pending';
 		const soundState = audioState === 'unavailable' ? 'UNAVAILABLE' : needsGesture ? 'ENABLE SOUND' : muted ? 'SOUND OFF' : 'SOUND ON';
 		if (lastSoundState !== soundState) { lastSoundState = soundState; ui.sound.textContent = soundState; ui.sound.setAttribute('aria-label', needsGesture ? 'Click to enable audio' : audioState === 'unavailable' ? 'Retry audio' : muted ? 'Unmute sound' : 'Mute sound'); ui.sound.setAttribute('aria-pressed', String(muted)); }
@@ -346,10 +407,10 @@ const shutdown = await mountGame('game', async function (container) {
 		if (element('audio-status').textContent !== audioStatus) element('audio-status').textContent = audioStatus;
 	};
 	const audioFrame = function (now: number) {
-		const combat = playing(); const audibleMenu = screen === 'brief' || screen === 'refit' || screen === 'training-result' || (screen === 'result' && now < terminalUntil + 30000);
+		const combat = playing(); const audibleMenu = screen === 'brief' || screen === 'loadout' || screen === 'requisition' || screen === 'refit' || screen === 'training-result' || (screen === 'result' && now < terminalUntil + 30000);
 		return { speed: combat ? state.player.speed : 0, laser: combat && !!state.beam, heat: state.player.heat,
 			active: !contextLost && focused && !document.hidden && (combat || audibleMenu), uiActive: !contextLost && focused && !document.hidden,
-			phase: screen === 'brief' ? 'briefing' as const : screen === 'refit' || screen === 'training-result' ? 'refit' as const : screen === 'result' ? 'result' as const : 'combat' as const,
+			phase: screen === 'brief' || screen === 'loadout' ? 'briefing' as const : screen === 'refit' || screen === 'requisition' || screen === 'training-result' ? 'refit' as const : screen === 'result' ? 'result' as const : 'combat' as const,
 			intensity: Math.min(1, state.enemies.length / 5 + (state.wave - 1) * 0.08), danger: Math.max(0, 1 - Math.min(state.player.hp, state.relay) / 50), victory: state.outcome === 'won' };
 	};
 	const tick = function (now: number) {
@@ -386,7 +447,7 @@ const shutdown = await mountGame('game', async function (container) {
 				audio.cue('focus');
 			}
 			if (pad.confirm && document.activeElement instanceof HTMLElement && root.contains(document.activeElement)) document.activeElement.click();
-			if (pad.back && screenRevision === revisionAtFrame) { audio.cue('back'); if (auxiliary) closeAuxiliary(); else if (screen === 'pause-panel') setPaused(false); }
+			if (pad.back && screenRevision === revisionAtFrame) { audio.cue('back'); if (auxiliary) closeAuxiliary(); else if (screen === 'loadout') toBriefing(); else if (screen === 'requisition' && !element('replace-panel').hidden) showDraft(); else if (screen === 'pause-panel') setPaused(false); }
 		}
 		if (playing() && screenRevision === revisionAtFrame) {
 			if (Math.hypot(pad.aimX, pad.aimY) > 0.2) {
@@ -402,7 +463,7 @@ const shutdown = await mountGame('game', async function (container) {
 				const picked = [...state.enemies].sort(function (a, b) { return distance(presentation.toScreen(a, 45), cursor) - distance(presentation.toScreen(b, 45), cursor); })[0];
 				if (picked && distance(presentation.toScreen(picked, 45), cursor) < 42 * viewScale(width, height)) aim = { x: picked.x, y: picked.y };
 			}
-			const makeInput = function (): Controls { return { drive: Math.max(-1, Math.min(1, Number(active('forward')) - Number(active('back')) + pad.drive)), stop: active('stop') || pad.stop, turn: Math.max(-1, Math.min(1, Number(active('right')) - Number(active('left')) + pad.turn)), aim, cannon: active('cannon') || pad.cannon, laser: active('laser') || pad.laser, missile: active('missile') || pad.missile, coolant: active('coolant') || pad.coolant }; };
+			const makeInput = function (): Controls { return { drive: Math.max(-1, Math.min(1, Number(active('forward')) - Number(active('back')) + pad.drive)), stop: active('stop') || pad.stop, turn: Math.max(-1, Math.min(1, Number(active('right')) - Number(active('left')) + pad.turn)), aim, fire: [active('mount-0') || pad.fire[0], active('mount-1') || pad.fire[1], active('mount-2') || pad.fire[2], active('mount-3') || pad.fire[3]], coolant: active('coolant') || pad.coolant }; };
 			accumulator += elapsed;
 			while (accumulator >= 1 / 60 && playing()) {
 				const previousGaits = gaits;
@@ -418,7 +479,7 @@ const shutdown = await mountGame('game', async function (container) {
 				if (state.events.includes('wave')) { message = getWaveDefinition(state.wave).briefing.toUpperCase(); messageUntil = state.time + 5; }
 				if (state.events.includes('coolant')) { message = 'COOLANT PURGE / REACTOR STABILIZING'; messageUntil = state.time + 2; }
 				if (training?.stage === 'complete') { screen = 'training-result'; syncScreen(); }
-				else if (!training && state.outcome !== 'playing') showResult(now); else if (!training && state.phase === 'refit') showRefit();
+				else if (!training && state.outcome !== 'playing') showResult(now); else if (!training && state.phase === 'requisition') showDraft(); else if (!training && state.phase === 'refit') showRefit();
 			}
 		}
 		audio.update(audioFrame(now));

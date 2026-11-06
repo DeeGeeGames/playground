@@ -1,7 +1,8 @@
 import type { OrthographicCamera } from 'three';
+import { getWeapon } from './arsenal';
 import { mechScale, type Gaits } from './gait';
 import { toScreen } from './projection-3d';
-import { ARENA, distance, getEnemyDefense, type Point, type State } from './simulation';
+import { ARENA, distance, getEnemyDefense, type Point, type State, type Unit } from './simulation';
 
 export interface ScreenRect { left: number; right: number; top: number; bottom: number }
 export interface OverlayOptions {
@@ -39,6 +40,19 @@ export const edgeMarker = function (point: Point, width: number, height: number,
 		if (entry > 0 && entry <= exit) factor = Math.min(factor, entry);
 	}
 	return { point: { x: origin.x + dx * factor, y: origin.y + dy * factor }, angle: Math.atan2(dy, dx) };
+};
+
+// Match each fitted guidance system's actual acquisition range and aim choice.
+export const targetSolution = function (state: State, target: Unit, aim: Point): { guided: boolean; inRange: boolean } {
+	const weapons = state.loadout.map(function (mount) { return getWeapon(mount.weapon); });
+	const range = distance(target, state.player);
+	const guided = weapons.some(function (weapon) {
+		if (weapon.kind !== 'missile' || range > weapon.range) return false;
+		const lock = state.enemies.filter(function (enemy) { return enemy.hp > 0 && distance(enemy, state.player) <= weapon.range; })
+			.reduce<Unit | undefined>(function (nearest, enemy) { return !nearest || distance(enemy, aim) < distance(nearest, aim) ? enemy : nearest; }, undefined);
+		return lock?.id === target.id;
+	});
+	return { guided, inRange: weapons.some(function (weapon) { return range <= weapon.range; }) };
 };
 
 const bracket = function (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, length: number) {
@@ -113,11 +127,11 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 		const size = (selected.commander ? 90 : 74) * scale;
 		ctx.strokeStyle = '#f3c37d'; ctx.lineWidth = 1.5;
 		bracket(ctx, anchor.x, anchor.y, size, size, 10);
-		const inRange = distance(selected, state.player) <= 900;
+		const solution = targetSolution(state, selected, aim);
 		const defense = getEnemyDefense(state, selected);
 		const role = selected.commander ? 'COMMAND FRAME' : selected.kind === 'siege' ? defense.exposed ? 'SIEGE / EXPOSED' : 'SIEGE / FLANK ARMOR' : selected.kind.toUpperCase();
 		text(role, selected, 42, '#ffe1aa', 10, 48);
-		text(`${Math.round(distance(selected, state.player))} M / ${inRange ? 'MISSILE LOCK' : 'NO LOCK'}`, selected, 42, inRange ? '#ebc184' : '#98a8a7', 8, 48 + (minimumText + 7) / scale);
+		text(`${Math.round(distance(selected, state.player))} M / ${solution.guided ? 'GUIDED LOCK' : solution.inRange ? 'IN RANGE' : 'OUT OF RANGE'}`, selected, 42, solution.inRange ? '#ebc184' : '#98a8a7', 8, 48 + (minimumText + 7) / scale);
 	}
 	// A precise sight remains useful when aiming ahead of a moving contact.
 	const cursor = at(aim, 0);

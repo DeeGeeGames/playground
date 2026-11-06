@@ -353,7 +353,7 @@ export const createAudio = function () {
 		const at = synth.context.currentTime;
 		for (const event of events.slice(0, 16)) {
 			const previous = lastEvent.get(event) ?? -10;
-			const interval = event === 'impact' ? 0.07 : event === 'explosion' ? 0.1 : 0.03;
+			const interval = event === 'impact' || event === 'machine-gun' ? 0.07 : event === 'explosion' || event === 'rocket' || event === 'missile' ? 0.1 : 0.03;
 			if (at - previous < interval) continue;
 			lastEvent.set(event, at);
 			switch (event) {
@@ -371,8 +371,22 @@ export const createAudio = function () {
 					tone({ at, frequency: 880, endFrequency: 330, duration: 0.32, volume: 0.13, type: 'triangle' });
 					tone({ at: at + 0.36, frequency: 660, endFrequency: 220, duration: 0.32, volume: 0.1, type: 'triangle' });
 					break;
+				case 'requisition':
 				case 'refit':
 					for (const [index, note] of [50, 57, 62].entries()) tone({ at: at + index * 0.14, frequency: frequency(note), duration: 0.6, volume: 0.13, type: 'triangle', attack: 0.02, cutoff: 1400 });
+					break;
+				case 'machine-gun':
+					noise({ at, duration: 0.07, volume: 0.18, frequency: 3400, type: 'bandpass', pan: -0.12 });
+					tone({ at, frequency: 160, endFrequency: 75, duration: 0.055, volume: 0.12, type: 'triangle' });
+					break;
+				case 'ppc':
+					tone({ at, frequency: 720, endFrequency: 110, duration: 0.36, volume: 0.21, type: 'sawtooth', cutoff: 2600, endCutoff: 500 });
+					tone({ at, frequency: 147, endFrequency: 42, duration: 0.5, volume: 0.3, type: 'triangle' });
+					noise({ at: at + 0.015, duration: 0.18, volume: 0.17, frequency: 4200, type: 'bandpass' });
+					break;
+				case 'rocket':
+					noise({ at, duration: 0.25, volume: 0.24, frequency: 980, type: 'bandpass' });
+					tone({ at, frequency: 96, endFrequency: 48, duration: 0.18, volume: 0.18, type: 'triangle' });
 					break;
 				case 'cannon':
 					tone({ at, frequency: 145, endFrequency: 27, duration: 0.36, volume: 0.55, type: 'triangle' });
@@ -381,11 +395,8 @@ export const createAudio = function () {
 					tone({ at: at + 0.19, frequency: 320, endFrequency: 170, duration: 0.09, volume: 0.09, type: 'triangle', pan: 0.15 });
 					break;
 				case 'missile':
-					for (let missile = 0; missile < 3; missile++) {
-						const delay = missile * 0.075;
-						noise({ at: at + delay, duration: 0.44, volume: 0.23, frequency: 2400, type: 'bandpass', pan: (missile - 1) * 0.3 });
-						tone({ at: at + delay, frequency: 115, endFrequency: 420, duration: 0.24, volume: 0.08, type: 'sawtooth', cutoff: 950, pan: (missile - 1) * 0.3 });
-					}
+					noise({ at, duration: 0.32, volume: 0.22, frequency: 2400, type: 'bandpass', pan: 0.18 });
+					tone({ at, frequency: 115, endFrequency: 420, duration: 0.24, volume: 0.09, type: 'sawtooth', cutoff: 950, pan: -0.18 });
 					break;
 				case 'impact':
 					noise({ at, duration: 0.13, volume: 0.34, frequency: 3600, type: 'bandpass' });

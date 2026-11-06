@@ -1,5 +1,5 @@
 import { BoxGeometry, BufferGeometry, CircleGeometry, Color, CylinderGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Material, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, RingGeometry, Scene, SphereGeometry, Vector3 } from 'three';
-import { ARENA, getEnemyDefense, type State } from './simulation';
+import { ARENA, getEnemyDefense, type Shot, type State } from './simulation';
 import { mechScale } from './gait';
 import { createEnvironment } from './environment-3d';
 
@@ -118,11 +118,21 @@ export const createWorldObjects = function (scene: Scene) {
 		value.add(shield);
 		return { root: value, shield, exposed, commitment };
 	};
-	const enemyTrail = glow('#ff8866'); const playerTrail = glow('#ffd290'); const missileTrail = glow('#d7d6c6', 0.53);
+	const enemyTrail = glow('#ff8866'); const playerTrail = glow('#ffd290');
+	const shotStyle: Record<Shot['kind'], { surface: MeshBasicMaterial; trail: MeshBasicMaterial; duration: number; width: number; length: number; radius: number }> = {
+		bullet: { surface: glow('#fff3bd'), trail: glow('#f8dc87', 0.75), duration: 0.022, width: 0.8, length: 4, radius: 1.5 },
+		cannon: { surface: playerTrail, trail: glow('#eebf70', 0.85), duration: 0.05, width: 2.4, length: 8, radius: 3 },
+		ppc: { surface: glow('#e6e2ff'), trail: glow('#ae9aff', 0.62), duration: 0.09, width: 4, length: 11, radius: 6 },
+		missile: { surface: glow('#b7f4ec'), trail: glow('#91d9d0', 0.55), duration: 0.18, width: 1.5, length: 10, radius: 2.5 },
+		rocket: { surface: glow('#ffd3a3'), trail: glow('#e59c67', 0.6), duration: 0.16, width: 2, length: 12, radius: 2.5 },
+		enemy: { surface: enemyTrail, trail: enemyTrail, duration: 0.04, width: 1, length: 4, radius: 2 },
+	};
+	const plasmaGlow = glow('#b196ff', 0.24);
 	const createShot = function () {
 		const value = new Group(); value.name = 'projectile';
-		const trail = new Mesh(cylinder, playerTrail); const head = new Mesh(cube, playerTrail); head.scale.setScalar(4); value.add(trail, head);
-		return { root: value, trail, head };
+		const trail = new Mesh(cylinder, playerTrail); const head = new Mesh<BufferGeometry, MeshBasicMaterial>(cube, playerTrail);
+		const halo = new Mesh(sphere, plasmaGlow); value.add(trail, head, halo);
+		return { root: value, trail, head, halo };
 	};
 	const normal = new Vector3(1, 1, 1).normalize(); const zAxis = new Vector3(0, 0, 1);
 	const effectRight = new Vector3(Math.SQRT1_2, 0, -Math.SQRT1_2); const effectUp = new Vector3(-1, 2, -1).normalize();
@@ -197,10 +207,13 @@ export const createWorldObjects = function (scene: Scene) {
 				value.root.position.set(unit.x, 0.05, unit.y); value.root.scale.setScalar('kind' in unit ? mechScale(unit.kind) : 1);
 			});
 			sync(shots, state.shots.length, createShot, function (value, index) {
-				const shot = state.shots[index]; if (!shot) return; const duration = shot.kind === 'missile' ? 0.12 : 0.04;
-				from.set(shot.x - shot.vx * duration, 42, shot.y - shot.vy * duration); to.set(shot.x, 42, shot.y);
-				value.trail.material = shot.kind === 'missile' ? missileTrail : shot.kind === 'enemy' ? enemyTrail : playerTrail;
-				value.head.material = shot.kind === 'enemy' ? enemyTrail : playerTrail; value.head.position.copy(to); segment(value.trail, shot.kind === 'cannon' ? 2.5 : 1);
+				const shot = state.shots[index]; if (!shot) return; const style = shotStyle[shot.kind];
+				from.set(shot.x - shot.vx * style.duration, 42, shot.y - shot.vy * style.duration); to.set(shot.x, 42, shot.y);
+				value.trail.material = style.trail; value.head.material = style.surface;
+				value.head.geometry = shot.kind === 'ppc' ? sphere : cube;
+				value.head.position.copy(to); value.head.rotation.y = -Math.atan2(shot.vy, shot.vx);
+				value.head.scale.set(style.length, style.radius, style.radius); segment(value.trail, style.width);
+				value.halo.visible = shot.kind === 'ppc'; value.halo.position.copy(to); value.halo.scale.setScalar(12);
 			});
 			sync(effects, state.effects.length, createEffect, function (value, index) {
 				const effect = state.effects[index]; if (!effect) return; const progress = Math.max(0, 1 - effect.life * 2); const radius = Math.max(1, effect.size * progress) / Math.sqrt(1.5);

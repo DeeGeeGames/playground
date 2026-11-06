@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { edgeMarker } from '../src/overlay';
+import { edgeMarker, targetSolution } from '../src/overlay';
+import { createMount } from '../src/arsenal';
+import { createState, type Unit } from '../src/simulation';
 
 test('edge markers remain clear of the HUD across desktop, phone and short landscape layouts', function () {
 	for (const [width = 1, height = 1] of [[1440, 900], [390, 844], [844, 390], [480, 260]]) {
@@ -32,4 +34,22 @@ test('a narrow touch cockpit cannot hide a threat when it overlaps the usual ray
 		expect(Number.isFinite(marker.point.x) && Number.isFinite(marker.point.y)).toBe(true);
 		expect(marker.point.x >= 162 || marker.point.y <= 218).toBe(true);
 	}
+});
+
+// A rocket or an out-of-range target must never promise missile guidance.
+test('target feedback follows fitted weapon range and actual guidance acquisition', function () {
+	const state = createState({ starter: 'stream-rockets' });
+	const target: Unit = { id: 1, x: state.player.x, y: state.player.y - 700, hp: 100, maxHp: 100, angle: 0, cooldown: 10, heavy: false, kind: 'striker' };
+	state.enemies = [target];
+	expect(targetSolution(state, target, target)).toEqual({ guided: false, inRange: true });
+	state.loadout = [createMount('laser')];
+	expect(targetSolution(state, target, target)).toEqual({ guided: false, inRange: false });
+	state.loadout = [createMount('stream-missiles')];
+	expect(targetSolution(state, target, target)).toEqual({ guided: true, inRange: true });
+	const nearer = { ...target, id: 2, x: target.x + 40 };
+	state.enemies.push(nearer);
+	expect(targetSolution(state, target, nearer).guided).toBe(false);
+	expect(targetSolution(state, nearer, nearer).guided).toBe(true);
+	target.y = state.player.y - 1100;
+	expect(targetSolution(state, target, target)).toEqual({ guided: false, inRange: false });
 });

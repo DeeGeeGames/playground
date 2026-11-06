@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { advanceGait, advanceGaits, createGait, createGaits, legJoints } from '../src/gait';
 import { createState, step, type Controls } from '../src/simulation';
 
-const idle: Controls = { drive: 0, stop: false, turn: 0, aim: { x: 900, y: 0 }, cannon: false, laser: false, missile: false, coolant: false };
+const idle: Controls = { drive: 0, stop: false, turn: 0, aim: { x: 900, y: 0 }, fire: [false, false, false, false], coolant: false };
 const dt = 1 / 60;
 
 test('stance feet hold their world position and heading while the hull advances; only one foot swings', function () {
