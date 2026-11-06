@@ -1,5 +1,8 @@
+import { createDemoUI } from './demo-ui';
+import { applyDoctrine } from './doctrines';
+import { readPreferences, savePreferences } from './preferences';
 import { OPERATION_IDS, OPERATIONS, type OperationId } from './operations';
-import { operationRecord, recordOperation } from './operation-record';
+import { recordOperation } from './operation-record';
 import { renderPassageReports } from './passage-report';
 import { createContextActions } from './context-actions';
 import { createShipyardPanel } from './shipyard-panel';
@@ -58,6 +61,8 @@ const shutdown = await mountGame('game', async function (container) {
 	const buildButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-build]')];
 	const deployButtons = [...container.querySelectorAll<HTMLButtonElement>('[data-deploy]')];
 	const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+	let preferences = readPreferences();
+	let restartIntent: 'restart' | 'menu' | undefined;
 	let selectedOperation: OperationId = 'kepler';
 	const newState = function () { return createConvoyState(selectedOperation); };
 	let state = newState(); let selected = 0; let paused = false; let briefing = true; let speed = 1;
@@ -86,6 +91,7 @@ const shutdown = await mountGame('game', async function (container) {
 		contextActions.close();
 		if (!inspector) inspectorReturn = document.activeElement instanceof HTMLElement ? document.activeElement : element('coverage-tab');
 		pointers.clear(); multiTouch = false; presentation.cancelInteraction();
+		if (inspector !== view) { const content = container.querySelector('.inspector-content'); if (content instanceof HTMLElement) content.scrollTop = 0; }
 		inspector = view; lastInspector = view; element('inspector').hidden = false; container.dataset['inspectorOpen'] = 'true';
 		for (const section of container.querySelectorAll<HTMLElement>('[data-inspector-content]')) section.hidden = section.dataset['inspectorContent'] !== view;
 		for (const control of container.querySelectorAll<HTMLButtonElement>('[data-inspector]')) { control.setAttribute('aria-pressed', String(control.dataset['inspector'] === view)); control.setAttribute('aria-expanded', String(control.dataset['inspector'] === view)); control.setAttribute('aria-controls', 'inspector'); }
@@ -102,6 +108,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const available = function () { return contextAvailable && state.focused && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'); };
 	const focusCanvas = function () { for (const child of container.children) if (child instanceof HTMLElement) child.inert = false; if (radarOpen) { for (const child of container.children) if (child instanceof HTMLElement && child !== radarHost && child !== ui.pausePanel && child !== ui.result && child !== ui.brief) child.inert = true; radar.focus(); } else canvas.focus({ preventScroll: true }); };
 	const setPause = function (value: boolean) {
+		restartIntent = undefined; element('restart-warning').hidden = true;
 		if (briefing || state.status === 'won' || state.status === 'lost') return;
 		if (!value && !contextAvailable) return;
 		if (value) { contextActions.close(); pointers.clear(); multiTouch = false; presentation.cancelInteraction(); }
@@ -118,9 +125,12 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const fleetPanel = createFleetPanel(element('fleet-panel'), function () { return state; }, available, presentation.getFocus, focusShip, abort.signal);
 	const audio = createAudio(); const observeSounds = createSoundObserver();
-	let muted = false;
+	let muted = preferences.muted;
+	let tensionUntil = 0;
 	const syncAudio = function () {
 		audio.setActive(!briefing && !paused && state.focused && !document.hidden && contextAvailable);
+		if (state.status === 'running' && state.shots.some(function (shot) { return shot.side === 'enemy'; })) tensionUntil = state.time + 6;
+		audio.setScene(state.status === 'won' ? 'victory' : state.status === 'lost' ? 'defeat' : state.status === 'fitting' ? 'fitting' : state.hull < MAX_HULL * 0.45 || state.time < tensionUntil ? 'tension' : 'transit');
 		for (const sound of observeSounds(state)) audio.play(sound);
 	};
 	const unlockAudio = function () { void audio.unlock(); };
@@ -128,19 +138,36 @@ const shutdown = await mountGame('game', async function (container) {
 	container.addEventListener('pointerup', unlockAudio, { ...options, capture: true });
 	container.addEventListener('click', unlockAudio, { ...options, capture: true });
 	container.addEventListener('keydown', unlockAudio, { ...options, capture: true });
-	button('mute').addEventListener('click', function () {
-		muted = !muted; audio.setMuted(muted); button('mute').setAttribute('aria-pressed', String(muted));
-		label(button('mute'), muted ? 'Sound off' : 'Sound on');
+	const refreshPreferences = function () {
+		audio.setMix({ music: preferences.music, effects: preferences.effects }); audio.setMuted(preferences.muted);
+		button('mute').setAttribute('aria-pressed', String(preferences.muted)); label(button('mute'), preferences.muted ? 'Audio off' : 'Audio on');
+		button('motion').setAttribute('aria-pressed', String(preferences.reducedMotion)); label(button('motion'), preferences.reducedMotion ? 'Reduced motion on' : 'Reduced motion off');
+		container.dataset['reducedMotion'] = String(preferences.reducedMotion || reducedMotion.matches);
+		for (const kind of ['music', 'effects'] as const) {
+			const input = element(`${kind}-volume`); if (input instanceof HTMLInputElement) input.value = String(Math.round(preferences[kind] * 100));
+			label(element(`${kind}-value`), `${Math.round(preferences[kind] * 100)}%`);
+		}
+	};
+	refreshPreferences();
+	button('mute').addEventListener('click', function () { muted = !muted; preferences = { ...preferences, muted }; refreshPreferences(); savePreferences(preferences); }, options);
+	button('motion').addEventListener('click', function () { preferences = { ...preferences, reducedMotion: !preferences.reducedMotion }; refreshPreferences(); savePreferences(preferences); }, options);
+	for (const kind of ['music', 'effects'] as const) element(`${kind}-volume`).addEventListener('input', function (event) {
+		const input = event.target; if (!(input instanceof HTMLInputElement)) return;
+		const value = Number(input.value); if (!Number.isFinite(value)) return;
+		preferences = { ...preferences, [kind]: Math.max(0, Math.min(1, value / 100)) }; refreshPreferences(); savePreferences(preferences);
 	}, options);
 	const detachFullscreen = attachFullscreen(container, button('fullscreen'), element('fullscreen-status'));
 	canvas.addEventListener('webglcontextlost', function () { contextAvailable = false; setPause(true); notify(state, 'Graphics interrupted. Voyage paused until the display is restored.'); }, options);
 	canvas.addEventListener('webglcontextrestored', function () { contextAvailable = true; notify(state, 'Display restored. Resume when ready.'); }, options);
 	button('reset-camera').addEventListener('click', function () { presentation.resetCamera(); if (!paused) focusCanvas(); }, options);
 	const restart = function () {
-		contextActions.close(); audio.reset();
+		contextActions.close(); audio.reset(); tensionUntil = 0;
 		setRadar(false); radar.reset();
 		pointers.clear(); multiTouch = false;
 		placement = undefined; state = newState(); selected = 0; paused = false; briefing = false; speed = 1; accumulator = 0;
+		const doctrine = demoUI.doctrine(); if (doctrine) applyDoctrine(state, doctrine);
+		selected = Math.max(0, state.mounts.findIndex(function (mount) { return !!mount.weapon; }));
+		restartIntent = undefined; element('restart-warning').hidden = true;
 		ui.pausePanel.hidden = true; ui.result.hidden = true; ui.brief.hidden = true; inspectedContact = undefined; openInspector('mounts'); focusCanvas();
 		presentation.resetCamera();
 	};
@@ -192,21 +219,23 @@ const shutdown = await mountGame('game', async function (container) {
 		option.textContent = `${OPERATIONS[id].name} · ${OPERATIONS[id].passages.length} passages`;
 		operationSelect.append(option);
 	}
-	const describeOperation = function () {
-		label(element('operation-description'), OPERATIONS[selectedOperation].description);
-		label(element('operation-record'), operationRecord(selectedOperation));
-	};
+	const demoUI = createDemoUI(function () { return state; }, function (id) {
+		if (!briefing) return; selectedOperation = id; operationSelect.value = id; describeOperation();
+	}, order, abort.signal);
+	const describeOperation = function () { demoUI.selectOperation(selectedOperation); };
 	operationSelect.addEventListener('change', function () {
 		const id = OPERATION_IDS.find(function (id) { return id === operationSelect.value; });
-		if (!briefing || !id) return;
-		selectedOperation = id; describeOperation();
+		if (!briefing || !id) return; selectedOperation = id; describeOperation();
 	}, options);
 	describeOperation();
 	button('prepare').addEventListener('click', restart, options);
-	button('choose-operation').addEventListener('click', function () {
-		ui.result.hidden = true; briefing = true; ui.brief.hidden = false; ui.brief.inert = false;
-		describeOperation(); ui.brief.scrollTop = 0; operationSelect.focus({ preventScroll: true });
-	}, options);
+	const showOperations = function () {
+		contextActions.close(); setRadar(false); closeInspector(); audio.reset();
+		ui.result.hidden = true; ui.pausePanel.hidden = true; paused = false; state.paused = true;
+		briefing = true; ui.brief.hidden = false; ui.brief.inert = false; restartIntent = undefined;
+		describeOperation(); ui.brief.scrollTop = 0; demoUI.focusOperation(selectedOperation);
+	};
+	button('choose-operation').addEventListener('click', showOperations, options);
 	button('prepare').disabled = false;
 
 	const radar = createRadar(radarHost, function () { return state; }, available, { close: function () { setRadar(false); }, pause: function () { setPause(true); }, repair: function () { order(function () { return repairSensors(state); }); }, selectedMount: function () { return selected; } }, abort.signal);
@@ -227,7 +256,14 @@ const shutdown = await mountGame('game', async function (container) {
 	ui.pause.addEventListener('click', function () { setPause(!paused); }, options);
 	button('help').addEventListener('click', function () { const help = element('systems-help'); if (help instanceof HTMLDetailsElement) { help.open = !help.open; help.scrollIntoView({ block: 'nearest' }); } }, options);
 	button('resume').addEventListener('click', function () { setPause(false); }, options);
-	button('restart').addEventListener('click', restart, options); button('restart-pause').addEventListener('click', restart, options);
+	button('restart').addEventListener('click', restart, options);
+	const confirmDeparture = function (intent: 'restart' | 'menu') {
+		if (restartIntent === intent) { if (intent === 'restart') restart(); else showOperations(); return; }
+		restartIntent = intent; element('restart-warning').hidden = false;
+		label(element('restart-warning'), `Current operation progress will be lost. Select ${intent === 'restart' ? 'Restart operation' : 'Operation selection'} again to confirm, or return to command to keep playing.`);
+	};
+	button('restart-pause').addEventListener('click', function () { confirmDeparture('restart'); }, options);
+	button('return-menu').addEventListener('click', function () { confirmDeparture('menu'); }, options);
 	ui.speed.addEventListener('click', function () { if (!briefing && contextAvailable && state.focused && (state.status === 'fitting' || state.status === 'running')) speed = speed === 1 ? 2 : 1; }, options);
 	ui.coverage.addEventListener('click', function () { openInspector('coverage'); }, options);
 	ui.clear.addEventListener('click', function () { if (available()) setPriority(state, undefined); }, options);
@@ -281,7 +317,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'Tab') {
 			const modal = briefing ? ui.brief : paused ? ui.pausePanel : !ui.result.hidden ? ui.result : radarOpen ? radarHost : undefined;
 			if (modal) {
-				const controls = [...modal.querySelectorAll<HTMLElement>('button:enabled, a[href], summary, select:enabled')].filter(function (control) { return control.getClientRects().length > 0; });
+				const controls = [...modal.querySelectorAll<HTMLElement>('button:enabled, a[href], summary, select:enabled, input:enabled')].filter(function (control) { return control.getClientRects().length > 0; });
 				const first = controls.at(0); const last = controls.at(-1);
 				if (!modal.contains(document.activeElement) && first) { event.preventDefault(); first.focus(); }
 				else if (event.shiftKey && document.activeElement === first && last) { event.preventDefault(); last.focus(); }
@@ -289,7 +325,7 @@ const shutdown = await mountGame('game', async function (container) {
 			}
 			return;
 		}
-		if (event.target instanceof HTMLSelectElement && event.code !== 'Escape') return;
+		if ((event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement) && event.code !== 'Escape') return;
 		// Preserve native keyboard activation when navigating DOM controls.
 		if (event.code === 'Space' && (event.target instanceof HTMLButtonElement || event.target instanceof HTMLElement && event.target.tagName === 'SUMMARY')) return;
 		if (event.code === 'Escape' && radarOpen && !paused) { event.preventDefault(); setRadar(false); return; }
@@ -300,6 +336,8 @@ const shutdown = await mountGame('game', async function (container) {
 		if (event.code === 'Escape' || event.code === 'Space') { event.preventDefault(); setPause(!paused); return; }
 		if (!available()) return;
 		if (radarOpen && event.code !== 'KeyS' && event.code !== 'KeyQ' && event.code !== 'KeyE') return;
+		if (event.code === 'KeyF') { event.preventDefault(); if (inspector === 'mounts') closeInspector(); else openInspector('mounts'); return; }
+		if (event.code === 'KeyL') { event.preventDefault(); if (state.status === 'fitting') ui.depart.click(); return; }
 		if (event.code === 'KeyC') { event.preventDefault(); if (inspector === 'coverage') closeInspector(); else { openInspector('coverage'); element('close-inspector').focus({ preventScroll: true }); } return; }
 		if (event.code === 'KeyI') { event.preventDefault(); if (placement) cancelPlacement(); else aimPlacement(worldPoint(state, { x: tactical(300), y: 0 })); return; }
 		if (placement && event.target === canvas) {
@@ -320,6 +358,8 @@ const shutdown = await mountGame('game', async function (container) {
 	document.addEventListener('visibilitychange', function () { if (!document.hidden) state.focused = true; }, options);
 	const hud = function () {
 		container.dataset['fitting'] = String(state.status === 'fitting');
+		container.dataset['screen'] = briefing ? 'briefing' : paused ? 'paused' : state.status;
+		demoUI.update();
 		const cluster = container.querySelector<HTMLElement>('.command-cluster');
 		const sensorFeed = container.querySelector<HTMLElement>('.sector');
 		if (cluster && sensorFeed) {
@@ -380,8 +420,7 @@ const shutdown = await mountGame('game', async function (container) {
 		label(button('prepare'), `PREPARE ${OPERATIONS[selectedOperation].name.toUpperCase()} →`);
 		label(ui.wave, `PASSAGE ${Math.min(passagesFor(state).length, state.wave + (state.status === 'fitting' ? 1 : 0))} / ${passagesFor(state).length} · ${state.status === 'fitting' ? 'BUILD' : 'UNDERWAY'}`);
 		label(element('passage-scout'), state.status === 'fitting' ? (passagesFor(state)[state.wave]?.scout ?? 'Destination reached') : `${Math.ceil(PASSAGE_SECONDS - (state.convoy?.elapsed ?? 0))}s to passage exit · ${contactWarning(state)}`);
-		const reportChanged = renderPassageReports(element('passage-report'), state.status === 'fitting' ? (state.convoy?.reports ?? []).slice(-1) : []);
-		if (reportChanged && state.status === 'fitting' && state.convoy?.reports?.length) element('passage-report').scrollIntoView({ block: 'start' });
+		renderPassageReports(element('passage-report'), state.status === 'fitting' ? (state.convoy?.reports ?? []).slice(-1) : []);
 		shipyard.update(); syncMountButtons();
 		label(ui.waveInfo, state.status === 'fitting' ? `Scout: ${passagesFor(state)[state.wave]?.name ?? 'Arrival'}` : `${Math.max(0, Math.ceil(PASSAGE_SECONDS - (state.convoy?.elapsed ?? 0)))}s to exit · ${contactWarning(state)}`);
 		for (const [i, control] of mountButtons.entries()) {
@@ -395,7 +434,8 @@ const shutdown = await mountGame('game', async function (container) {
 		label(ui.mountInfo, mount.weapon ? `${WEAPONS[mount.weapon].name} · Level ${mount.level} / 3 · ${Math.round(WEAPONS[mount.weapon].range * (1 + (mount.level - 1) * 0.12))}m range · ${Math.round(WEAPONS[mount.weapon].rotationSpeed * 180 / Math.PI)}°/s turn` : 'Empty hardpoint');
 		label(ui.mountInfo, `${ui.mountInfo.textContent} · ${Math.ceil(mount.integrity)}% ${mount.integrity <= 0 ? 'OFFLINE' : mount.integrity < 50 ? 'IMPAIRED' : 'FUNCTIONAL'} · ${conditionMultiplier(mount.integrity) * 100}% condition cadence${mount.weapon ? ` · ${(effectiveOutputs(systems).weaponRate * conditionMultiplier(mount.integrity) * (1 + (mount.level - 1) * 0.12) / WEAPONS[mount.weapon].reload).toFixed(2)} shots/s` : ''}`);
 		label(ui.mountInfo, ui.mountInfo.textContent + (state.coverageDegrees < 360 ? ` · ${state.coverageDegrees}° outward coverage` : ' · full firing arc'));
-		label(ui.mountInfo, `${ui.mountInfo.textContent} ${priorityCoverage(state, selected)}`.trim());
+		label(element('mount-specs'), `${ui.mountInfo.textContent} ${priorityCoverage(state, selected)}`.trim());
+		label(ui.mountInfo, mount.weapon ? `${WEAPONS[mount.weapon].name} · Level ${mount.level} · ${Math.round(WEAPONS[mount.weapon].range * (1 + (mount.level - 1) * 0.12))}m range${mount.integrity < 100 ? ` · ${Math.ceil(mount.integrity)}% integrity` : ''}` : 'Empty hardpoint · Choose a weapon below');
 		ui.build.hidden = !!mount.weapon; ui.upgradeOptions.hidden = !mount.weapon;
 		label(ui.upgrade, mount.level >= 3 ? 'FULLY UPGRADED' : `UPGRADE TO LV ${mount.level + 1} · ${upgradeCost(mount)}`);
 		ui.upgrade.disabled = !active || state.status !== 'fitting' || mount.level >= 3 || state.salvage < upgradeCost(mount);
@@ -413,8 +453,8 @@ const shutdown = await mountGame('game', async function (container) {
 		if (canvas.getAttribute('aria-label') !== canvasHelp) canvas.setAttribute('aria-label', canvasHelp);
 		label(ui.depart, 'Launch passage →');
 		ui.depart.setAttribute('aria-label', 'Launch scouted passage');
-		label(button('restart-pause'), 'Restart Convoy passage');
-		label(button('restart'), 'RETRY CONVOY PASSAGE →');
+		label(button('restart-pause'), 'Restart operation');
+		label(button('restart'), 'BUILD ANOTHER CONVOY →');
 		ui.depart.hidden = state.status !== 'fitting'; ui.depart.disabled = !active || !state.mounts.some(function (m) { return !!m.weapon; });
 		ui.depart.title = ui.depart.disabled ? 'Fit a turret before launch.' : 'Launch this scouted passage';
 		ui.pulse.disabled = !active || state.status !== 'running' || state.pulseCooldown > 0;
@@ -428,18 +468,18 @@ const shutdown = await mountGame('game', async function (container) {
 		ui.coverage.disabled = !active; label(element('escort-help'), 'Fighters start docked. Scramble all to launch using radar coverage; Recall all to return and hold aboard. Replace losses while docked or rearming.');
 		ui.clear.hidden = state.priority === undefined; ui.clear.disabled = !active;
 		label(element('coverage-setting'), 'Convoy passage · 120° outward coverage');
-		label(ui.hint, state.status === 'fitting' ? 'BUILD · Click a ring to build · Click a mount to fit · Select a ship to move / swap' : placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Click mount to build · Radar for escort coverage · Click hostile to focus');
+		label(ui.hint, state.status === 'fitting' ? 'BUILD · Click a ring to build · Click a mount to fit · Select a ship to move / swap' : placement ? 'FIELD PREVIEW · Tap/click to aim · Enter / Place field to confirm · Esc cancels' : state.priority !== undefined ? 'PRIORITY LOCK · Eligible weapons focus the marked hostile within range and coverage' : 'Guns fire automatically · Click hostile to focus · Q Aegis · Space pause');
 		label(ui.message, state.messageTime > 0 ? state.message : ''); label(ui.speed, `${speed}×`); ui.speed.disabled = briefing || !contextAvailable || !state.focused || state.status === 'won' || state.status === 'lost';
 		label(ui.pause, paused ? 'Resume' : 'Menu'); ui.pause.disabled = briefing || state.status === 'won' || state.status === 'lost';
 	};
 	const showResult = function () {
 		contextActions.close(); setRadar(false);
 		ui.result.hidden = false; placement = undefined; pointers.clear(); multiTouch = false; presentation.cancelInteraction();
-		label(element('result-title'), state.status === 'won' ? 'CONVOY PASSAGE COMPLETE.' : 'CONVOY PASSAGE LOST.');
+		label(element('result-title'), state.status === 'won' ? 'THE FLEET MADE IT.' : 'THE CROSSING ENDS HERE.');
 		renderPassageReports(element('convoy-results'), state.convoy?.reports ?? []);
 		if (state.status === 'won') recordOperation(selectedOperation, state.hull);
 		const summary = systemsSummary(state);
-		label(element('result-copy'), systemsResultMessage(state));
+		label(element('result-copy'), `${OPERATIONS[selectedOperation].name} · ${systemsResultMessage(state)}`);
 		label(element('result-stats'), [
 			`${summary.elapsed.toFixed(1)}s elapsed · ${Math.round(summary.distance)} / ${summary.routeLength}m · travel ETA ${summary.eta === null ? 'stalled' : clockTime(Math.ceil(summary.eta))}`,
 			`Hull ${Math.ceil(summary.hull)} / ${MAX_HULL} · shield ${Math.ceil(summary.shield)} / ${state.systems.shield.capacity}`,
@@ -464,8 +504,10 @@ const shutdown = await mountGame('game', async function (container) {
 			if (view) { openInspector(view); button('close-inspector').focus(); }
 		},
 		pause: function () { setPause(!paused); },
+		cameraEnabled: function () { return available() && !radarOpen && !inspector && !contextActions.isOpen(); },
+		camera: function (horizontal, vertical, zoom, delta) { presentation.orbitCamera(horizontal, vertical, zoom, delta); },
 	}, abort.signal);
-	const passageEnded = function () { if (state.status === 'won' || state.status === 'lost') showResult(); else if (state.status === 'fitting') { setRadar(false); cancelPlacement(); inspectedContact = undefined; openInspector('mounts'); ui.depart.focus({ preventScroll: true }); } };
+	const passageEnded = function () { if (state.status === 'won' || state.status === 'lost') showResult(); else if (state.status === 'fitting') { setRadar(false); cancelPlacement(); inspectedContact = undefined; openInspector('mounts'); const content = container.querySelector('.inspector-content'); if (content instanceof HTMLElement) content.scrollTop = 0; ui.depart.focus({ preventScroll: true }); } };
 	const tick = function (now: number) {
 		if (disposed) return;
 		controller.poll();
@@ -474,7 +516,7 @@ const shutdown = await mountGame('game', async function (container) {
 			accumulator += elapsed * speed;
 			while (accumulator >= 1 / 60 && state.status === 'running') { step(state, 1 / 60); syncAudio(); accumulator -= 1 / 60; if (state.status !== 'running') passageEnded(); }
 		} else accumulator = 0;
-		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches, !radarOpen && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, 0, inspector && canvas.clientWidth >= 650 ? 180 : 0, shipyard.selected());
+		if (contextAvailable) presentation.render(state, selected, reducedMotion.matches || preferences.reducedMotion, !radarOpen && !briefing && !paused && (state.status === 'fitting' || state.status === 'running'), placement, inspector && canvas.clientWidth < 650 && canvas.clientHeight > 600 ? canvas.clientHeight * 0.18 : 0, inspector && canvas.clientWidth >= 650 ? 180 : 0, shipyard.selected(), briefing);
 		syncAudio(); hud(); radar.update();
 		frame = requestAnimationFrame(tick);
 	};
