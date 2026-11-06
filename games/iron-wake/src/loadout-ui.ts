@@ -1,4 +1,22 @@
 import { getWeapon, type WeaponId, type WeaponMount } from './arsenal';
+import type { FrameDefinition } from './frames';
+
+export const frameCard = function (frame: FrameDefinition, onSelect: () => void) {
+	const button = document.createElement('button');
+	button.className = 'frame-card'; button.dataset['frame'] = frame.id;
+	button.style.setProperty('--frame-color', frame.color);
+	const role = document.createElement('span'); role.className = 'frame-role'; role.textContent = `${frame.mass}T · ${frame.role}`;
+	const title = document.createElement('b'); title.textContent = `${frame.name} / ${frame.designation}`;
+	const weapon = document.createElement('span'); weapon.className = 'frame-starter'; weapon.textContent = `STARTS WITH ${getWeapon(frame.starter).name}`;
+	const description = document.createElement('p'); description.textContent = frame.description;
+	const tradeoff = document.createElement('p'); tradeoff.className = 'frame-tradeoff'; tradeoff.textContent = frame.tradeoff;
+	const stats = document.createElement('span'); stats.className = 'frame-stats';
+	stats.textContent = `${frame.speed} m/s cruise · ${frame.cooling} heat/s cooling`;
+	const badge = document.createElement('small'); badge.className = 'frame-badge'; badge.textContent = 'SELECT FRAME';
+	button.append(role, title, weapon, description, tradeoff, stats, badge);
+	button.addEventListener('click', onSelect);
+	return button;
+};
 
 export const MOUNTS = [
 	{ action: 'mount-0', mouse: 'LEFT', pad: 'RT / R2', key: '1', button: 0 },

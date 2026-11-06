@@ -1,3 +1,4 @@
+import { getFrame } from './frames';
 import { angleDelta, distance, type EnemyKind, type Point, type State } from './simulation';
 
 interface Body extends Point { angle: number }
@@ -48,7 +49,7 @@ const advanceBodyMotion = function (motion: BodyMotion, swing: Swing | undefined
 
 // Presentation advances on simulation steps, never render frames. Stance feet
 // retain their world position AND heading while the hull passes over them.
-export const advanceGait = function (gait: WalkerGait, actualBody: Body, dt: number, size = 1): WalkerGait {
+export const advanceGait = function (gait: WalkerGait, actualBody: Body, dt: number, size = 1, stride = 1): WalkerGait {
 	if (dt <= 0) return gait;
 	if (distance(gait.body, actualBody) > 80 * size) return createGait(actualBody, size);
 	// AI aim can change instantly on a target switch. Let the visible hull turn
@@ -62,9 +63,9 @@ export const advanceGait = function (gait: WalkerGait, actualBody: Body, dt: num
 	if (!swing && speed > 0.1) {
 		const preferred = gait.nextFoot;
 		const other = preferred === 0 ? 1 : 0;
-		const index = distance(gait.feet[preferred], restFoot(body, preferred, size)) > 10 * size ? preferred : other;
-		if (distance(gait.feet[index], restFoot(body, index, size)) > 10 * size) {
-			swing = { index, from: gait.feet[index], elapsed: 0, duration: clamp(26 * size / speed, 0.22, 0.65) };
+		const index = distance(gait.feet[preferred], restFoot(body, preferred, size)) > 10 * size * stride ? preferred : other;
+		if (distance(gait.feet[index], restFoot(body, index, size)) > 10 * size * stride) {
+			swing = { index, from: gait.feet[index], elapsed: 0, duration: clamp(26 * size * stride / speed, 0.12 * stride, 0.65 * stride) };
 		}
 	}
 	if (!swing) return { ...gait, body, motion: advanceBodyMotion(gait.motion, undefined, forwardSpeed, dt) };
@@ -110,14 +111,14 @@ export const legJoints = function (body: Body, foot: Foot, index: FootIndex, siz
 };
 
 export const createGaits = function (state: State): Gaits {
-	return { player: createGait(state.player), enemies: new Map(state.enemies.map(function (enemy) { return [enemy.id, createGait(enemy, mechScale(enemy.kind))]; })), time: state.time };
+	return { player: createGait(state.player, getFrame(state.frame).size), enemies: new Map(state.enemies.map(function (enemy) { return [enemy.id, createGait(enemy, mechScale(enemy.kind))]; })), time: state.time };
 };
 export const advanceGaits = function (gaits: Gaits, state: State): Gaits {
 	const dt = state.time - gaits.time;
 	if (dt < 0) return createGaits(state);
 	if (dt === 0) return gaits;
 	return {
-		player: advanceGait(gaits.player, state.player, dt), time: state.time,
+		player: advanceGait(gaits.player, state.player, dt, getFrame(state.frame).size, getFrame(state.frame).stride), time: state.time,
 		enemies: new Map(state.enemies.map(function (enemy) {
 			const size = mechScale(enemy.kind);
 			return [enemy.id, advanceGait(gaits.enemies.get(enemy.id) ?? createGait(enemy, size), enemy, dt, size)];

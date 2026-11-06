@@ -3,7 +3,8 @@ import { createGroupComponents, createRenderer3DPlugin } from 'ecspresso/plugins
 import { zoomForWheel } from '../../../shared/wheel-zoom';
 import { ACESFilmicToneMapping, BufferGeometry, Color, DirectionalLight, Fog, HemisphereLight, Line, LineBasicMaterial, Mesh, MeshBasicMaterial, OrthographicCamera, PCFShadowMap, RingGeometry, Scene, Vector3, WebGLRenderer } from 'three';
 import { createGait, mechScale, type Gaits } from './gait';
-import { createMech } from './mech-3d';
+import { getFrame, type FrameId } from './frames';
+import { createMech, weaponRecoil } from './mech-3d';
 import { drawOverlay, type ScreenRect } from './overlay';
 import { alignCamera, toGround, toScreen } from './projection-3d';
 import type { EnemyKind, Point, State } from './simulation';
@@ -32,9 +33,9 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 	const barrelMaterial = new LineBasicMaterial({ color: '#b5e4e0', transparent: true, opacity: 0.25, depthWrite: false });
 	const barrel = new Line(barrelGeometry, barrelMaterial); barrel.frustumCulled = false; scene.add(barrel);
 	const world = ECSpresso.create().withPlugin(createRenderer3DPlugin({ renderer, scene, camera, startLoop: false })).build();
-	const makeUnit = function (kind?: EnemyKind, commander = false) {
-		const model = createMech(kind, commander); const damage: { hp: number | undefined; hitAt: number } = { hp: undefined, hitAt: -10 };
-		return { model, kind, commander, damage, entity: world.spawn(createGroupComponents(model.root)) };
+	const makeUnit = function (kind?: EnemyKind, commander = false, frame: FrameId = 'warden') {
+		const model = createMech(kind, commander, frame); const damage: { hp: number | undefined; hitAt: number } = { hp: undefined, hitAt: -10 };
+		return { model, kind, commander, frame, damage, entity: world.spawn(createGroupComponents(model.root)) };
 	};
 	const enemies = new Map<number, ReturnType<typeof makeUnit>>();
 	let player: ReturnType<typeof makeUnit> | undefined;
@@ -77,8 +78,12 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 		resetZoom: function () { zoom = 1; },
 		toGround: function (point: Point) { return toGround(point, camera, width, height); },
 		toScreen: function (point: Point, elevation = 0) { return toScreen(point, camera, width, height, elevation); },
-		render: function (state: State, aim: Point, gaits: Gaits, reducedMotion: boolean, attract = false, obstructions: readonly ScreenRect[] = [], couchMode = false) {
+		render: function (state: State, aim: Point, gaits: Gaits, reducedMotion: boolean, attract = false, obstructions: readonly ScreenRect[] = [], couchMode = false, hangar = false) {
 			if (disposed || width <= 0 || height <= 0) return;
+			if (player?.frame !== state.frame) {
+				if (player) { world.removeEntity(player.entity.id); player.model.dispose(); }
+				player = makeUnit(undefined, false, state.frame);
+			}
 			if (state.time < previousStateTime) {
 				if (player) { player.damage.hp = undefined; player.damage.hitAt = -10; }
 				relayHp = undefined; relayHitAt = -10;
@@ -89,17 +94,21 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 			resize(state, width, height, reducedMotion);
 			sun.position.set(state.player.x - 420, 900, state.player.y - 500); sun.target.position.set(state.player.x, 0, state.player.y);
 			fill.position.set(state.player.x + 700, 450, state.player.y + 600); fill.target.position.set(state.player.x, 50, state.player.y);
-			if (attract && width > 700) {
+			if (hangar) {
+				camera.zoom = 1.65;
+				camera.setViewOffset(width, height, width > 700 ? -width * 0.29 : -width * 0.16, width > 700 ? -height * 0.11 : height * 0.27, width, height);
+				camera.updateProjectionMatrix();
+			} else if (attract && width > 700) {
 				camera.zoom = 1.65;
 				camera.setViewOffset(width, height, -width * 0.2, -height * 0.11, width, height);
 				camera.updateProjectionMatrix();
 			}
 			if (player) {
 				const heading = attract ? Math.PI / 4 - 0.22 : state.player.turret;
-				const gait = attract ? createGait({ ...state.player, angle: Math.PI / 4 + 0.15 }) : gaits.player;
-				pose(player, gait, heading, state.player.hp, state, reducedMotion, Math.max(0, (state.cannonIn - 0.45) / 0.2));
+				const gait = attract ? createGait({ ...state.player, angle: Math.PI / 4 + 0.15 }, getFrame(state.frame).size) : gaits.player;
+				pose(player, gait, heading, state.player.hp, state, reducedMotion, weaponRecoil(state.loadout));
 				const transform = player.entity.components.localTransform3D;
-				transform.sx = transform.sy = transform.sz = attract && width > 700 ? 1.55 : 1;
+				transform.sx = transform.sy = transform.sz = hangar ? Math.min(width > 700 ? 1.55 : 0.9, height / (width > 700 ? 520 : 900)) : attract && width > 700 ? 1.55 : 1;
 				world.markChanged(player.entity.id, 'localTransform3D');
 			}
 			const live = new Set(state.enemies.map(function (enemy) { return enemy.id; }));

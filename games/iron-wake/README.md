@@ -1,20 +1,41 @@
 # Iron Wake · Last Transmission
 
-A browser-only isometric mech-combat demo. Pilot Warden 08, an 80-ton siege
-frame, through a complete relay-defense operation. Heavy persistent throttle
-and independent turret tracking remain the core of the original prototype.
+A browser-only isometric mech-combat demo. Choose one of five original combat
+frames for a complete relay-defense operation. Persistent throttle and
+independent turret tracking remain the core of the original prototype.
 
-Choose a single starting weapon in the armory. Combat eliminations earn
+The frame hangar shows the selected playable model beside its role, starter,
+handling, and tradeoffs. Each frame comes with an assigned starting weapon;
+there is no separate starting-weapon selection. Combat eliminations earn
 three-choice weapon drafts at 2, 5, 9, 14, 20, 27, and 35 kills. The first three
 drops fill the remaining mounts; later drops offer rank upgrades or new weapons
 that explicitly replace a chosen mount. A weapon can reach rank III, with +30%
 base damage per rank. Drafts pause the entire simulation, including artillery,
 and preserve momentum. Each operation rolls new offers; no unlock grind is required.
 
-**Frame Training** is a separate, unscored nine-drill range: cruise, neutral,
+**Frame Training** uses a standardized Warden and fixed training weapons in a
+separate, unscored nine-drill range: cruise, neutral,
 turning, cannon targeting, guided missiles, combined fire, heat, coolant, and artillery evasion.
 It uses the operation’s actual controls and simulation, allows safe retries,
-and starts a clean operation when you deploy. Pause can restart or exit training.
+and returns to frame selection before a clean operation. Your selected combat
+frame is retained during training. Pause can restart or exit training.
+
+## Combat frames
+
+| Frame | Archetype / starter | Cruise / reverse | Cooling | Tradeoff |
+| --- | --- | --- | --- | --- |
+| Warden 08 · 80T | Line fighter / AC/38 | 90 / 48 m/s | 12 heat/s | Balanced baseline armor and handling |
+| Kestrel 21 · 40T | Skirmisher / Rattler | 125 / 65 m/s | 10 heat/s | Fast acceleration and tracking; takes 30% more damage |
+| Maul 34 · 100T | Brawler / Hailstorm | 82 / 40 m/s | 11 heat/s | Takes 22% less damage; slow hull and turret traverse |
+| Longbow 16 · 65T | Precision gunner / Tempest | 86 / 42 m/s | 15 heat/s | Piercing fire and strong cooling; slow tracking and 12% more damage |
+| Morrow 52 · 70T | Missile support / Trident | 88 / 48 m/s | 12 heat/s | Guided area fire and quick traverse; takes 10% more damage |
+
+All frames share four mounts, the same battlefield drafts, and the same controls.
+Their handling and protection remain distinct as the arsenal grows. Integrity
+is a percentage on every frame; armor resistance changes damage received,
+while repair amounts, refits, and existing saved records retain their meanings.
+Frame selection lasts for the current page session; records remain grouped by
+difficulty. No new mode or progression unlock is required.
 
 ## The operation
 
@@ -125,7 +146,8 @@ PPC bolts hit each pierced frame once. Siege frontal armor and exposed windows
 apply to every family. The target reticle reports guidance only when a fitted
 missile weapon can actually acquire that target.
 Weapons share reactor heat. At 100%, weapons lock until heat falls to 35%.
-Cooling normally removes 12 heat per second. A coolant charge purges 55 heat;
+Cooling removes 10–15 heat per second depending on the frame, before refits.
+A coolant charge purges 55 heat;
 holding the button spends only one charge, and a cold reactor consumes none.
 Every second elimination drops alternating repair or coolant salvage. Drive
 within 55 units to recover it; full supplies leave it available, and salvage
@@ -140,8 +162,8 @@ simulation; Three.js and ECSpresso's renderer3D plugin provide the presentation.
 
 The game includes an authored industrial yard, procedural surface textures,
 layered frame geometry, dynamic lighting/shadows, animated planted-foot gait,
-artillery warnings, weapon trails, and pooled effects. The briefing stages the
-same playable model in a closer camera; deployment restores normal projection.
+artillery warnings, weapon trails, and pooled effects. The briefing and frame hangar stage the selected playable model in a closer
+camera; deployment restores normal projection.
 
 Siege frames have broad armor and dorsal artillery for a distinct silhouette.
 Committed barrages, exposed armor, player damage, and relay damage have separate
@@ -185,7 +207,7 @@ coolant use, and entering the evasion drill from an arena boundary.
 
 Moving heat-managed simulation policies can complete Standard and Veteran,
 preserving substantially more frame and relay integrity than stationary play.
-All eight starters can earn the first draft. These are balance guardrails, not
+Each frame and its assigned starter can earn the first draft. These are balance guardrails, not
 a measurement of first-time-player difficulty.
 
 Browser verification and screenshots are recorded with the delivery PR.
@@ -194,7 +216,11 @@ or touch feel, speaker/headphone quality, or owner acceptance of combat balance.
 This remains a browser demo; no Steam integration or desktop distribution is
 included.
 
-![Production armory with eight starting weapon families](./docs/arsenal.png)
+![Five original playable frames in a rendering fixture](./docs/frame-roster.png)
+
+![Production frame hangar](./docs/frame-hangar.png)
+
+![Production phone hangar](./docs/frame-hangar-phone.png)
 
 ![First weapon draft earned through normal production-browser play](./docs/weapon-draft.png)
 

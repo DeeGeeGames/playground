@@ -1,4 +1,5 @@
 import { createMount, DRAFT_MILESTONES, getWeapon, MAX_WEAPON_LEVEL, WEAPONS, weaponDamage, type FireInputs, type WeaponDefinition, type WeaponId, type WeaponMount } from './arsenal';
+import { getFrame, type FrameId } from './frames';
 import { getDifficultyDefinition, getWaveDefinition, WAVES, type Difficulty, type RefitChoice } from './operation';
 
 export interface Point { x: number; y: number }
@@ -15,7 +16,7 @@ export interface CombatStats { damageDealt: number; damageTaken: number; relayDa
 export interface Wreck extends Point { kind: EnemyKind; angle: number }
 export interface Controls { drive: number; stop: boolean; turn: number; aim: Point; fire: FireInputs; coolant: boolean }
 export interface State {
-	difficulty: Difficulty; phase: 'combat' | 'refit' | 'requisition'; loadout: WeaponMount[]; draftCount: number; offers: WeaponId[]; seed: number; draftsEnabled: boolean; upgrades: Record<RefitChoice, number>; stats: CombatStats; strikes: ArtilleryStrike[];
+	frame: FrameId; difficulty: Difficulty; phase: 'combat' | 'refit' | 'requisition'; loadout: WeaponMount[]; draftCount: number; offers: WeaponId[]; seed: number; draftsEnabled: boolean; upgrades: Record<RefitChoice, number>; stats: CombatStats; strikes: ArtilleryStrike[];
 	player: Point & { angle: number; turret: number; throttle: number; speed: number; hp: number; heat: number; overheated: boolean };
 	relay: number; enemies: Unit[]; shots: Shot[]; effects: Effect[]; wave: number; spawned: number; spawnIn: number;
 	intermission: number; cannonIn: number; time: number; kills: number; shake: number;
@@ -32,9 +33,10 @@ export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
 export const distance = function (a: Point, b: Point) { return Math.hypot(a.x - b.x, a.y - b.y); };
 export const angleDelta = function (from: number, to: number) { return Math.atan2(Math.sin(to - from), Math.cos(to - from)); };
 const clamp = function (value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); };
-export const createState = function (options: { difficulty?: Difficulty; starter?: WeaponId; seed?: number } = {}): State {
+export const createState = function (options: { difficulty?: Difficulty; frame?: FrameId; starter?: WeaponId; seed?: number } = {}): State {
+	const frame = getFrame(options.frame ?? 'warden');
 	return {
-		difficulty: options.difficulty ?? 'standard', phase: 'combat', loadout: [createMount(options.starter ?? 'autocannon')], draftCount: 0, offers: [], seed: options.seed ?? 1, draftsEnabled: true, upgrades: { arsenal: 0, cooling: 0, bastion: 0 }, strikes: [],
+		frame: frame.id, difficulty: options.difficulty ?? 'standard', phase: 'combat', loadout: [createMount(options.starter ?? frame.starter)], draftCount: 0, offers: [], seed: options.seed ?? 1, draftsEnabled: true, upgrades: { arsenal: 0, cooling: 0, bastion: 0 }, strikes: [],
 		stats: { damageDealt: 0, damageTaken: 0, relayDamage: 0, shotsFired: 0, shotsHit: 0, salvageRecovered: 0, overheats: 0, killScore: 0, commanderDestroyed: false },
 		player: { x: 900, y: 780, angle: -Math.PI / 2, turret: -Math.PI / 2, throttle: 0, speed: 0, hp: 100, heat: 0, overheated: false },
 		relay: 100, enemies: [], shots: [], effects: [], wave: 1, spawned: 0, spawnIn: 4, intermission: 0,
@@ -125,7 +127,7 @@ const hurtEnemy = function (state: State, enemy: Unit, damage: number, from: Poi
 	enemy.hp -= applied;
 };
 const hurtPlayer = function (state: State, damage: number) {
-	const resisted = damage * Math.max(0.6, 1 - state.upgrades.bastion * 0.1);
+	const resisted = damage * getFrame(state.frame).incomingDamage * Math.max(0.6, 1 - state.upgrades.bastion * 0.1);
 	if (resisted > 0 && state.player.hp > 0) state.events.push('player-hit');
 	state.stats.damageTaken += Math.min(state.player.hp, resisted);
 	state.player.hp = Math.max(0, state.player.hp - resisted);
@@ -203,26 +205,27 @@ export const step = function (state: State, input: Controls, dt: number) {
 	dt = Math.min(dt, 0.04);
 	const p = state.player;
 	const difficulty = getDifficultyDefinition(state.difficulty);
+	const frame = getFrame(state.frame);
 	const wave = getWaveDefinition(state.wave);
 	state.time += dt;
 	state.cannonIn = Math.max(0, state.cannonIn - dt);
 	for (const mount of state.loadout) { mount.cooldown = Math.max(0, mount.cooldown - dt); mount.firing = false; }
 	state.shake = Math.max(0, state.shake - dt * 15);
-	p.heat = Math.max(0, p.heat - dt * 12 * (1 + state.upgrades.cooling * 0.18));
+	p.heat = Math.max(0, p.heat - dt * frame.cooling * (1 + state.upgrades.cooling * 0.18));
 	if (input.coolant && !state.coolantHeld && state.coolantCharges > 0 && p.heat > 0) {
 		state.coolantCharges--; p.heat = Math.max(0, p.heat - 55);
 		state.events.push('coolant'); burst(state, p, 80, '#93e9e1');
 	}
 	state.coolantHeld = input.coolant;
 	if (p.overheated && p.heat <= 35) p.overheated = false;
-	p.angle += input.turn * dt * 1.05;
+	p.angle += input.turn * dt * frame.turnRate;
 	// Drive input adjusts the engine setting; releasing it holds that setting.
 	p.throttle = input.stop ? 0 : clamp(p.throttle + input.drive * dt * 0.75, -1, 1);
-	p.speed += (p.throttle * (p.throttle < 0 ? 48 : 90) - p.speed) * Math.min(1, dt * 1.5);
+	p.speed += (p.throttle * (p.throttle < 0 ? frame.reverseSpeed : frame.speed) - p.speed) * Math.min(1, dt * frame.acceleration);
 	p.x = clamp(p.x + Math.cos(p.angle) * p.speed * dt, 35, ARENA.width - 35);
 	p.y = clamp(p.y + Math.sin(p.angle) * p.speed * dt, 35, ARENA.height - 35);
 	const aimAngle = Math.atan2(input.aim.y - p.y, input.aim.x - p.x);
-	p.turret += clamp(angleDelta(p.turret, aimAngle), -dt * 2.3, dt * 2.3);
+	p.turret += clamp(angleDelta(p.turret, aimAngle), -dt * frame.turretRate, dt * frame.turretRate);
 	state.beam = undefined;
 	if (!p.overheated) state.loadout.forEach(function (mount, index) {
 		if (!input.fire[index]) return;
