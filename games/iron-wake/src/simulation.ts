@@ -8,7 +8,7 @@ export type CombatEvent = 'artillery' | 'refit' | 'requisition' | 'machine-gun' 
 export interface AttackCycle { phase: 'committed' | 'recovery'; remaining: number; cycle: number }
 export interface Unit extends Point { id: number; hp: number; maxHp: number; angle: number; cooldown: number; heavy: boolean; kind: EnemyKind; commander?: boolean; attack?: AttackCycle }
 export interface Shot extends Point { vx: number; vy: number; life: number; kind: 'cannon' | 'missile' | 'enemy' | 'bullet' | 'ppc' | 'rocket'; target: number | undefined; damage: number; splash?: number; hitIds?: number[] }
-export interface Effect extends Point { life: number; size: number; color: string }
+export interface Effect extends Point { life: number; size: number; color: string; source?: 'muzzle' }
 export interface Salvage extends Point { id: number; kind: 'repair' | 'coolant'; life: number }
 export interface Warning extends Point { kind: EnemyKind; life: number; commander?: boolean }
 export interface ArtilleryStrike extends Point { id: number; life: number; duration: number; radius: number; damage: number }
@@ -44,7 +44,7 @@ export const createState = function (options: { difficulty?: Difficulty; frame?:
 		coolantCharges: 2, coolantHeld: false, salvage: [], warnings: [], wrecks: [], events: [],
 	};
 };
-const burst = function (state: State, at: Point, size: number, color: string) { state.effects.push({ x: at.x, y: at.y, size, color, life: 0.5 }); };
+const burst = function (state: State, at: Point, size: number, color: string, source?: 'muzzle') { state.effects.push({ x: at.x, y: at.y, size, color, life: 0.5, ...(source ? { source } : {}) }); };
 const launchEnemy = function (state: State, origin: Point, angle: number, damage: number) {
 	state.shots.push({ x: origin.x + Math.cos(angle) * 30, y: origin.y + Math.sin(angle) * 30, vx: Math.cos(angle) * 230, vy: Math.sin(angle) * 230, life: 2.5, kind: 'enemy', target: undefined, damage });
 };
@@ -250,7 +250,7 @@ export const step = function (state: State, input: Controls, dt: number) {
 		mount.cooldown = weapon.interval; mount.firing = true; p.heat += weapon.heat;
 		if (weapon.kind === 'cannon' || weapon.kind === 'ppc') { state.cannonIn = 0.65; state.shake = weapon.kind === 'ppc' ? 4 : 3; }
 		state.events.push(weapon.kind === 'bullet' ? 'machine-gun' : weapon.kind);
-		burst(state, { x: p.x + Math.cos(p.turret) * 36, y: p.y + Math.sin(p.turret) * 36 }, weapon.kind === 'bullet' ? 9 : 20, weapon.color);
+		burst(state, { x: p.x + Math.cos(p.turret) * 36, y: p.y + Math.sin(p.turret) * 36 }, weapon.kind === 'bullet' ? 9 : 20, weapon.color, 'muzzle');
 	});
 	if (p.heat >= 100) { p.heat = 100; p.overheated = true; state.stats.overheats++; state.events.push('overheat'); }
 	const quota = wave.enemies.length;

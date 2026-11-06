@@ -4,6 +4,7 @@ import { zoomForWheel } from '../../../shared/wheel-zoom';
 import { ACESFilmicToneMapping, BufferGeometry, Color, DirectionalLight, Fog, HemisphereLight, Line, LineBasicMaterial, Mesh, MeshBasicMaterial, OrthographicCamera, PCFShadowMap, RingGeometry, Scene, Vector3, WebGLRenderer } from 'three';
 import { createGait, mechScale, type Gaits } from './gait';
 import { getFrame, type FrameId } from './frames';
+import { FRAME_RIGS } from './frame-rig';
 import { createMech, weaponRecoil } from './mech-3d';
 import { drawOverlay, type ScreenRect } from './overlay';
 import { alignCamera, toGround, toScreen } from './projection-3d';
@@ -105,7 +106,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 			}
 			if (player) {
 				const heading = attract ? Math.PI / 4 - 0.22 : state.player.turret;
-				const gait = attract ? createGait({ ...state.player, angle: Math.PI / 4 + 0.15 }, getFrame(state.frame).size) : gaits.player;
+				const gait = attract ? createGait({ ...state.player, angle: Math.PI / 4 + 0.15 }, getFrame(state.frame).size, FRAME_RIGS[state.frame]) : gaits.player;
 				pose(player, gait, heading, state.player.hp, state, reducedMotion, weaponRecoil(state.loadout));
 				const transform = player.entity.components.localTransform3D;
 				transform.sx = transform.sy = transform.sz = hangar ? Math.min(width > 700 ? 1.55 : 0.9, height / (width > 700 ? 520 : 900)) : attract && width > 700 ? 1.55 : 1;
@@ -119,14 +120,19 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 				if (!unit) { unit = makeUnit(enemy.kind, enemy.commander); enemies.set(enemy.id, unit); }
 				pose(unit, gaits.enemies.get(enemy.id) ?? createGait(enemy, mechScale(enemy.kind)), enemy.angle, enemy.hp, state, reducedMotion);
 			}
-			objects.update(state, reducedMotion);
+			const worldAnchor = function (anchor: Vector3) { return new Vector3(anchor.x + state.player.x, anchor.y, anchor.z + state.player.y); };
+			objects.update(state, reducedMotion, player ? {
+				muzzles: player.model.muzzles.map(worldAnchor), exhaust: player.model.exhaust ? worldAnchor(player.model.exhaust) : undefined,
+			} : undefined);
 			reticle.visible = barrel.visible = !attract;
 			reticle.position.set(aim.x, 0.25, aim.y);
 			const positions = barrelGeometry.getAttribute('position'); const p = state.player;
 			positions.setXYZ(0, p.x, 0.25, p.y); positions.setXYZ(1, p.x + Math.cos(p.turret) * 110, 0.25, p.y + Math.sin(p.turret) * 110); positions.needsUpdate = true;
 			world.update(0);
 			drawOverlay(ctx, width, height, state, aim, { reducedMotion, showRadar: width > 700 && height > 520, gaits, camera, obstructions, couchMode,
-				armorHit: Math.max(0, 1 - (state.time - (player?.damage.hitAt ?? -10)) / 0.9), relayHit: Math.max(0, 1 - (state.time - relayHitAt) / 1.6) });
+				armorHit: Math.max(0, 1 - (state.time - (player?.damage.hitAt ?? -10)) / 0.9),
+				...(player && state.frame !== 'warden' ? { armorHitHeight: player.model.labelHeight + 20 } : {}),
+				relayHit: Math.max(0, 1 - (state.time - relayHitAt) / 1.6) });
 		},
 		diagnostics: function () { return { calls: renderer.info.render.calls, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures }; },
 		dispose,

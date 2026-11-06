@@ -1,9 +1,10 @@
 import { BoxGeometry, BufferGeometry, CircleGeometry, Color, CylinderGeometry, Group, InstancedMesh, LineBasicMaterial, LineSegments, Material, Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D, RingGeometry, Scene, SphereGeometry, Vector3 } from 'three';
-import { ARENA, getEnemyDefense, type Shot, type State } from './simulation';
+import { ARENA, getEnemyDefense, type Effect, type Shot, type State } from './simulation';
 import { mechScale } from './gait';
 import { createEnvironment } from './environment-3d';
 
 interface PooledObject { root: Object3D; dispose?: () => void }
+interface FrameEffects { muzzles: readonly Vector3[]; exhaust: Vector3 | undefined }
 
 // World presentation owns its meshes and GPU assets. Simulation objects never
 // retain Three.js objects; pools shrink with live state, including on restart.
@@ -159,6 +160,14 @@ export const createWorldObjects = function (scene: Scene) {
 	const beamImpact = new Mesh(sphere, glow('#b1ffff')); beam.add(beamGlow, beamCore, beamImpact); beamImpact.scale.setScalar(5);
 	const smoke = new Mesh(circle, glow('#b3c4cf', 0.27)); smoke.name = 'reactor-vent'; smoke.quaternion.setFromUnitVectors(zAxis, normal); root.add(smoke);
 	const from = new Vector3(); const to = new Vector3(); const delta = new Vector3(); const up = new Vector3(0, 1, 0);
+	const launches = new WeakMap<Shot, { offset: Vector3; x: number; y: number; distance: number }>();
+	const flashes = new WeakMap<Effect, Vector3>();
+	let nextMuzzle = 0;
+	let nextFlashMuzzle = 0;
+	const launchWeight = function (distance: number) {
+		const t = Math.max(0, Math.min(1, distance / 180));
+		return 1 - t * t * (3 - 2 * t);
+	};
 	const segment = function (mesh: Mesh, width: number) {
 		delta.subVectors(to, from); const length = delta.length();
 		mesh.visible = length > 0.0001; if (!mesh.visible) return;
@@ -166,8 +175,9 @@ export const createWorldObjects = function (scene: Scene) {
 	};
 	let disposed = false;
 	return {
-		update: function (state: State, reducedMotion: boolean) {
+		update: function (state: State, reducedMotion: boolean, frameEffects?: FrameEffects) {
 			if (disposed) return;
+			const muzzles = frameEffects?.muzzles ?? [];
 			beaconSurface.color.set(state.relay < 30 ? '#ff865e' : '#b9fff0');
 			beacon.scale.setScalar(reducedMotion ? 4 : 4 + Math.sin(state.time * 2.4) * 0.6);
 			const siege = state.enemies.filter(function (enemy) { return enemy.kind === 'siege'; });
@@ -209,6 +219,27 @@ export const createWorldObjects = function (scene: Scene) {
 			sync(shots, state.shots.length, createShot, function (value, index) {
 				const shot = state.shots[index]; if (!shot) return; const style = shotStyle[shot.kind];
 				from.set(shot.x - shot.vx * style.duration, 42, shot.y - shot.vy * style.duration); to.set(shot.x, 42, shot.y);
+				if (shot.kind !== 'enemy' && muzzles.length > 0) {
+					let launch = launches.get(shot);
+					const speed = Math.hypot(shot.vx, shot.vy);
+					if (!launch && speed > 0) {
+						const muzzle = muzzles[nextMuzzle++ % muzzles.length];
+						if (muzzle) {
+							const dx = shot.vx / speed; const dy = shot.vy / speed;
+							const distance = Math.max(0, (shot.x - state.player.x) * dx + (shot.y - state.player.y) * dy - 30);
+							launch = { offset: muzzle.clone().sub(new Vector3(shot.x - dx * distance, 42, shot.y - dy * distance)), x: shot.x, y: shot.y, distance };
+							launches.set(shot, launch);
+						}
+					}
+					if (launch) {
+						// Fix the muzzle offset at launch, then converge to the unchanged
+						// collision path. Turning the mech cannot drag airborne shots.
+						launch.distance += Math.hypot(shot.x - launch.x, shot.y - launch.y); launch.x = shot.x; launch.y = shot.y;
+						const trailTime = speed > 0 ? Math.min(style.duration, launch.distance / speed) : 0;
+						from.set(shot.x - shot.vx * trailTime, 42, shot.y - shot.vy * trailTime).addScaledVector(launch.offset, launchWeight(launch.distance - speed * trailTime));
+						to.addScaledVector(launch.offset, launchWeight(launch.distance));
+					}
+				}
 				value.trail.material = style.trail; value.head.material = style.surface;
 				value.head.geometry = shot.kind === 'ppc' ? sphere : cube;
 				value.head.position.copy(to); value.head.rotation.y = -Math.atan2(shot.vy, shot.vx);
@@ -218,6 +249,14 @@ export const createWorldObjects = function (scene: Scene) {
 			sync(effects, state.effects.length, createEffect, function (value, index) {
 				const effect = state.effects[index]; if (!effect) return; const progress = Math.max(0, 1 - effect.life * 2); const radius = Math.max(1, effect.size * progress) / Math.sqrt(1.5);
 				value.root.position.set(effect.x, 36, effect.y); value.halo.scale.setScalar(radius);
+				if (effect.source === 'muzzle' && muzzles.length > 0) {
+					let origin = flashes.get(effect);
+					if (!origin) {
+						origin = muzzles[nextFlashMuzzle++ % muzzles.length]?.clone();
+						if (origin) flashes.set(effect, origin);
+					}
+					if (origin) value.root.position.copy(origin);
+				}
 				value.surface.color.set(effect.color); value.surface.opacity = value.sparkSurface.opacity = Math.min(1, effect.life * 2);
 				value.flash.scale.setScalar(Math.max(0.1, effect.size * (1 - progress) * 0.2));
 				for (let i = 0; i < value.sparks.count; i++) {
@@ -230,11 +269,15 @@ export const createWorldObjects = function (scene: Scene) {
 			beam.visible = !!state.beam;
 			if (state.beam) {
 				from.set(state.player.x, 42, state.player.y); to.set(state.beam.x, 42, state.beam.y);
+				if (muzzles[0]) from.copy(muzzles[0]);
 				segment(beamGlow, 4.5); segment(beamCore, 1.25); beamImpact.position.copy(to);
 			}
 			smoke.visible = state.player.heat > 60;
 			if (smoke.visible) {
 				smoke.position.set(state.player.x - Math.cos(state.player.angle) * 23, 70 + (reducedMotion ? 0 : state.time * 25 % 24), state.player.y - Math.sin(state.player.angle) * 23);
+				if (frameEffects?.exhaust) {
+					smoke.position.copy(frameEffects.exhaust); smoke.position.y += reducedMotion ? 0 : state.time * 25 % 24;
+				}
 				smoke.scale.setScalar((6 + state.player.heat / 15) / Math.sqrt(1.5));
 			}
 		},

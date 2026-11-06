@@ -22,6 +22,19 @@ frame is retained during training. Pause can restart or exit training.
 
 ## Combat frames
 
+Warden retains its original model. Kestrel is an open, reverse-jointed avian
+runner; Maul is a broad humanoid with rocket gauntlets; Longbow is a tall,
+slender humanoid with an asymmetric cannon arm; Morrow is a crouched, armless
+twin-silo carrier. Authored hip heights, link proportions, knee directions,
+and armor distinguish the frames while keeping each supporting foot planted.
+These anatomy differences affect presentation, not hitboxes or handling.
+Maul and Longbow stand fully upright, lift their first foot as motion begins,
+flex their forward knees during steps, and take settling steps after stopping.
+Their pelvis follows the planted leg so the limbs retain their lengths
+throughout the stride. The reverse-jointed frames keep their crouched stance
+and original stepping behavior. Weapon effects and reactor exhaust follow the
+revised hardware; damage labels clear the taller silhouettes.
+
 | Frame | Archetype / starter | Cruise / reverse | Cooling | Tradeoff |
 | --- | --- | --- | --- | --- |
 | Warden 08 · 80T | Line fighter / AC/38 | 90 / 48 m/s | 12 heat/s | Balanced baseline armor and handling |
@@ -216,11 +229,15 @@ or touch feel, speaker/headphone quality, or owner acceptance of combat balance.
 This remains a browser demo; no Steam integration or desktop distribution is
 included.
 
-![Five original playable frames in a rendering fixture](./docs/frame-roster.png)
+![Five playable frame silhouettes in a rendering fixture](./docs/frame-roster.png)
+
+![Frame side profiles showing forward and reverse knee anatomy](./docs/frame-profiles.png)
 
 ![Production frame hangar](./docs/frame-hangar.png)
 
 ![Production phone hangar](./docs/frame-hangar-phone.png)
+
+![Revised Longbow in a production combat encounter](./docs/frame-combat.png)
 
 ![First weapon draft earned through normal production-browser play](./docs/weapon-draft.png)
 
