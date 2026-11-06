@@ -26,12 +26,33 @@ describe('Iron Wake player preferences and input boundaries', function () {
 	test('menu buttons trigger only once until released, and disconnect clears firing and axes', function () {
 		const input = claimedInput();
 		const first = input.read([pad([9, 7], [0.5, -1, 1, 0])], 16);
-		expect(first.pause).toBe(true); expect(first.cannon).toBe(true); expect(first.drive).toBe(1); expect(first.aimX).toBe(1);
+		expect(first.pause).toBe(true); expect(first.fire[0]).toBe(true); expect(first.drive).toBe(1); expect(first.aimX).toBe(1);
 		expect(input.read([pad([9, 7])], 32).pause).toBe(false);
-		const lost = input.read([], 48); expect(lost.connected).toBe(false); expect(lost.cannon).toBe(false); expect(lost.drive).toBeCloseTo(0); expect(lost.turn).toBe(0);
+		const lost = input.read([], 48); expect(lost.connected).toBe(false); expect(lost.fire[0]).toBe(false); expect(lost.drive).toBeCloseTo(0); expect(lost.turn).toBe(0);
 		input.read([pad()], 64); const reclaim = input.read([pad([9])], 80);
 		expect(reclaim.claimed).toBe(true); expect(reclaim.pause).toBe(false);
 		input.read([pad()], 96); expect(input.read([pad([9])], 112).pause).toBe(true);
+	});
+	test('all four shoulder inputs fire independently and coolant is isolated on B', function () {
+		const input = claimedInput();
+		for (const [slot, button] of [7, 6, 5, 4].entries()) {
+			const result = input.read([pad([button])], 16 + slot * 16);
+			expect(result.fire).toEqual([slot === 0, slot === 1, slot === 2, slot === 3]);
+			expect(result.coolant).toBe(false);
+		}
+		const volley = input.read([pad([4, 5, 6, 7])], 100);
+		expect(volley.fire).toEqual([true, true, true, true]); expect(volley.coolant).toBe(false);
+		const purge = input.read([pad([1, 4, 5, 6, 7])], 116);
+		expect(purge.fire).toEqual([true, true, true, true]); expect(purge.coolant).toBe(true);
+		input.requireNeutral();
+		const heldBack = input.read([pad([1])], 132);
+		expect(heldBack.ready).toBe(false); expect(heldBack.coolant).toBe(false);
+		input.read([pad()], 148);
+		expect(input.read([pad([1])], 164).coolant).toBe(true);
+		input.requireNeutral();
+		expect(input.read([pad([4, 5, 6, 7])], 180).fire).toEqual([false, false, false, false]);
+		input.read([pad()], 196);
+		expect(input.read([pad([4, 5, 6, 7])], 212).fire).toEqual([true, true, true, true]);
 	});
 	test('stick drift is ignored and menu navigation repeats at a bounded rate', function () {
 		const input = claimedInput(); const drifting = input.read([pad([], [0.12, -0.09, 0.03, -0.1])], 10);
@@ -46,32 +67,32 @@ describe('Iron Wake player preferences and input boundaries', function () {
 		expect(claim.claimed).toBe(true); expect(claim.confirm).toBe(false); expect(claim.index).toBe(0);
 		input.read([pad(), pad([], undefined, 1)], 32);
 		const lost = input.read([null, pad([0, 7], undefined, 1)], 48);
-		expect(lost.lost).toBe(true); expect(lost.connected).toBe(false); expect(lost.cannon).toBe(false);
+		expect(lost.lost).toBe(true); expect(lost.connected).toBe(false); expect(lost.fire[0]).toBe(false);
 		expect(input.read([null, pad([0, 7], undefined, 1)], 64).connected).toBe(false);
 		input.read([null, pad([], undefined, 1)], 80);
 		const replacement = input.read([null, pad([0, 7], undefined, 1)], 96);
-		expect(replacement.claimed).toBe(true); expect(replacement.index).toBe(1); expect(replacement.confirm).toBe(false); expect(replacement.cannon).toBe(false);
-		expect(input.read([null, pad([7], undefined, 1)], 112).cannon).toBe(false);
+		expect(replacement.claimed).toBe(true); expect(replacement.index).toBe(1); expect(replacement.confirm).toBe(false); expect(replacement.fire[0]).toBe(false);
+		expect(input.read([null, pad([7], undefined, 1)], 112).fire[0]).toBe(false);
 		input.read([null, pad([], undefined, 1)], 128);
-		expect(input.read([null, pad([7], undefined, 1)], 144).cannon).toBe(true);
+		expect(input.read([null, pad([7], undefined, 1)], 144).fire[0]).toBe(true);
 	});
 	test('a higher-slot pilot keeps ownership when an idle lower-slot controller connects', function () {
 		const input = createGamepadInput(); input.read([null, pad([], undefined, 1)], 0); input.read([null, pad([0], undefined, 1)], 16);
 		input.read([pad(), pad([], undefined, 1)], 32);
 		const active = input.read([pad([7]), pad([6], undefined, 1)], 48);
-		expect(active.index).toBe(1); expect(active.laser).toBe(true); expect(active.cannon).toBe(false); expect(active.lost).toBe(false);
+		expect(active.index).toBe(1); expect(active.fire[1]).toBe(true); expect(active.fire[0]).toBe(false); expect(active.lost).toBe(false);
 		const swapped = input.read([pad(), pad([], undefined, 1, 'Replacement')], 64);
 		expect(swapped.lost).toBe(true); expect(swapped.connected).toBe(false);
 	});
 	test('menu transitions suppress held driving, weapons and menu navigation until neutral', function () {
 		const input = claimedInput();
-		expect(input.read([pad([7], [1, -1, 0, 1])], 16).cannon).toBe(true);
+		expect(input.read([pad([7], [1, -1, 0, 1])], 16).fire[0]).toBe(true);
 		input.requireNeutral();
 		const held = input.read([pad([7], [1, -1, 0, 1])], 32);
-		expect(held.cannon).toBe(false); expect(held.drive).toBe(0); expect(held.turn).toBe(0); expect(held.aimY).toBe(0); expect(held.scroll).toBe(0); expect(held.navigate).toBe(0);
+		expect(held.fire[0]).toBe(false); expect(held.drive).toBe(0); expect(held.turn).toBe(0); expect(held.aimY).toBe(0); expect(held.scroll).toBe(0); expect(held.navigate).toBe(0);
 		input.read([pad()], 48);
 		const resumed = input.read([pad([7], [0, -1, 1, 0])], 64);
-		expect(resumed.cannon).toBe(true); expect(resumed.drive).toBe(1); expect(resumed.aimX).toBe(1);
+		expect(resumed.fire[0]).toBe(true); expect(resumed.drive).toBe(1); expect(resumed.aimX).toBe(1);
 		expect(input.read([pad([], [0, 0, 0, 1])], 80).scroll).toBe(1);
 	});
 	test('connection with a held confirm requires release before it can claim or activate a menu', function () {

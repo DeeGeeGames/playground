@@ -22,7 +22,7 @@ export interface RefitDefinition {
 	description: string;
 }
 export const REFITS: readonly RefitDefinition[] = [
-	{ id: 'arsenal', name: 'Overpressure kit', label: '+15% weapon damage', description: 'Increase cannon, laser and missile damage. Stacks with previous kits.' },
+	{ id: 'arsenal', name: 'Overpressure kit', label: '+15% weapon damage', description: 'Increase damage from every installed weapon. Stacks with previous kits.' },
 	{ id: 'cooling', name: 'Cryogenic loop', label: '+18% heat dissipation', description: 'Sustain fire longer. Adds a coolant charge and purges the reactor.' },
 	{ id: 'bastion', name: 'Bastion plating', label: '−10% incoming frame damage', description: 'Reinforce the frame and restore 12 relay integrity. Resistance stacks.' },
 ];

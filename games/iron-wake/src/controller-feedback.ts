@@ -21,11 +21,12 @@ export const createControllerFeedback = function () {
 	};
 	const play = function (events: readonly CombatEvent[], now: number) {
 		if (!actuator || now - lastPulse < 75) return;
-		const damage = events.includes('player-hit'); const cannon = events.includes('cannon'); const missiles = events.includes('missile');
-		if (!damage && !cannon && !missiles) return;
+		const damage = events.includes('player-hit'); const heavy = events.includes('cannon') || events.includes('ppc');
+		const salvo = events.includes('missile') || events.includes('rocket'); const light = events.includes('machine-gun');
+		if (!damage && !heavy && !salvo && !light) return;
 		lastPulse = now;
 		try {
-			void actuator.playEffect('dual-rumble', { duration: damage ? 140 : cannon ? 65 : 90, startDelay: 0, strongMagnitude: damage ? 0.55 : 0.25, weakMagnitude: damage ? 0.3 : 0.15 }).catch(function () { /* Unsupported effects are optional. */ });
+			void actuator.playEffect('dual-rumble', { duration: damage ? 140 : heavy ? 65 : salvo ? 90 : 35, startDelay: 0, strongMagnitude: damage ? 0.55 : light && !heavy && !salvo ? 0.06 : 0.25, weakMagnitude: damage ? 0.3 : light && !heavy && !salvo ? 0.08 : 0.15 }).catch(function () { /* Unsupported effects are optional. */ });
 		} catch { /* Some drivers throw synchronously. */ }
 	};
 	const dispose = async function () { await stop(); actuator = undefined; device = undefined; };

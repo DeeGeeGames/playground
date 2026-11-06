@@ -1,23 +1,24 @@
+import { createMount, DRAFT_MILESTONES, getWeapon, MAX_WEAPON_LEVEL, WEAPONS, weaponDamage, type FireInputs, type WeaponDefinition, type WeaponId, type WeaponMount } from './arsenal';
 import { getDifficultyDefinition, getWaveDefinition, WAVES, type Difficulty, type RefitChoice } from './operation';
 
 export interface Point { x: number; y: number }
 export type EnemyKind = 'scout' | 'striker' | 'siege';
-export type CombatEvent = 'artillery' | 'refit' | 'cannon' | 'missile' | 'impact' | 'player-hit' | 'relay-hit' | 'explosion' | 'wave' | 'pickup' | 'coolant' | 'overheat' | 'defeat' | 'victory';
+export type CombatEvent = 'artillery' | 'refit' | 'requisition' | 'machine-gun' | 'ppc' | 'rocket' | 'cannon' | 'missile' | 'impact' | 'player-hit' | 'relay-hit' | 'explosion' | 'wave' | 'pickup' | 'coolant' | 'overheat' | 'defeat' | 'victory';
 export interface AttackCycle { phase: 'committed' | 'recovery'; remaining: number; cycle: number }
 export interface Unit extends Point { id: number; hp: number; maxHp: number; angle: number; cooldown: number; heavy: boolean; kind: EnemyKind; commander?: boolean; attack?: AttackCycle }
-export interface Shot extends Point { vx: number; vy: number; life: number; kind: 'cannon' | 'missile' | 'enemy'; target: number | undefined; damage: number }
+export interface Shot extends Point { vx: number; vy: number; life: number; kind: 'cannon' | 'missile' | 'enemy' | 'bullet' | 'ppc' | 'rocket'; target: number | undefined; damage: number; splash?: number; hitIds?: number[] }
 export interface Effect extends Point { life: number; size: number; color: string }
 export interface Salvage extends Point { id: number; kind: 'repair' | 'coolant'; life: number }
 export interface Warning extends Point { kind: EnemyKind; life: number; commander?: boolean }
 export interface ArtilleryStrike extends Point { id: number; life: number; duration: number; radius: number; damage: number }
 export interface CombatStats { damageDealt: number; damageTaken: number; relayDamage: number; shotsFired: number; shotsHit: number; salvageRecovered: number; overheats: number; killScore: number; commanderDestroyed: boolean }
 export interface Wreck extends Point { kind: EnemyKind; angle: number }
-export interface Controls { drive: number; stop: boolean; turn: number; aim: Point; cannon: boolean; laser: boolean; missile: boolean; coolant: boolean }
+export interface Controls { drive: number; stop: boolean; turn: number; aim: Point; fire: FireInputs; coolant: boolean }
 export interface State {
-	difficulty: Difficulty; phase: 'combat' | 'refit'; upgrades: Record<RefitChoice, number>; stats: CombatStats; strikes: ArtilleryStrike[];
+	difficulty: Difficulty; phase: 'combat' | 'refit' | 'requisition'; loadout: WeaponMount[]; draftCount: number; offers: WeaponId[]; seed: number; draftsEnabled: boolean; upgrades: Record<RefitChoice, number>; stats: CombatStats; strikes: ArtilleryStrike[];
 	player: Point & { angle: number; turret: number; throttle: number; speed: number; hp: number; heat: number; overheated: boolean };
 	relay: number; enemies: Unit[]; shots: Shot[]; effects: Effect[]; wave: number; spawned: number; spawnIn: number;
-	intermission: number; cannonIn: number; missileIn: number; time: number; kills: number; shake: number;
+	intermission: number; cannonIn: number; time: number; kills: number; shake: number;
 	beam: Point | undefined; outcome: 'playing' | 'won' | 'lost'; nextId: number;
 	coolantCharges: number; coolantHeld: boolean; salvage: Salvage[]; warnings: Warning[]; wrecks: Wreck[]; events: CombatEvent[];
 }
@@ -31,21 +32,69 @@ export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
 export const distance = function (a: Point, b: Point) { return Math.hypot(a.x - b.x, a.y - b.y); };
 export const angleDelta = function (from: number, to: number) { return Math.atan2(Math.sin(to - from), Math.cos(to - from)); };
 const clamp = function (value: number, min: number, max: number) { return Math.max(min, Math.min(max, value)); };
-export const createState = function (options: { difficulty?: Difficulty } = {}): State {
+export const createState = function (options: { difficulty?: Difficulty; starter?: WeaponId; seed?: number } = {}): State {
 	return {
-		difficulty: options.difficulty ?? 'standard', phase: 'combat', upgrades: { arsenal: 0, cooling: 0, bastion: 0 }, strikes: [],
+		difficulty: options.difficulty ?? 'standard', phase: 'combat', loadout: [createMount(options.starter ?? 'autocannon')], draftCount: 0, offers: [], seed: options.seed ?? 1, draftsEnabled: true, upgrades: { arsenal: 0, cooling: 0, bastion: 0 }, strikes: [],
 		stats: { damageDealt: 0, damageTaken: 0, relayDamage: 0, shotsFired: 0, shotsHit: 0, salvageRecovered: 0, overheats: 0, killScore: 0, commanderDestroyed: false },
 		player: { x: 900, y: 780, angle: -Math.PI / 2, turret: -Math.PI / 2, throttle: 0, speed: 0, hp: 100, heat: 0, overheated: false },
 		relay: 100, enemies: [], shots: [], effects: [], wave: 1, spawned: 0, spawnIn: 4, intermission: 0,
-		cannonIn: 0, missileIn: 0, time: 0, kills: 0, shake: 0, beam: undefined, outcome: 'playing', nextId: 1,
+		cannonIn: 0, time: 0, kills: 0, shake: 0, beam: undefined, outcome: 'playing', nextId: 1,
 		coolantCharges: 2, coolantHeld: false, salvage: [], warnings: [], wrecks: [], events: [],
 	};
 };
 const burst = function (state: State, at: Point, size: number, color: string) { state.effects.push({ x: at.x, y: at.y, size, color, life: 0.5 }); };
-const launch = function (state: State, kind: Shot['kind'], origin: Point, angle: number, target?: number, damage = 7) {
-	if (kind !== 'enemy') state.stats.shotsFired++;
-	const speed = kind === 'missile' ? 220 : kind === 'enemy' ? 230 : 650;
-	state.shots.push({ x: origin.x + Math.cos(angle) * 30, y: origin.y + Math.sin(angle) * 30, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: kind === 'missile' ? 4 : kind === 'cannon' ? 1.3 : 2.5, kind, target, damage: kind === 'enemy' ? damage : (kind === 'cannon' ? 38 : 27) * (1 + state.upgrades.arsenal * 0.15) });
+const launchEnemy = function (state: State, origin: Point, angle: number, damage: number) {
+	state.shots.push({ x: origin.x + Math.cos(angle) * 30, y: origin.y + Math.sin(angle) * 30, vx: Math.cos(angle) * 230, vy: Math.sin(angle) * 230, life: 2.5, kind: 'enemy', target: undefined, damage });
+};
+const launchWeapon = function (state: State, weapon: WeaponDefinition, mount: WeaponMount, angle: number, target?: number) {
+	if (weapon.kind === 'laser') return;
+	const p = state.player;
+	state.stats.shotsFired++;
+	state.shots.push({ x: p.x + Math.cos(angle) * 30, y: p.y + Math.sin(angle) * 30,
+		vx: Math.cos(angle) * weapon.speed, vy: Math.sin(angle) * weapon.speed, life: weapon.range / weapon.speed,
+		kind: weapon.kind, target, damage: weaponDamage(weapon, mount.level) * (1 + state.upgrades.arsenal * 0.15),
+		...(weapon.splash > 0 ? { splash: weapon.splash } : {}), ...(weapon.kind === 'ppc' ? { hitIds: [] } : {}) });
+};
+const random = function (state: State) {
+	state.seed = (Math.imul(state.seed, 1664525) + 1013904223) >>> 0;
+	return state.seed / 4294967296;
+};
+const prepareRequisition = function (state: State): boolean {
+	const threshold = DRAFT_MILESTONES[state.draftCount];
+	if (!state.draftsEnabled || threshold === undefined || state.kills < threshold || state.outcome !== 'playing') return false;
+	const unowned = WEAPONS.filter(function (weapon) { return !state.loadout.some(function (mount) { return mount.weapon === weapon.id; }); }).map(function (weapon) { return weapon.id; });
+	const upgrades = state.loadout.filter(function (mount) { return mount.level < MAX_WEAPON_LEVEL; }).map(function (mount) { return mount.weapon; });
+	const candidates = state.loadout.length < 4 ? unowned : [...unowned, ...upgrades];
+	const offers: WeaponId[] = [];
+	if (state.loadout.length === 4 && upgrades.length > 0) {
+		const guaranteed = upgrades[Math.floor(random(state) * upgrades.length)];
+		if (guaranteed) offers.push(guaranteed);
+	}
+	while (offers.length < 3 && candidates.length > 0) {
+		const index = Math.floor(random(state) * candidates.length);
+		const candidate = candidates.splice(index, 1)[0];
+		if (candidate && !offers.includes(candidate)) offers.push(candidate);
+	}
+	state.offers = offers; state.phase = 'requisition'; state.beam = undefined;
+	for (const mount of state.loadout) mount.firing = false;
+	state.events.push('requisition');
+	return true;
+};
+export const chooseWeapon = function (state: State, weapon: WeaponId, replaceSlot?: number): boolean {
+	if (state.phase !== 'requisition' || state.outcome !== 'playing' || !state.offers.includes(weapon)) return false;
+	const installed = state.loadout.find(function (mount) { return mount.weapon === weapon; });
+	if (installed) {
+		if (installed.level >= MAX_WEAPON_LEVEL) return false;
+		installed.level++; installed.cooldown = 0;
+	} else if (state.loadout.length < 4) state.loadout.push(createMount(weapon));
+	else {
+		if (replaceSlot === undefined || !Number.isInteger(replaceSlot) || replaceSlot < 0 || replaceSlot >= state.loadout.length) return false;
+		state.loadout[replaceSlot] = createMount(weapon);
+	}
+	state.draftCount++; state.offers = []; state.phase = 'combat'; state.events = ['refit'];
+	// A multi-kill can earn several choices. Resolve each before time resumes.
+	prepareRequisition(state);
+	return true;
 };
 // Return the earliest entry into a circle along a finite movement segment.
 const hitFraction = function (from: Point, to: Point, target: Point, radius: number): number | undefined {
@@ -120,7 +169,8 @@ export const applyRefit = function (state: State, choice: RefitChoice): boolean 
 	state.coolantCharges = Math.min(3, state.coolantCharges + (choice === 'cooling' ? 2 : 1));
 	if (choice === 'bastion') state.relay = Math.min(100, state.relay + 12);
 	state.coolantHeld = false;
-	state.cannonIn = 0; state.missileIn = 0;
+	state.cannonIn = 0;
+	for (const mount of state.loadout) { mount.cooldown = 0; mount.firing = false; }
 	state.wave++; state.spawned = 0; state.spawnIn = 4; state.intermission = 0; state.phase = 'combat';
 	state.events = ['wave'];
 	return true;
@@ -156,7 +206,7 @@ export const step = function (state: State, input: Controls, dt: number) {
 	const wave = getWaveDefinition(state.wave);
 	state.time += dt;
 	state.cannonIn = Math.max(0, state.cannonIn - dt);
-	state.missileIn = Math.max(0, state.missileIn - dt);
+	for (const mount of state.loadout) { mount.cooldown = Math.max(0, mount.cooldown - dt); mount.firing = false; }
 	state.shake = Math.max(0, state.shake - dt * 15);
 	p.heat = Math.max(0, p.heat - dt * 12 * (1 + state.upgrades.cooling * 0.18));
 	if (input.coolant && !state.coolantHeld && state.coolantCharges > 0 && p.heat > 0) {
@@ -174,29 +224,31 @@ export const step = function (state: State, input: Controls, dt: number) {
 	const aimAngle = Math.atan2(input.aim.y - p.y, input.aim.x - p.x);
 	p.turret += clamp(angleDelta(p.turret, aimAngle), -dt * 2.3, dt * 2.3);
 	state.beam = undefined;
-	if (!p.overheated) {
-		if (input.cannon && state.cannonIn === 0) {
-			launch(state, 'cannon', p, p.turret);
-			state.cannonIn = 0.65; p.heat += 8; state.shake = 3; state.events.push('cannon');
-			burst(state, { x: p.x + Math.cos(p.turret) * 36, y: p.y + Math.sin(p.turret) * 36 }, 20, '#ffe4a0');
-		}
-		if (input.missile && state.missileIn === 0) {
-			const target = state.enemies.filter(function (enemy) { return enemy.hp > 0 && distance(enemy, p) <= 900; }).reduce<Unit | undefined>(function (best, enemy) { return !best || distance(enemy, input.aim) < distance(best, input.aim) ? enemy : best; }, undefined);
-			for (const spread of [-0.3, 0, 0.3]) launch(state, 'missile', p, p.turret + spread, target?.id);
-			state.missileIn = 4.5; p.heat += 15; state.events.push('missile');
-		}
-		if (input.laser) {
-			const reach = 620;
+	if (!p.overheated) state.loadout.forEach(function (mount, index) {
+		if (!input.fire[index]) return;
+		const weapon = getWeapon(mount.weapon);
+		if (weapon.kind === 'laser') {
 			const hit = state.enemies.filter(function (enemy) { return enemy.hp > 0; }).map(function (enemy) {
 				const dx = enemy.x - p.x; const dy = enemy.y - p.y;
 				return { enemy, along: dx * Math.cos(p.turret) + dy * Math.sin(p.turret), across: Math.abs(dx * Math.sin(p.turret) - dy * Math.cos(p.turret)) };
-			}).filter(function (candidate) { return candidate.along > 0 && candidate.along < reach && candidate.across < 24; }).sort(function (a, b) { return a.along - b.along; })[0];
-			const length = hit?.along ?? reach;
+			}).filter(function (candidate) { return candidate.along > 0 && candidate.along < weapon.range && candidate.across < 24; }).sort(function (a, b) { return a.along - b.along; })[0];
+			const length = hit?.along ?? weapon.range;
 			state.beam = { x: p.x + Math.cos(p.turret) * length, y: p.y + Math.sin(p.turret) * length };
-			if (hit) hurtEnemy(state, hit.enemy, 48 * dt * (1 + state.upgrades.arsenal * 0.15), p);
-			p.heat += 44 * dt;
+			if (hit) hurtEnemy(state, hit.enemy, weaponDamage(weapon, mount.level) * dt * (1 + state.upgrades.arsenal * 0.15), p);
+			p.heat += weapon.heat * dt; mount.firing = true;
+			return;
 		}
-	}
+		if (mount.cooldown > 0) return;
+		const target = weapon.kind === 'missile' ? state.enemies.filter(function (enemy) { return enemy.hp > 0 && distance(enemy, p) <= weapon.range; }).reduce<Unit | undefined>(function (best, enemy) { return !best || distance(enemy, input.aim) < distance(best, input.aim) ? enemy : best; }, undefined) : undefined;
+		for (let projectile = 0; projectile < weapon.projectiles; projectile++) {
+			const spread = weapon.projectiles === 1 ? Math.sin(state.stats.shotsFired * 2.4) * weapon.spread : (projectile - (weapon.projectiles - 1) / 2) * weapon.spread;
+			launchWeapon(state, weapon, mount, p.turret + spread, target?.id);
+		}
+		mount.cooldown = weapon.interval; mount.firing = true; p.heat += weapon.heat;
+		if (weapon.kind === 'cannon' || weapon.kind === 'ppc') { state.cannonIn = 0.65; state.shake = weapon.kind === 'ppc' ? 4 : 3; }
+		state.events.push(weapon.kind === 'bullet' ? 'machine-gun' : weapon.kind);
+		burst(state, { x: p.x + Math.cos(p.turret) * 36, y: p.y + Math.sin(p.turret) * 36 }, weapon.kind === 'bullet' ? 9 : 20, weapon.color);
+	});
 	if (p.heat >= 100) { p.heat = 100; p.overheated = true; state.stats.overheats++; state.events.push('overheat'); }
 	const quota = wave.enemies.length;
 	state.spawnIn -= dt;
@@ -237,7 +289,7 @@ export const step = function (state: State, input: Controls, dt: number) {
 		if (enemy.cooldown <= 0 && distance(enemy, target) < range + 50 && Math.abs(angleDelta(enemy.angle, targetAngle)) < 0.3) {
 			if (enemy.kind === 'siege') {
 				commitBarrage(state, enemy, target);
-			} else launch(state, 'enemy', enemy, enemy.angle, undefined, stats.damage * difficulty.enemyDamage);
+			} else launchEnemy(state, enemy, enemy.angle, stats.damage * difficulty.enemyDamage);
 			enemy.cooldown = stats.reload;
 		}
 	}
@@ -257,7 +309,8 @@ export const step = function (state: State, input: Controls, dt: number) {
 			if (target) {
 				const heading = Math.atan2(shot.vy, shot.vx);
 				const angle = heading + clamp(angleDelta(heading, Math.atan2(target.y - shot.y, target.x - shot.x)), -travel * 3, travel * 3);
-				shot.vx = Math.cos(angle) * 270; shot.vy = Math.sin(angle) * 270;
+				const speed = Math.hypot(shot.vx, shot.vy);
+				shot.vx = Math.cos(angle) * speed; shot.vy = Math.sin(angle) * speed;
 			}
 		}
 		const origin = { x: shot.x, y: shot.y };
@@ -271,10 +324,22 @@ export const step = function (state: State, input: Controls, dt: number) {
 				hurtRelay(state, shot.damage * 0.65); shot.life = 0; burst(state, relay, 30, '#ff985d'); state.events.push('impact');
 			}
 		} else {
-			const hit = state.enemies.filter(function (enemy) { return enemy.hp > 0; }).map(function (enemy) { return { enemy, entry: hitFraction(origin, shot, enemy, 25) }; }).filter(function (candidate): candidate is { enemy: Unit; entry: number } { return candidate.entry !== undefined; }).sort(function (a, b) { return a.entry - b.entry || a.enemy.id - b.enemy.id; })[0];
-			if (hit) {
-				hurtEnemy(state, hit.enemy, shot.damage, origin); state.stats.shotsHit++; shot.life = 0;
-				burst(state, hit.enemy, shot.kind === 'cannon' ? 45 : 32, '#ffd28b'); state.shake = 2; state.events.push('impact');
+			const hits = state.enemies.filter(function (enemy) { return enemy.hp > 0 && !shot.hitIds?.includes(enemy.id); }).map(function (enemy) { return { enemy, entry: hitFraction(origin, shot, enemy, 25) }; }).filter(function (candidate): candidate is { enemy: Unit; entry: number } { return candidate.entry !== undefined; }).sort(function (a, b) { return a.entry - b.entry || a.enemy.id - b.enemy.id; });
+			for (const hit of hits) {
+				hurtEnemy(state, hit.enemy, shot.damage, origin);
+				// Hit rate counts projectiles, not each victim of a penetrating bolt.
+				if (!shot.hitIds || shot.hitIds.length === 0) state.stats.shotsHit++;
+				if (shot.hitIds) shot.hitIds.push(hit.enemy.id); else shot.life = 0;
+				const impact = { x: origin.x + (shot.x - origin.x) * hit.entry, y: origin.y + (shot.y - origin.y) * hit.entry };
+				if (shot.splash) {
+					for (const nearby of state.enemies) {
+						if (nearby.id !== hit.enemy.id && nearby.hp > 0 && distance(nearby, impact) < shot.splash) hurtEnemy(state, nearby, shot.damage * 0.6, impact);
+					}
+				}
+				burst(state, impact, shot.splash ?? (shot.kind === 'ppc' ? 55 : shot.kind === 'cannon' ? 45 : 20), shot.kind === 'ppc' ? '#b1a0ff' : '#ffd28b');
+				if (shot.kind !== 'bullet') state.shake = Math.max(state.shake, 2);
+				state.events.push('impact');
+				if (!shot.hitIds) break;
 			}
 		}
 	}
@@ -297,6 +362,7 @@ export const step = function (state: State, input: Controls, dt: number) {
 		state.stats.salvageRecovered++; state.events.push('pickup'); burst(state, p, 55, '#93e9e1'); return false;
 	});
 	if (p.hp <= 0 || state.relay <= 0) { state.outcome = 'lost'; state.events.push('defeat'); }
+	else if (prepareRequisition(state)) { /* Requisitions freeze incoming ordnance and preserve momentum. */ }
 	else if (state.spawned === quota && state.enemies.length === 0 && state.warnings.length === 0 && state.strikes.length === 0 && !state.shots.some(function (shot) { return shot.kind === 'enemy'; })) {
 		state.intermission += dt;
 		if (state.intermission >= 4) {
