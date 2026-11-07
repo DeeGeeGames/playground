@@ -2,6 +2,8 @@ import { BoxGeometry, BufferGeometry, CircleGeometry, Color, CylinderGeometry, G
 import { ARENA, getEnemyDefense, type Effect, type Shot, type State } from './simulation';
 import { mechScale } from './gait';
 import { createEnvironment } from './environment-3d';
+import { createMissionEnvironment } from './mission-environment';
+import type { MissionMap } from './campaign-types';
 
 interface PooledObject { root: Object3D; dispose?: () => void }
 interface FrameEffects { muzzles: readonly Vector3[]; exhaust: Vector3 | undefined }
@@ -10,7 +12,10 @@ interface FrameEffects { muzzles: readonly Vector3[]; exhaust: Vector3 | undefin
 // retain Three.js objects; pools shrink with live state, including on restart.
 export const createWorldObjects = function (scene: Scene) {
 	const root = new Group(); root.name = 'iron-wake-world'; scene.add(root);
-	const environment = createEnvironment(); root.add(environment.root);
+	const yard = new Group(); yard.name = 'legacy-terrain'; root.add(yard);
+	const environment = createEnvironment(); yard.add(environment.root);
+	let missionMap: MissionMap | undefined;
+	let missionEnvironment: ReturnType<typeof createMissionEnvironment> | undefined;
 	const geometries = new Set<BufferGeometry>(); const materials = new Set<Material>();
 	const geometry = function <T extends BufferGeometry>(value: T): T { geometries.add(value); return value; };
 	const material = function <T extends Material>(value: T): T { materials.add(value); return value; };
@@ -35,13 +40,13 @@ export const createWorldObjects = function (scene: Scene) {
 	// The flat decorative apron keeps its recorded colors without evaluating a
 	// physical lighting shader across the whole viewport on software GPUs.
 	const floor = new InstancedMesh(cube, glow('#ffffff'), ARENA.width / 120 * (ARENA.height / 120));
-	floor.name = 'industrial-apron'; root.add(floor);
+	floor.name = 'industrial-apron'; yard.add(floor);
 	let tile = 0;
 	for (let x = 0; x < ARENA.width; x += 120) for (let z = 0; z < ARENA.height; z += 120) {
 		scratch.position.set(x + 60, -0.55, z + 60); scratch.scale.set(119.6, 1, 119.6); scratch.updateMatrix();
 		floor.setMatrixAt(tile, scratch.matrix); floor.setColorAt(tile++, tint.set((x / 120 + z / 120) % 3 === 0 ? '#354046' : '#303c41'));
 	}
-	const stains = new InstancedMesh(circle, glow('#202c32', 0.15), 90); stains.name = 'terrain-marks'; root.add(stains);
+	const stains = new InstancedMesh(circle, glow('#202c32', 0.15), 90); stains.name = 'terrain-marks'; yard.add(stains);
 	scratch.rotation.x = -Math.PI / 2;
 	for (let i = 0; i < 90; i++) {
 		scratch.position.set((i * 317 + 71) % ARENA.width, 0.015, (i * 173 + 80) % ARENA.height);
@@ -54,8 +59,9 @@ export const createWorldObjects = function (scene: Scene) {
 		const x = (i * 317 + 71) % ARENA.width; const z = (i * 173 + 80) % ARENA.height;
 		lines.push(new Vector3(x, 0.03, z), new Vector3(x + 24, 0.03, z + 10));
 	}
-	root.add(new LineSegments(geometry(new BufferGeometry().setFromPoints(lines)), material(new LineBasicMaterial({ color: '#405056', transparent: true, opacity: 0.09, depthWrite: false }))));
+	yard.add(new LineSegments(geometry(new BufferGeometry().setFromPoints(lines)), material(new LineBasicMaterial({ color: '#405056', transparent: true, opacity: 0.09, depthWrite: false }))));
 	const stripes = group('boundary-stripes'); const stripeMaterial = glow('#b49a60');
+	yard.add(stripes);
 	for (let x = 50; x < ARENA.width; x += 110) for (const z of [25, ARENA.height - 25]) box(stripes, stripeMaterial, x + 19, 0.04, z, 38, 5, 0.04);
 	const relay = group('relay'); relay.position.set(ARENA.relayX, 0, ARENA.relayY);
 	disc(relay, shadow, 97).position.y = 0.04;
@@ -177,6 +183,15 @@ export const createWorldObjects = function (scene: Scene) {
 	return {
 		update: function (state: State, reducedMotion: boolean, frameEffects?: FrameEffects) {
 			if (disposed) return;
+			if (missionMap !== state.mission?.map) {
+				missionEnvironment?.dispose(); missionEnvironment = undefined;
+				missionMap = state.mission?.map;
+				if (missionMap) { missionEnvironment = createMissionEnvironment(missionMap); root.add(missionEnvironment.root); }
+			}
+			yard.visible = !state.mission;
+			relay.visible = !state.mission || state.mission.contract.kind === 'defend';
+			relay.position.set(state.mission?.map.objective.x ?? ARENA.relayX, 0, state.mission?.map.objective.y ?? ARENA.relayY);
+			if (state.mission) missionEnvironment?.update(state.mission, state.time, reducedMotion);
 			const muzzles = frameEffects?.muzzles ?? [];
 			beaconSurface.color.set(state.relay < 30 ? '#ff865e' : '#b9fff0');
 			beacon.scale.setScalar(reducedMotion ? 4 : 4 + Math.sin(state.time * 2.4) * 0.6);
@@ -286,6 +301,7 @@ export const createWorldObjects = function (scene: Scene) {
 			for (const effect of effects) effect.dispose();
 			for (const strike of strikes) strike.dispose();
 			for (const batch of relayBatches) batch.dispose();
+			missionEnvironment?.dispose();
 			environment.dispose();
 			floor.dispose(); stains.dispose();
 			for (const value of geometries) value.dispose(); for (const value of materials) value.dispose();

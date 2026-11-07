@@ -10,6 +10,8 @@ import { drawOverlay, type ScreenRect } from './overlay';
 import { alignCamera, toGround, toScreen } from './projection-3d';
 import type { EnemyKind, Point, State } from './simulation';
 import { createWorldObjects } from './world-3d';
+import { SURFACE_PALETTES } from './mission-environment';
+import type { Biome } from './campaign-types';
 
 export const createPresentation = async function (canvas: HTMLCanvasElement) {
 	const labels = document.createElement('canvas'); labels.className = 'world-labels'; labels.setAttribute('aria-hidden', 'true');
@@ -42,6 +44,7 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 	let player: ReturnType<typeof makeUnit> | undefined;
 	let width = 1; let height = 1; let disposed = false; let previousStateTime = 0;
 	let zoom = 1;
+	let biome: Biome | undefined;
 	let relayHp: number | undefined; let relayHitAt = -10;
 	const dispose = async function () {
 		if (disposed) return; disposed = true;
@@ -81,6 +84,13 @@ export const createPresentation = async function (canvas: HTMLCanvasElement) {
 		toScreen: function (point: Point, elevation = 0) { return toScreen(point, camera, width, height, elevation); },
 		render: function (state: State, aim: Point, gaits: Gaits, reducedMotion: boolean, attract = false, obstructions: readonly ScreenRect[] = [], couchMode = false, hangar = false) {
 			if (disposed || width <= 0 || height <= 0) return;
+			if (biome !== state.mission?.map.biome) {
+				biome = state.mission?.map.biome;
+				const palette = biome ? SURFACE_PALETTES[biome] : undefined;
+				scene.background = new Color(palette?.sky ?? '#142329');
+				scene.fog = new Fog(palette?.haze ?? '#1c3035', 1700, 3200);
+				sun.color.set(palette?.light ?? '#ffd9a0');
+			}
 			if (player?.frame !== state.frame) {
 				if (player) { world.removeEntity(player.entity.id); player.model.dispose(); }
 				player = makeUnit(undefined, false, state.frame);
