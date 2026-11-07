@@ -1,8 +1,77 @@
-# Iron Wake · Last Transmission
+# Iron Wake · Frontier Company
 
-A browser-only isometric mech-combat demo. Choose one of five original combat
-frames for a complete relay-defense operation. Persistent throttle and
-independent turret tracking remain the core of the original prototype.
+A browser-only isometric mech-combat game with a persistent mercenary campaign.
+Command the IWV Wayfarer from its bridge, jump between three planets, accept
+faction contracts, deploy a frame, complete the surface objective, and extract.
+Persistent throttle and independent turret tracking remain the combat core.
+The original **Last Transmission** operation and **Frame Training** remain
+available from the ship's bridge.
+
+## Campaign and contracts
+
+The star map provides destination selection and a short jump sequence. Meridian
+has dusty badlands, Cinder volcanic flats, and Borealis frozen basins. Travel
+advances one day and refreshes the contract board; remote listings preview the
+postings available after arrival. There is no fuel cost or separate ship-flight
+combat. An accepted contract must be completed or aborted before traveling.
+
+The Frontier Freeholds, Ferric Combine, and Signal Accord post work against
+one another. The briefing shows both sides, payment, and reputation changes
+before acceptance. Accepting immediately costs opposition reputation (6–10).
+Successful extraction earns employer favor (8–12) and contract payment; failure
+or abort earns neither and retains the original opposition penalty. Reputation
+is bounded to −100…100, modifies offered payment, and unlocks higher-tier work
+after the first two wins. Entry-tier recovery contracts remain available even
+with hostile factions. Earnings are a career total, with no spending or repair
+debt in this version.
+
+| Contract | Surface objective |
+| --- | --- |
+| Garrison defense | Keep the contracted relay alive through a finite assault. |
+| Facility demolition | Shoot the marked installation; surviving guards are optional. |
+| Priority target | Destroy the designated command frame; escorts are optional. |
+| Area clearance | Eliminate every hostile across three deployment sites. |
+
+Completing an objective opens extraction. Reach the marked landing zone and
+remain within 150 meters for three uninterrupted seconds. Combat and incoming
+ordnance continue during extraction; frame destruction or loss of a defended
+relay still fails the contract. Every weapon family can damage a facility,
+including laser, guided missiles, piercing shots, and splash weapons.
+
+Contract seeds create bounded fields 4,200–4,800 by 3,000–3,600 meters (roughly
+6–8 times the original yard's area). Drop side, objective and patrol sites,
+extraction point, and low terrain landmarks vary. Scenery is traversable;
+there is no cover or terrain collision. The tactical radar and edge markers
+show actual map bounds, the active objective, and extraction. Reattempting an
+accepted contract keeps its seed; newly generated postings use new seeds.
+
+Each sortie starts with a fully serviced chosen frame and its assigned weapon.
+Combat drafts rebuild the four-mount arsenal within that mission. Frames,
+weapons, and damage do not carry over between sorties. Story/Standard/Veteran
+can be selected in Settings for the next sortie.
+
+Campaign state is validated and stored separately under `iron-wake:campaign:v1`.
+Accepted contracts survive reloads with their already-applied reputation cost;
+relaunching starts the surface mission again without charging acceptance twice.
+Settlement clears the active contract before saving, so reloads cannot duplicate
+payment. Surface progress is not saved mid-sortie. Invalid campaign saves reset
+the campaign; unavailable storage supports session-only play with a visible
+notice. Existing `iron-wake:profile:v1` preferences and classic records stay
+intact. Campaign outcomes do not enter the classic operation leaderboard.
+
+![Wayfarer command bridge from the production build](./docs/campaign-bridge.png)
+
+[Phone bridge capture](./docs/campaign-bridge-phone.png) ·
+[Extraction capture](./docs/campaign-extraction.png) ·
+[Contract report](./docs/campaign-report.png) ·
+[Browser validation record](./docs/campaign-validation.json)
+
+Extraction and report captures use temporary browser instrumentation to advance
+ordinary combat controls through the real simulation. The production browser
+checks use the unmodified build for ship travel, contracts, reloads, deployment,
+controller/touch input, legacy mode, training, and storage failure handling.
+
+## Combat and classic operation
 
 The frame hangar shows the selected playable model beside its role, starter,
 handling, and tradeoffs. Each frame comes with an assigned starting weapon;
@@ -11,7 +80,7 @@ three-choice weapon drafts at 2, 5, 9, 14, 20, 27, and 35 kills. The first three
 drops fill the remaining mounts; later drops offer rank upgrades or new weapons
 that explicitly replace a chosen mount. A weapon can reach rank III, with +30%
 base damage per rank. Drafts pause the entire simulation, including artillery,
-and preserve momentum. Each operation rolls new offers; no unlock grind is required.
+and preserve momentum. Each operation rolls new offers; no weapon unlock grind is required.
 
 **Frame Training** uses a standardized Warden and fixed training weapons in a
 separate, unscored nine-drill range: cruise, neutral,
@@ -48,9 +117,9 @@ Their handling and protection remain distinct as the arsenal grows. Integrity
 is a percentage on every frame; armor resistance changes damage received,
 while repair amounts, refits, and existing saved records retain their meanings.
 Frame selection lasts for the current page session; records remain grouped by
-difficulty. No new mode or progression unlock is required.
+difficulty. All frames are available in both campaign sorties and the classic operation.
 
-## The operation
+## Last Transmission
 
 Defend Relay 09 against 39 hostiles across five assaults: **First contact**,
 **Crossfire**, **Hammerfall**, **Breaking point**, and **Iron crown**. The final
@@ -86,7 +155,7 @@ the operation, including during the final clearance period.
 Story, Standard, and Veteran change hostile armor/damage and score multipliers.
 The report records rank, score, kills, field time, relay integrity, projectile
 hit rate, and installed refits. The latest eight reports and permanent best
-result per difficulty are saved locally under `iron-wake:profile:v1`. A run in
+result per difficulty are saved locally under `iron-wake:profile:v1`. A classic run in
 progress is not saved across reloads. Invalid or unavailable storage does not
 prevent play.
 
@@ -166,7 +235,7 @@ Every second elimination drops alternating repair or coolant salvage. Drive
 within 55 units to recover it; full supplies leave it available, and salvage
 expires after 45 seconds.
 
-The industrial yard is deliberately open: painted routes, maintenance pads,
+The classic industrial yard is deliberately open: painted routes, maintenance pads,
 and scenery are visual landmarks, not hidden cover. Tall industry sits outside
 the navigation bounds. Mechs and projectiles use the deterministic 2D ground
 simulation; Three.js and ECSpresso's renderer3D plugin provide the presentation.
@@ -210,7 +279,9 @@ For production validation, `bun run build` followed by `bun run preview` and
 open `games/iron-wake/`. No game-specific build routes or desktop setup are
 required. Run `bun run check` for tests, strict TypeScript, lint, and build.
 
-Meaningful regression coverage includes persistent throttle, swept hits,
+Campaign regression coverage includes seeded map bounds and variation, offensive patrol engagement, all objective/failure/extraction paths, facility weapon targeting, once-only reputation and payout transactions, reload validation, remote boards, and mission terrain disposal.
+
+Existing regression coverage includes persistent throttle, swept hits,
 heat/salvage, four concurrent mounts, guided/unguided trajectories, piercing and area hits, draft freezing/queued rewards/replacement, deterministic complete operations, artillery escape/failure,
 refit freeze/one-time application, upgrade effects, difficulty, projection and
 aiming, gait, model depth, pooled resource disposal, storage corruption and

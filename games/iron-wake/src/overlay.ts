@@ -3,6 +3,7 @@ import { getWeapon } from './arsenal';
 import { mechScale, type Gaits } from './gait';
 import { toScreen } from './projection-3d';
 import { ARENA, distance, getEnemyDefense, type Point, type State, type Unit } from './simulation';
+import { FACILITY_TARGET_ID, EXTRACTION_SECONDS } from './missions';
 
 export interface ScreenRect { left: number; right: number; top: number; bottom: number }
 export interface OverlayOptions {
@@ -45,15 +46,29 @@ export const edgeMarker = function (point: Point, width: number, height: number,
 
 // Match each fitted guidance system's actual acquisition range and aim choice.
 export const targetSolution = function (state: State, target: Unit, aim: Point): { guided: boolean; inRange: boolean } {
+	return solutionFor(state, target, target.id, aim);
+};
+const solutionFor = function (state: State, target: Point, id: number, aim: Point): { guided: boolean; inRange: boolean } {
 	const weapons = state.loadout.map(function (mount) { return getWeapon(mount.weapon); });
 	const range = distance(target, state.player);
+	const structure = state.mission?.structure;
+	const candidates: { point: Point; id: number }[] = state.enemies.filter(function (enemy) { return enemy.hp > 0; }).map(function (enemy) { return { point: enemy, id: enemy.id }; });
+	if (structure && structure.hp > 0) candidates.push({ point: structure, id: FACILITY_TARGET_ID });
 	const guided = weapons.some(function (weapon) {
 		if (weapon.kind !== 'missile' || range > weapon.range) return false;
-		const lock = state.enemies.filter(function (enemy) { return enemy.hp > 0 && distance(enemy, state.player) <= weapon.range; })
-			.reduce<Unit | undefined>(function (nearest, enemy) { return !nearest || distance(enemy, aim) < distance(nearest, aim) ? enemy : nearest; }, undefined);
-		return lock?.id === target.id;
+		const lock = candidates.filter(function (candidate) { return distance(candidate.point, state.player) <= weapon.range; })
+			.reduce<{ point: Point; id: number } | undefined>(function (nearest, candidate) { return !nearest || distance(candidate.point, aim) < distance(nearest.point, aim) ? candidate : nearest; }, undefined);
+		return lock?.id === id;
 	});
 	return { guided, inRange: weapons.some(function (weapon) { return range <= weapon.range; }) };
+};
+
+export const missionNavigation = function (state: State): { point: Point; label: string; color: string } | undefined {
+	const mission = state.mission; if (!mission) return undefined;
+	if (mission.stage === 'extract') return { point: mission.map.extraction, label: 'EXTRACT', color: '#b9f5ca' };
+	const target = mission.contract.kind === 'assassination' ? state.enemies.find(function (enemy) { return enemy.id === mission.targetId; })
+		: mission.contract.kind === 'clearance' ? state.enemies.reduce<Unit | undefined>(function (nearest, enemy) { return !nearest || distance(enemy, state.player) < distance(nearest, state.player) ? enemy : nearest; }, undefined) : undefined;
+	return { point: target ?? mission.structure ?? mission.map.objective, label: mission.contract.kind === 'defend' ? 'DEFEND' : mission.contract.kind === 'demolition' ? 'FACILITY' : mission.contract.kind === 'assassination' ? 'PRIORITY' : 'HOSTILE', color: mission.contract.kind === 'defend' ? '#a3ddd0' : '#ffd199' };
 };
 
 const bracket = function (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, length: number) {
@@ -90,8 +105,10 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 		ctx.fillStyle = '#0b171cdb'; ctx.fillRect(anchor.x - length / 2 - 4, y - fontSize, length + 8, fontSize + 5);
 		ctx.fillStyle = color; ctx.fillText(content, anchor.x, y);
 	};
-	const relay = { x: ARENA.relayX, y: ARENA.relayY };
-	text((options.relayHit ?? 0) > 0 ? 'UPLINK UNDER FIRE' : 'UPLINK / 09', relay, 206, (options.relayHit ?? 0) > 0 || state.relay < 30 ? '#ffac83' : '#aee2d5', 10);
+	const mission = state.mission; const navigation = missionNavigation(state);
+	const relay = mission?.map.objective ?? { x: ARENA.relayX, y: ARENA.relayY };
+	const showRelay = !mission || mission.contract.kind === 'defend';
+	if (showRelay) text((options.relayHit ?? 0) > 0 ? 'UPLINK UNDER FIRE' : mission ? 'DEFEND UPLINK' : 'UPLINK / 09', relay, 206, (options.relayHit ?? 0) > 0 || state.relay < 30 ? '#ffac83' : '#aee2d5', 10);
 	if ((options.armorHit ?? 0) > 0) {
 		const elevation = options.armorHitHeight ?? 124;
 		// Taller frames can fill the view when zoomed in. Keep the entire
@@ -100,9 +117,22 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 		const offset = options.armorHitHeight === undefined ? 0 : Math.max(0, inset - at(state.player, elevation).y) / scale;
 		text('ARMOR HIT', state.player, elevation, '#ffb697', 12, offset);
 	}
-	const relayLabel = at(relay, 196);
-	ctx.fillStyle = '#112329dd'; ctx.fillRect(relayLabel.x - 31, relayLabel.y, 62, 3);
-	ctx.fillStyle = state.relay < 30 ? '#f49769' : '#9bccbc'; ctx.fillRect(relayLabel.x - 31, relayLabel.y, 62 * state.relay / 100, 3);
+	if (showRelay) {
+		const relayLabel = at(relay, 196);
+		ctx.fillStyle = '#112329dd'; ctx.fillRect(relayLabel.x - 31, relayLabel.y, 62, 3);
+		ctx.fillStyle = state.relay < 30 ? '#f49769' : '#9bccbc'; ctx.fillRect(relayLabel.x - 31, relayLabel.y, 62 * state.relay / 100, 3);
+	}
+	const facility = mission?.structure;
+	if (facility) {
+		text(facility.hp > 0 ? `TARGET FACILITY / ${Math.ceil(facility.hp / facility.maxHp * 100)}%` : 'FACILITY DESTROYED', facility, 124, facility.hp > 0 ? '#ffd199' : '#a5b6ac', 11);
+		const label = at(facility, 114);
+		ctx.fillStyle = '#112329dd'; ctx.fillRect(label.x - 42, label.y, 84, 4);
+		ctx.fillStyle = '#e5a778'; ctx.fillRect(label.x - 42, label.y, 84 * Math.max(0, facility.hp / facility.maxHp), 4);
+	}
+	if (mission?.stage === 'extract') {
+		const remaining = Math.max(0, EXTRACTION_SECONDS - mission.extractTime);
+		text(mission.extractTime > 0 ? `LIFT IN ${remaining.toFixed(1)}s · HOLD POSITION` : 'EXTRACTION / ENTER THE GREEN ZONE', mission.map.extraction, 40, '#b9f5ca', 12);
+	}
 	for (const warning of state.warnings) text(warning.commander ? 'COMMAND SIGNAL' : 'INBOUND', warning, 10, '#f3bd80', 10, -20);
 	for (const [index, strike] of state.strikes.entries()) {
 		if (state.strikes.some(function (other, otherIndex) { return otherIndex !== index && distance(other, strike) < 12 && (other.life < strike.life || other.life === strike.life && otherIndex < index); })) continue;
@@ -115,7 +145,8 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 	const target = state.enemies.reduce<State['enemies'][number] | undefined>(function (nearest, enemy) {
 		return !nearest || distance(enemy, aim) < distance(nearest, aim) ? enemy : nearest;
 	}, undefined);
-	const selected = target && distance(target, aim) < 80 ? target : undefined;
+	const selectedFacility = facility && facility.hp > 0 && distance(facility, aim) < 100 && (!target || distance(facility, aim) < distance(target, aim)) ? facility : undefined;
+	const selected = !selectedFacility && target && distance(target, aim) < 80 ? target : undefined;
 	for (const enemy of state.enemies) {
 		const defense = getEnemyDefense(state, enemy);
 		if (enemy.hp >= enemy.maxHp && enemy !== selected && !enemy.commander && !defense.exposed) continue;
@@ -124,7 +155,7 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 		const barWidth = enemy.commander ? options.couchMode ? 100 : 76 : options.couchMode ? 56 : 42;
 		ctx.fillStyle = '#0a151be6'; ctx.fillRect(anchor.x - barWidth / 2 - 1, anchor.y - 1, barWidth + 2, 5);
 		ctx.fillStyle = enemy.commander ? '#f3ad7e' : '#dfaa82'; ctx.fillRect(anchor.x - barWidth / 2, anchor.y, barWidth * Math.max(0, enemy.hp) / enemy.maxHp, 3);
-		if (enemy.commander) text(defense.enraged ? 'IRON CROWN / OVERDRIVE' : 'IRON CROWN', enemy, labelHeight, '#ffd5a5', 11, -(minimumText + 6) / scale);
+		if (enemy.commander) text(mission ? defense.enraged ? 'PRIORITY / OVERDRIVE' : 'PRIORITY TARGET' : defense.enraged ? 'IRON CROWN / OVERDRIVE' : 'IRON CROWN', enemy, labelHeight, '#ffd5a5', 11, -(minimumText + 6) / scale);
 		if (enemy.attack) {
 			const label = defense.exposed ? `EXPOSED ${enemy.attack.remaining.toFixed(1)}s` : 'BARRAGE COMMITTED';
 			text(label, enemy, labelHeight, defense.exposed ? '#adf7d7' : '#ffd5a5', 11, -(enemy.commander ? minimumText * 2 + 15 : minimumText + 6) / scale);
@@ -141,9 +172,15 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 		text(role, selected, 42, '#ffe1aa', 10, 48);
 		text(`${Math.round(distance(selected, state.player))} M / ${solution.guided ? 'GUIDED LOCK' : solution.inRange ? 'IN RANGE' : 'OUT OF RANGE'}`, selected, 42, solution.inRange ? '#ebc184' : '#98a8a7', 8, 48 + (minimumText + 7) / scale);
 	}
+	if (selectedFacility) {
+		const anchor = at(selectedFacility, 45); ctx.strokeStyle = '#f3c37d'; ctx.lineWidth = 1.5;
+		bracket(ctx, anchor.x, anchor.y, 130 * scale, 110 * scale, 12);
+		const solution = solutionFor(state, selectedFacility, FACILITY_TARGET_ID, aim);
+		text(`${Math.round(distance(selectedFacility, state.player))} M / ${solution.guided ? 'GUIDED LOCK' : solution.inRange ? 'IN RANGE' : 'OUT OF RANGE'}`, selectedFacility, 30, '#ebc184', 10, 55);
+	}
 	// A precise sight remains useful when aiming ahead of a moving contact.
 	const cursor = at(aim, 0);
-	ctx.strokeStyle = selected ? '#f6c77c' : '#d9e5d1'; ctx.lineWidth = 1;
+	ctx.strokeStyle = selected || selectedFacility ? '#f6c77c' : '#d9e5d1'; ctx.lineWidth = 1;
 	bracket(ctx, cursor.x, cursor.y, 15, 15, 4);
 	ctx.fillStyle = '#f1e9c7'; ctx.fillRect(cursor.x - 1, cursor.y - 1, 2, 2);
 	const marker = function (point: Point, color: string, label?: string) {
@@ -151,11 +188,17 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 		ctx.save(); ctx.translate(edge.point.x, edge.point.y); ctx.rotate(edge.angle);
 		ctx.fillStyle = '#0b1c23dd'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
 		ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(-4, -4); ctx.lineTo(-2, 0); ctx.lineTo(-4, 4); ctx.closePath(); ctx.fill(); ctx.restore();
-		if (label) { ctx.font = `${minimumText}px monospace`; ctx.textAlign = 'center'; ctx.fillStyle = color; ctx.fillText(label, edge.point.x, edge.point.y + 26); }
+		if (label) {
+			ctx.font = `${minimumText}px monospace`; ctx.textAlign = 'center'; const half = ctx.measureText(label).width / 2;
+			const labelX = Math.max(half + 8, Math.min(width - half - 8, edge.point.x));
+			ctx.fillStyle = '#0b1c23ed'; ctx.fillRect(labelX - half - 3, edge.point.y + 13, half * 2 + 6, minimumText + 5);
+			ctx.fillStyle = color; ctx.fillText(label, labelX, edge.point.y + 26);
+		}
 	};
 	for (const enemy of state.enemies) marker(enemy, enemy.commander ? '#ffd3a3' : '#eead7c');
 	for (const warning of state.warnings) marker(warning, '#d29b66');
-	marker(relay, '#a3ddd0', 'UPLINK');
+	if (navigation) marker(navigation.point, navigation.color, `${navigation.label} ${Math.round(distance(navigation.point, state.player))} M`);
+	else marker(relay, '#a3ddd0', 'UPLINK');
 	if (options.showRadar) {
 		const w = options.couchMode ? 208 : 174; const h = options.couchMode ? 136 : 116; const x = width - w - 26; const y = 112;
 		ctx.fillStyle = '#0c1c22e6'; ctx.fillRect(x - 1, y - 24, w + 2, h + 49);
@@ -167,13 +210,18 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 		ctx.beginPath(); ctx.moveTo(x, y + h / 2); ctx.lineTo(x + w, y + h / 2); ctx.moveTo(x + w / 2, y); ctx.lineTo(x + w / 2, y + h); ctx.stroke();
 		ctx.strokeStyle = '#6c8b8433'; ctx.lineWidth = 1;
 		ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, 20, 0, Math.PI * 2); ctx.stroke();
-		const point = function (value: Point) { return { x: x + value.x / ARENA.width * w, y: y + value.y / ARENA.height * h }; };
+		const bounds = mission?.map ?? ARENA;
+		const point = function (value: Point) { return { x: x + value.x / bounds.width * w, y: y + value.y / bounds.height * h }; };
 		const dot = function (value: Point, color: string, radius: number, outline = false) {
 			const at = point(value); ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 1;
 			ctx.beginPath(); ctx.arc(at.x, at.y, radius, 0, Math.PI * 2); if (outline) ctx.stroke(); else ctx.fill();
 		};
 		ctx.save(); ctx.beginPath(); ctx.rect(x + 1, y + 1, w - 2, h - 2); ctx.clip();
-		dot(relay, '#91c5b8', 4, true);
+		if (showRelay) dot(relay, '#91c5b8', 4, true);
+		if (mission) {
+			dot(mission.map.drop, '#a5b6ac', 3, true);
+			if (navigation) dot(navigation.point, navigation.color, 6, true);
+		}
 		const p = point(state.player); const a = point(aim);
 		ctx.strokeStyle = '#c9d9c04d'; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(a.x, a.y); ctx.stroke();
 		ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(state.player.angle);
@@ -181,7 +229,7 @@ export const drawOverlay = function (ctx: CanvasRenderingContext2D, width: numbe
 		for (const enemy of state.enemies) dot(enemy, enemy.commander ? '#ffd6a7' : '#f2a571', enemy.commander ? 4 : enemy.kind === 'siege' ? 3 : 2);
 		for (const warning of state.warnings) dot(warning, '#e5a46f', 4, true);
 		for (const salvage of state.salvage) dot(salvage, salvage.kind === 'repair' ? '#83bba2' : '#86b6c1', 1.5);
-		for (const strike of state.strikes) dot(strike, '#ff8154', strike.radius / ARENA.width * w, true);
+		for (const strike of state.strikes) dot(strike, '#ff8154', strike.radius / bounds.width * w, true);
 		ctx.restore();
 		ctx.font = `${options.couchMode ? 14 : 11}px monospace`; ctx.textAlign = 'left'; ctx.fillStyle = '#91a9a3'; ctx.fillText(`${state.enemies.length.toString().padStart(2, '0')} CONTACTS`, x + 9, y + h + 15);
 	}

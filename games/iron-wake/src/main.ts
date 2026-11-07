@@ -2,7 +2,7 @@ import { DRAFT_MILESTONES, getWeapon, type WeaponId } from './arsenal';
 import { FRAMES, getFrame, type FrameId } from './frames';
 import { frameCard, MOUNTS, mountSummary, rankLabel, weaponCard } from './loadout-ui';
 import { mountGame } from '../../../shared/lifecycle';
-import { applyRefit, chooseWeapon, createState, distance, getOperationReport, step, type Controls, type Point } from './simulation';
+import { applyRefit, chooseWeapon, createMissionState, createState, distance, getOperationReport, step, type Controls, type Point } from './simulation';
 import { DIFFICULTIES, getWaveDefinition, REFITS, TOTAL_HOSTILES, WAVES } from './operation';
 import { createPresentation } from './presentation';
 import { advanceGaits, createGaits } from './gait';
@@ -13,6 +13,10 @@ import { createGamepadInput, type PadInput } from './gamepad';
 import { createControllerFeedback } from './controller-feedback';
 import { createTraining, stepTraining, trainingCopy, type Training } from './training';
 import { addOperationRecord, isDifficulty, readProfile, saveProfile } from './profile';
+import { abandonContract, acceptContract, getFaction, getPlanet, readCampaign, saveCampaign, settleContract, travelTo } from './campaign';
+import { MISSION_NAMES, renderBridge } from './campaign-ui';
+import type { PlanetId } from './campaign-types';
+import { missionObjective } from './missions';
 
 const element = function (id: string): HTMLElement {
 	const value = document.getElementById(id);
@@ -31,7 +35,7 @@ const bindings = new Map([
 	['Digit1', 'mount-0'], ['Digit2', 'mount-1'], ['Digit3', 'mount-2'], ['Digit4', 'mount-3'],
 ]);
 const formatTime = function (time: number) { return `${Math.floor(time / 60)}:${Math.floor(time % 60).toString().padStart(2, '0')}`; };
-type Screen = 'brief' | 'playing' | 'pause-panel' | 'refit' | 'result' | 'training-result' | 'loadout' | 'requisition';
+type Screen = 'bridge' | 'jump' | 'brief' | 'playing' | 'pause-panel' | 'refit' | 'result' | 'training-result' | 'loadout' | 'requisition';
 type Auxiliary = 'settings' | 'handbook' | 'confirm';
 const shutdown = await mountGame('game', async function (container) {
 	const canvas = container.querySelector('canvas');
@@ -42,6 +46,12 @@ const shutdown = await mountGame('game', async function (container) {
 	const padInput = createGamepadInput();
 	const feedback = createControllerFeedback();
 	let profile = readProfile();
+	let campaign = readCampaign();
+	let campaignSaved = saveCampaign(campaign);
+	let campaignMode = true;
+	let destination: PlanetId = campaign.planetId;
+	let selectedContract: string | undefined;
+	let jumpUntil = 0;
 	const abort = new AbortController(); const listenerOptions = { signal: abort.signal };
 	const keys = new Set<string>(); const pending = new Set<string>(); const held = new Map<number, string>();
 	const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -62,7 +72,7 @@ const shutdown = await mountGame('game', async function (container) {
 	});
 	element('weapon-bank').replaceChildren(...weaponButtons);
 	let training: Training | undefined;
-	let screen: Screen = 'brief'; let auxiliary: Auxiliary | undefined;
+	let screen: Screen = 'bridge'; let auxiliary: Auxiliary | undefined;
 	let selectedFrame: FrameId = 'warden';
 	const mouseButtons = new Set<number>();
 	const consumedMouseButtons = new Set<number>();
@@ -116,9 +126,13 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const syncScreen = function (focus = true) {
 		screenRevision++;
-		element('reset').textContent = training ? 'RESTART TRAINING' : 'RESTART OPERATION';
+		element('reset').textContent = training ? 'RESTART TRAINING' : state.mission ? 'RELAUNCH SORTIE' : 'RESTART OPERATION';
+		element('leave').textContent = state.mission ? 'ABORT CONTRACT & RETURN TO SHIP' : campaignMode ? 'RETURN TO SHIP' : 'RETURN TO BRIEFING';
+		element('loadout-back').textContent = campaignMode ? '← BACK TO SHIP' : '← BACK TO BRIEFING';
+		element('training-deploy').textContent = campaignMode ? campaign.active ? 'CHOOSE CONTRACT FRAME →' : 'RETURN TO SHIP →' : 'CHOOSE OPERATION FRAME →';
+		element('training-briefing').textContent = campaignMode ? 'RETURN TO SHIP' : 'RETURN TO BRIEFING';
 		element('pause-copy').textContent = training ? 'Training is paused. Resume the drill or return to the briefing.' : 'Your throttle and operation are preserved.';
-		for (const id of ['brief', 'pause-panel', 'refit', 'result', 'training-result', 'settings', 'handbook', 'confirm', 'loadout', 'requisition']) {
+		for (const id of ['bridge', 'jump', 'brief', 'pause-panel', 'refit', 'result', 'training-result', 'settings', 'handbook', 'confirm', 'loadout', 'requisition']) {
 			const node = element(id); const visible = auxiliary ? id === auxiliary : id === screen;
 			node.hidden = !visible; node.inert = !visible;
 		}
@@ -129,7 +143,7 @@ const shutdown = await mountGame('game', async function (container) {
 		resetInput(); accumulator = 0; lastHud = 0;
 		if (!focus) return;
 		const root = menu();
-		const initial = auxiliary === 'settings' ? element('master-volume') : auxiliary === 'handbook' ? element('handbook') : auxiliary === 'confirm' ? element('confirm-cancel') : screen === 'brief' ? element('start') : screen === 'pause-panel' ? element('resume') : screen === 'result' ? element('restart') : root?.querySelector<HTMLElement>('button');
+		const initial = auxiliary === 'settings' ? element('master-volume') : auxiliary === 'handbook' ? element('handbook') : auxiliary === 'confirm' ? element('confirm-cancel') : screen === 'bridge' ? element('bridge') : screen === 'brief' ? element('start') : screen === 'pause-panel' ? element('resume') : screen === 'result' ? element('restart') : root?.querySelector<HTMLElement>('button');
 		if (root) (root.querySelector<HTMLElement>('.frame-list') ?? root).scrollTop = 0;
 		(initial ?? canvas).focus({ preventScroll: true });
 		if (initial && auxiliary !== 'handbook') initial.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -138,15 +152,16 @@ const shutdown = await mountGame('game', async function (container) {
 		const records = profile.bests.filter(function (record) { return record.difficulty === profile.settings.difficulty; });
 		const best = [...records].sort(function (a, b) { return b.score - a.score; })[0];
 		element('record-summary').textContent = best ? `${profile.settings.difficulty.toUpperCase()} BEST · ${best.score.toLocaleString()} · RANK ${best.rank} · ${best.won ? 'SIGNAL HELD' : `ASSAULT ${best.wave}/5`}` : 'NO OPERATIONS RECORDED';
-		for (const input of container.querySelectorAll<HTMLInputElement>('input[name="difficulty"]')) input.checked = input.value === profile.settings.difficulty;
+		for (const input of container.querySelectorAll<HTMLInputElement>('input[data-difficulty]')) input.checked = input.value === profile.settings.difficulty;
 		element('difficulty-copy').textContent = DIFFICULTIES.find(function (difficulty) { return difficulty.id === profile.settings.difficulty; })?.description ?? '';
 	};
 	const start = function () {
 		if (contextLost) return;
+		if (campaignMode && !campaign.active) { toBridge(); return; }
 		presentation.resetZoom();
 		training = undefined;
-		state = createState({ difficulty: profile.settings.difficulty, frame: selectedFrame, seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1 }); gaits = createGaits(state); screen = 'playing'; auxiliary = undefined;
-		aim = { x: 900, y: 450 }; pointer = undefined; message = `${getFrame(selectedFrame).name} ONLINE. PROTECT RELAY 09.`; messageUntil = 5; tipDismissed = false;
+		state = campaignMode && campaign.active ? createMissionState(campaign.active, { difficulty: profile.settings.difficulty, frame: selectedFrame }) : createState({ difficulty: profile.settings.difficulty, frame: selectedFrame, seed: crypto.getRandomValues(new Uint32Array(1))[0] ?? 1 }); gaits = createGaits(state); screen = 'playing'; auxiliary = undefined;
+		aim = state.mission ? { ...state.mission.map.objective } : { x: 900, y: 450 }; pointer = undefined; message = state.mission ? `${getFrame(selectedFrame).name.toUpperCase()} ON SURFACE · ${MISSION_NAMES[state.mission.contract.kind].toUpperCase()}` : `${getFrame(selectedFrame).name} ONLINE. PROTECT RELAY 09.`; messageUntil = 5; tipDismissed = false;
 		terminalUntil = 0; audio.reset(); syncScreen(); unlockSound();
 	};
 	const startTraining = function () {
@@ -158,6 +173,7 @@ const shutdown = await mountGame('game', async function (container) {
 		audio.reset(); syncScreen(); unlockSound();
 	};
 	const toBriefing = function () {
+		if (campaignMode) { toBridge(); return; }
 		presentation.resetZoom();
 		training = undefined;
 		screen = 'brief'; auxiliary = undefined; state = createState({ difficulty: profile.settings.difficulty, frame: selectedFrame }); gaits = createGaits(state);
@@ -177,7 +193,42 @@ const shutdown = await mountGame('game', async function (container) {
 		if (returnFocus?.isConnected && !returnFocus.closest('[hidden], [inert]')) returnFocus.focus({ preventScroll: true });
 		else syncScreen();
 	};
-	const confirm = function (action: () => void, label: string) { confirmedAction = action; element('confirm-action').textContent = label; showAuxiliary('confirm'); };
+	const confirm = function (action: () => void, label: string, copy = 'The current operation will be lost. Your recorded results and settings will be kept.', title = 'ABANDON THIS RUN?') {
+		confirmedAction = action; element('confirm-action').textContent = label; element('confirm-copy').textContent = copy; element('confirm-title').textContent = title; showAuxiliary('confirm');
+	};
+	const persistCampaign = function () { campaignSaved = saveCampaign(campaign); };
+	const refreshBridge = function () {
+		renderBridge(element('bridge'), campaign, destination, selectedContract, campaignSaved, {
+			selectPlanet: function (id) { if (campaign.active) return; destination = id; selectedContract = undefined; refreshBridge(); },
+			selectContract: function (id) { selectedContract = id; refreshBridge(); },
+			travel: function () {
+				if (screen !== 'bridge' || auxiliary || contextLost) return;
+				const origin = getPlanet(campaign.planetId); const next = travelTo(campaign, destination); if (next === campaign) return;
+				campaign = next; persistCampaign();
+				element('jump-destination').textContent = getPlanet(campaign.planetId).name.toUpperCase();
+				element('jump-copy').textContent = `${origin.name} → ${getPlanet(campaign.planetId).name} · DAY ${campaign.day} · APPROACHING ORBIT`;
+				screen = 'jump'; jumpUntil = performance.now() + (motionReduced() ? 350 : 2200); syncScreen();
+				element('jump').focus({ preventScroll: true });
+			},
+			accept: function (contract) {
+				if (screen !== 'bridge' || auxiliary || destination !== campaign.planetId) return;
+				const next = acceptContract(campaign, contract.id); if (next === campaign) return;
+				campaign = next; persistCampaign(); refreshBridge(); syncScreen();
+				element('bridge-deploy').focus({ preventScroll: true }); element('bridge-deploy').scrollIntoView({ block: 'nearest' });
+			},
+			deploy: openLoadout,
+			abandon: function () { confirm(function () { campaign = abandonContract(campaign); persistCampaign(); toBridge(); }, 'ABORT & RETURN TO SHIP', 'No payment or employer favor will be earned. The opposition reputation penalty from acceptance remains.', 'ABORT THIS CONTRACT?'); },
+			training: startTraining,
+			legacy: function () { campaignMode = false; toBriefing(); },
+			settings: function () { showAuxiliary('settings'); },
+			handbook: function () { showAuxiliary('handbook'); },
+		});
+	};
+	const toBridge = function () {
+		campaignMode = true; training = undefined; screen = 'bridge'; auxiliary = undefined; destination = campaign.planetId; selectedContract = undefined;
+		state = createState({ difficulty: profile.settings.difficulty, frame: selectedFrame }); gaits = createGaits(state);
+		pointer = undefined; presentation.resetZoom(); audio.reset(); refreshBridge(); syncScreen();
+	};
 	const frameCards = FRAMES.map(function (definition) {
 		return frameCard(definition, function () {
 			if (screen !== 'loadout' || auxiliary) return;
@@ -202,6 +253,7 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	element('frame-cards').replaceChildren(...frameCards); updateFrame();
 	const openLoadout = function () {
+		if (campaignMode && !campaign.active) { toBridge(); return; }
 		presentation.resetZoom();
 		state = createState({ difficulty: profile.settings.difficulty, frame: selectedFrame }); gaits = createGaits(state);
 		screen = 'loadout'; auxiliary = undefined; training = undefined; syncScreen();
@@ -236,10 +288,11 @@ const shutdown = await mountGame('game', async function (container) {
 	const listen = function (id: string, callback: () => void) { element(id).addEventListener('click', callback, listenerOptions); };
 	listen('deploy-loadout', start); listen('loadout-back', toBriefing); listen('replace-back', showDraft);
 	listen('training', startTraining); listen('training-deploy', openLoadout); listen('training-briefing', toBriefing);
-	listen('start', openLoadout); listen('restart', openLoadout); listen('resume', function () { setPaused(false); });
+	listen('start', openLoadout); listen('restart', function () { if (campaignMode) toBridge(); else openLoadout(); });
+	listen('brief-bridge', toBridge); listen('resume', function () { setPaused(false); });
 	listen('pause', function () { setPaused(true); });
-	listen('reset', function () { confirm(training ? startTraining : openLoadout, training ? 'RESTART TRAINING' : 'RESTART OPERATION'); });
-	listen('leave', function () { confirm(toBriefing, 'RETURN TO BRIEFING'); });
+	listen('reset', function () { if (state.mission) confirm(openLoadout, 'RELAUNCH SORTIE', 'Return to the frame bay and relaunch this accepted contract. Surface progress resets; the original acceptance penalty is retained without a second charge.', 'RELAUNCH THIS SORTIE?'); else confirm(training ? startTraining : openLoadout, training ? 'RESTART TRAINING' : 'RESTART OPERATION'); });
+	listen('leave', function () { if (state.mission) confirm(function () { campaign = abandonContract(campaign); persistCampaign(); toBridge(); }, 'ABORT & RETURN TO SHIP', 'No payment or employer favor will be earned. The opposition reputation penalty from acceptance remains.', 'ABORT THIS CONTRACT?'); else confirm(toBriefing, campaignMode ? 'RETURN TO SHIP' : 'RETURN TO BRIEFING'); });
 	listen('result-briefing', toBriefing);
 	listen('confirm-action', function () { const action = confirmedAction; confirmedAction = undefined; action?.(); });
 	listen('confirm-cancel', closeAuxiliary);
@@ -252,7 +305,7 @@ const shutdown = await mountGame('game', async function (container) {
 		else { muted = !muted; audio.setMuted(muted); }
 		canvas.focus({ preventScroll: true });
 	});
-	for (const input of container.querySelectorAll<HTMLInputElement>('input[name="difficulty"]')) input.addEventListener('change', function () {
+	for (const input of container.querySelectorAll<HTMLInputElement>('input[data-difficulty]')) input.addEventListener('change', function () {
 		if (!isDifficulty(input.value)) return;
 		profile.settings.difficulty = input.value; save(); updateRecordSummary();
 	}, listenerOptions);
@@ -299,6 +352,23 @@ const shutdown = await mountGame('game', async function (container) {
 		const stats = [[`${report.kills}/${TOTAL_HOSTILES}`, 'HOSTILES'], [formatTime(report.time), 'FIELD TIME'], [`${Math.ceil(report.relay)}%`, 'RELAY'], [`${report.accuracy}%`, 'BALLISTIC HITS']];
 		element('result-stats').replaceChildren(...stats.map(function ([value, label]) { const node = document.createElement('div'); const strong = document.createElement('b'); const small = document.createElement('small'); strong.textContent = value ?? ''; small.textContent = label ?? ''; node.append(strong, small); return node; }));
 		element('result-upgrades').textContent = `LOADOUT · ${state.loadout.map(function (mount) { return `${getWeapon(mount.weapon).name} ${rankLabel(mount.level)}`; }).join(' / ')} · REFITS · ARSENAL ${state.upgrades.arsenal} / COOLING ${state.upgrades.cooling} / BASTION ${state.upgrades.bastion}`;
+		element('restart').textContent = state.mission ? 'RETURN TO SHIP →' : 'DEPLOY AGAIN ↗';
+		element('result-briefing').hidden = Boolean(state.mission);
+		if (state.mission) {
+			const contract = state.mission.contract;
+			campaign = settleContract(campaign, won); persistCampaign();
+			element('result-title').textContent = won ? 'CONTRACT COMPLETE.' : 'CONTRACT FAILED.';
+			element('result-copy').textContent = won ? `${getPlanet(contract.planetId).name} extraction complete. ${getFaction(contract.employer).name} has confirmed the objective and released payment.` : `The sortie was lost. No payment or employer favor was earned. The acceptance penalty with ${getFaction(contract.opponent).name} remains.`;
+			element('result-score').textContent = `${campaign.lastResult?.payout.toLocaleString() ?? '0'} CR`;
+			element('result-rank').textContent = won ? '✓' : '×';
+			const heading = element('result-score').previousElementSibling; if (heading) heading.textContent = 'CONTRACT PAYMENT';
+			const missionStats = [[String(report.kills), 'ELIMINATED'], [formatTime(report.time), 'FIELD TIME'], [`${report.armor}%`, 'FRAME INTEGRITY'], [`+${campaign.lastResult?.favor ?? 0}`, 'EMPLOYER FAVOR']];
+			element('result-stats').replaceChildren(...missionStats.map(function ([value, label]) { const node = document.createElement('div'); const strong = document.createElement('b'); const small = document.createElement('small'); strong.textContent = value ?? ''; small.textContent = label ?? ''; node.append(strong, small); return node; }));
+			element('result-upgrades').textContent = `OPPOSITION · ${getFaction(contract.opponent).name}: −${contract.hostility} applied on acceptance. Current standing: ${campaign.reputation[contract.opponent]}.`;
+			element('record-feedback').textContent = campaignSaved ? 'CAMPAIGN SAVED ON THIS DEVICE' : 'STORAGE UNAVAILABLE · CAMPAIGN CONTINUES FOR THIS SESSION';
+			syncScreen(); return;
+		}
+		const scoreHeading = element('result-score').previousElementSibling; if (scoreHeading) scoreHeading.textContent = 'OPERATION SCORE';
 		const oldBest = Math.max(0, ...profile.bests.filter(function (record) { return record.difficulty === state.difficulty; }).map(function (record) { return record.score; }));
 		profile = addOperationRecord(profile, { difficulty: state.difficulty, won, score: report.score, rank: report.rank, kills: report.kills, wave: state.wave, time: report.time, relay: report.relay });
 		const saved = saveProfile(profile);
@@ -382,6 +452,10 @@ const shutdown = await mountGame('game', async function (container) {
 		const p = state.player;
 		ui.phase.textContent = `${String(state.wave).padStart(2, '0')} / ${getWaveDefinition(state.wave).name.toUpperCase()}`;
 		ui.status.textContent = state.intermission > 0 ? 'ASSAULT CLEAR · SECURING THE YARD' : `${state.enemies.length} ACTIVE · ${state.warnings.length} INBOUND · ${state.kills}/${TOTAL_HOSTILES} ELIMINATED`;
+		element('mission-name').textContent = state.mission ? `${getPlanet(state.mission.contract.planetId).name.toUpperCase()} / ${getFaction(state.mission.contract.employer).shortName}` : 'LAST TRANSMISSION';
+		element('relay-readout').hidden = Boolean(state.mission && state.mission.contract.kind !== 'defend');
+		element('relay-name').textContent = state.mission ? 'CONTRACT RELAY' : 'RELAY 09';
+		if (state.mission) { ui.phase.textContent = state.mission.stage === 'extract' ? 'OBJECTIVE COMPLETE / EXTRACT' : MISSION_NAMES[state.mission.contract.kind].toUpperCase(); ui.status.textContent = missionObjective(state); }
 		element('training-guide').hidden = !training || screen !== 'playing';
 		if (training) {
 			const copy = trainingCopy(training, inputMode === 'gamepad');
@@ -427,13 +501,14 @@ const shutdown = await mountGame('game', async function (container) {
 		if (element('audio-status').textContent !== audioStatus) element('audio-status').textContent = audioStatus;
 	};
 	const audioFrame = function (now: number) {
-		const combat = playing(); const audibleMenu = screen === 'brief' || screen === 'loadout' || screen === 'requisition' || screen === 'refit' || screen === 'training-result' || (screen === 'result' && now < terminalUntil + 30000);
+		const combat = playing(); const audibleMenu = screen === 'jump' || screen === 'bridge' || screen === 'brief' || screen === 'loadout' || screen === 'requisition' || screen === 'refit' || screen === 'training-result' || (screen === 'result' && now < terminalUntil + 30000);
 		return { speed: combat ? state.player.speed : 0, laser: combat && !!state.beam, heat: state.player.heat,
 			active: !contextLost && focused && !document.hidden && (combat || audibleMenu), uiActive: !contextLost && focused && !document.hidden,
-			phase: screen === 'brief' || screen === 'loadout' ? 'briefing' as const : screen === 'refit' || screen === 'requisition' || screen === 'training-result' ? 'refit' as const : screen === 'result' ? 'result' as const : 'combat' as const,
+			phase: screen === 'jump' || screen === 'bridge' || screen === 'brief' || screen === 'loadout' ? 'briefing' as const : screen === 'refit' || screen === 'requisition' || screen === 'training-result' ? 'refit' as const : screen === 'result' ? 'result' as const : 'combat' as const,
 			intensity: Math.min(1, state.enemies.length / 5 + (state.wave - 1) * 0.08), danger: Math.max(0, 1 - Math.min(state.player.hp, state.relay) / 50), victory: state.outcome === 'won' };
 	};
 	const tick = function (now: number) {
+		if (screen === 'jump' && focused && !document.hidden && now >= jumpUntil) toBridge();
 		const revisionAtFrame = screenRevision;
 		const elapsed = previous ? Math.min((now - previous) / 1000, 0.1) : 0; previous = now;
 		const rect = canvas.getBoundingClientRect(); const width = rect.width; const height = rect.height;
@@ -475,12 +550,15 @@ const shutdown = await mountGame('game', async function (container) {
 				const origin = presentation.toScreen(state.player); const length = Math.hypot(pad.aimX, pad.aimY);
 				const projected = presentation.toGround({ x: origin.x + pad.aimX / length * 380, y: origin.y + pad.aimY / length * 380 });
 				if (projected) aim = projected;
-				const targets = state.enemies.map(function (enemy) { const at = presentation.toScreen(enemy); const dx = at.x - origin.x; const dy = at.y - origin.y; return { enemy, alignment: (dx * pad.aimX + dy * pad.aimY) / Math.max(1, Math.hypot(dx, dy) * length) }; }).filter(function (target) { return target.alignment > 0.975 && distance(target.enemy, state.player) < 850; }).sort(function (a, b) { return b.alignment - a.alignment; });
+				const facility = state.mission?.structure;
+				const aimTargets = [...state.enemies, ...(facility && facility.hp > 0 ? [facility] : [])];
+				const targets = aimTargets.map(function (enemy) { const at = presentation.toScreen(enemy); const dx = at.x - origin.x; const dy = at.y - origin.y; return { enemy, alignment: (dx * pad.aimX + dy * pad.aimY) / Math.max(1, Math.hypot(dx, dy) * length) }; }).filter(function (target) { return target.alignment > 0.975 && distance(target.enemy, state.player) < 850; }).sort(function (a, b) { return b.alignment - a.alignment; });
 				const target = targets[0]; if (target) aim = { x: target.enemy.x, y: target.enemy.y };
 			} else if (pointer && aimMode === 'pointer') {
 				aim = presentation.toGround(pointer) ?? aim;
 				const cursor = pointer;
-				const picked = [...state.enemies].sort(function (a, b) { return distance(presentation.toScreen(a, 45), cursor) - distance(presentation.toScreen(b, 45), cursor); })[0];
+				const facility = state.mission?.structure;
+				const picked = [...state.enemies, ...(facility && facility.hp > 0 ? [facility] : [])].sort(function (a, b) { return distance(presentation.toScreen(a, 45), cursor) - distance(presentation.toScreen(b, 45), cursor); })[0];
 				if (picked && distance(presentation.toScreen(picked, 45), cursor) < 42 * viewScale(width, height)) aim = { x: picked.x, y: picked.y };
 			}
 			const makeInput = function (): Controls { return { drive: Math.max(-1, Math.min(1, Number(active('forward')) - Number(active('back')) + pad.drive)), stop: active('stop') || pad.stop, turn: Math.max(-1, Math.min(1, Number(active('right')) - Number(active('left')) + pad.turn)), aim, fire: [active('mount-0') || pad.fire[0], active('mount-1') || pad.fire[1], active('mount-2') || pad.fire[2], active('mount-3') || pad.fire[3]], coolant: active('coolant') || pad.coolant }; };
@@ -488,6 +566,7 @@ const shutdown = await mountGame('game', async function (container) {
 			while (accumulator >= 1 / 60 && playing()) {
 				const previousGaits = gaits;
 				const previousStage = training?.stage;
+				const previousMissionStage = state.mission?.stage;
 				if (training) stepTraining(training, makeInput(), 1 / 60); else step(state, makeInput(), 1 / 60);
 				gaits = training?.stage === 'evade' && previousStage !== 'evade' ? createGaits(state) : advanceGaits(gaits, state);
 				pending.clear(); accumulator -= 1 / 60;
@@ -496,6 +575,7 @@ const shutdown = await mountGame('game', async function (container) {
 				feedback.play(state.events, now);
 				for (const index of [0, 1] as const) if (previousGaits.player.feet[index].lift > 0 && gaits.player.feet[index].lift === 0) audio.footstep(index === 0 ? -1 : 1);
 				if (state.events.includes('pickup')) { message = 'SALVAGE RECOVERED'; messageUntil = state.time + 2.5; }
+				if (state.mission?.stage === 'extract' && previousMissionStage !== 'extract') { message = 'OBJECTIVE COMPLETE · REACH EXTRACTION AND HOLD FOR 3 SECONDS'; messageUntil = state.time + 7; }
 				if (state.events.includes('wave')) { message = getWaveDefinition(state.wave).briefing.toUpperCase(); messageUntil = state.time + 5; }
 				if (state.events.includes('coolant')) { message = 'COOLANT PURGE / REACTOR STABILIZING'; messageUntil = state.time + 2; }
 				if (training?.stage === 'complete') { screen = 'training-result'; syncScreen(); }
@@ -503,11 +583,11 @@ const shutdown = await mountGame('game', async function (container) {
 			}
 		}
 		audio.update(audioFrame(now));
-		if (!contextLost) presentation.render(state, aim, gaits, motionReduced(), screen === 'brief' || screen === 'loadout', hudObstructions, inputMode === 'gamepad' || profile.settings.couchUI, screen === 'loadout');
+		if (!contextLost && screen !== 'bridge' && screen !== 'jump') presentation.render(state, aim, gaits, motionReduced(), screen === 'brief' || screen === 'loadout', hudObstructions, inputMode === 'gamepad' || profile.settings.couchUI, screen === 'loadout');
 		if (now - lastHud > 80 || lastHud === 0) { updateHud(); lastHud = now; }
 		frame = requestAnimationFrame(tick);
 	};
-	updateSettings(); updateRecordSummary(); syncScreen(); frame = requestAnimationFrame(tick);
+	updateSettings(); updateRecordSummary(); refreshBridge(); syncScreen(); frame = requestAnimationFrame(tick);
 	return async function () { cancelAnimationFrame(frame); abort.abort(); resetInput(); padInput.reset(); await feedback.dispose(); try { await audio.dispose(); } finally { await presentation.dispose(); } };
 });
 if (import.meta.hot) import.meta.hot.dispose(shutdown);

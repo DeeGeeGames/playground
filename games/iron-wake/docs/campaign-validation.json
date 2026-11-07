@@ -1,0 +1,85 @@
+{
+  "production_browser": {
+    "results": [
+      {
+        "remoteArrivalBoards": "matched all three jumps"
+      },
+      {
+        "difficulty": "distinct groups synchronize",
+        "legacy": "launch and return",
+        "training": "launch and return to ship"
+      },
+      {
+        "controller": "claim consumed; accept/frame/drop; persistent throttle; disconnect pause; explicit recovery"
+      },
+      {
+        "touch": "contract/frame/drop; throttle/stop; abort"
+      },
+      {
+        "storageUnavailable": "visible notice, playable"
+      }
+    ],
+    "errors": []
+  },
+  "instrumented_browser": {
+    "method": "Temporary Bun onLoad injection exposes the real main.ts closure, advances ordinary Controls through step at 60 Hz, and invokes the existing draft/result presentation transitions. Acceptance, travel, deployment, weapon draft choices, return to ship and reload use real DOM interactions. Initial saves are seeded fixtures. No shipping source modifications, direct wins, health edits, campaign writes after fixture initialization, or settlement replacement.",
+    "outcomes": [
+      {
+        "kind": "defend",
+        "planet": "meridian",
+        "outcome": "won",
+        "time": 130.02,
+        "payout": 1200,
+        "favor": 8,
+        "legacyProfileUnchanged": true,
+        "reloadNoDuplicatePayment": true
+      },
+      {
+        "kind": "demolition",
+        "planet": "cinder",
+        "outcome": "won",
+        "time": 45.97,
+        "payout": 1400,
+        "favor": 8,
+        "legacyProfileUnchanged": true,
+        "reloadNoDuplicatePayment": true
+      },
+      {
+        "kind": "assassination",
+        "planet": "borealis",
+        "outcome": "won",
+        "time": 57.4,
+        "payout": 1700,
+        "favor": 8,
+        "legacyProfileUnchanged": true,
+        "reloadNoDuplicatePayment": true
+      },
+      {
+        "kind": "clearance",
+        "planet": "meridian",
+        "outcome": "won",
+        "time": 61.92,
+        "payout": 1600,
+        "favor": 8,
+        "legacyProfileUnchanged": true,
+        "reloadNoDuplicatePayment": true
+      },
+      {
+        "kind": "defend",
+        "planet": "cinder",
+        "outcome": "lost",
+        "time": 39.6,
+        "payout": 0,
+        "favor": 0,
+        "legacyProfileUnchanged": true,
+        "reloadNoDuplicatePayment": true
+      }
+    ]
+  },
+  "unmeasured": [
+    "Physical gamepad and touch feel",
+    "Hardware GPU performance",
+    "Human difficulty and balance acceptance",
+    "Speaker and headphone audio quality"
+  ]
+}
