@@ -1,94 +1,16 @@
 <!doctype html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-	<meta name="theme-color" content="#10191d">
-	<meta name="description" content="Command a mercenary dropship, choose faction contracts across three planets, and deploy your combat frame into varied surface missions.">
-	<title>Iron Wake · Frontier Company</title>
-	<link rel="stylesheet" href="./src/style.css">
-	<link rel="stylesheet" href="./src/campaign.css">
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="description" content="Iron Wake is now Heavy Rig. Play the standalone mech combat campaign.">
+	<title>Iron Wake is now Heavy Rig</title>
+	<link rel="canonical" href="https://heavyrig.deegeegames.com/">
+	<script type="module" src="./redirect.ts"></script>
 </head>
 <body>
-<main id="game" class="menu-open">
-	<canvas id="battlefield" aria-label="Iron Wake battlefield. W and S set throttle, A and D steer, X stops. Mouse aims; wheel zooms. Left, right, middle and thumb buttons fire mounts 1 to 4. Hold 1 to 4 on the keyboard. V vents coolant. Escape pauses."></canvas>
-	<div class="screen-grain" aria-hidden="true"></div>
-	<div id="hud" inert>
-		<header class="mission-bar">
-			<div class="mission-heading"><span class="insignia" aria-hidden="true">IW</span><div><span class="eyebrow" id="mission-name">LAST TRANSMISSION</span><b id="phase">01 / FIRST CONTACT</b><span id="status">Protect Relay 09</span></div></div>
-			<div class="system-buttons"><span id="input-mode">KB / MOUSE</span><button id="sound" aria-label="Mute sound" aria-pressed="false">SOUND ON</button><button id="pause">PAUSE <kbd>Esc</kbd></button></div>
-		</header>
-		<div id="training-guide" class="training-guide" hidden><span id="training-progress" class="eyebrow"></span><b id="training-title"></b><p id="training-copy"></p><small>SAFE TRAINING · PAUSE TO EXIT</small></div>
-		<div id="message" class="field-message" role="status" aria-live="polite"></div>
-		<div class="left-instruments">
-			<div class="relay-readout" id="relay-readout"><span class="signal-icon" aria-hidden="true">◈</span><div><span class="eyebrow" id="relay-name">RELAY 09</span><b id="relay-value">100%</b><div class="track"><i id="relay-fill"></i></div></div></div>
-			<div class="frame-readout"><div class="readout-heading"><span class="eyebrow">FRAME INTEGRITY</span><strong id="armor-value">100%</strong></div><div class="track armor-track"><i id="armor-fill"></i></div>
-				<div class="heat-heading"><span>REACTOR</span><b id="heat-value">0%</b></div><div class="track heat-track"><i id="heat-fill"></i></div>
-				<div class="drive-heading"><span>DRIVE <b id="drive-value">NEUTRAL</b></span><span id="speed-value">SPD 0%</span></div><div class="throttle-track"><span></span><i id="throttle-fill"></i></div>
-			</div>
-		</div>
-		<div class="weapon-console">
-			<div class="weapon-console-heading"><span class="eyebrow">FIRE CONTROL</span><span id="weapon-hint">HOLD ANY MOUNT TO FIRE</span></div>
-			<div class="weapon-bank" id="weapon-bank"></div>
-			<div class="draft-progress"><span id="draft-progress-label">NEXT DROP · 0 / 2 ELIMINATIONS</span><div class="track"><i id="draft-progress-fill"></i></div></div>
-			<button id="coolant" class="coolant-button" data-control="coolant"><span>VENT COOLANT <kbd>V</kbd></span><b id="coolant-value">2 CHARGES</b></button>
-		</div>
-		<div id="pilot-hint" class="pilot-hint"><span id="hint-copy"></span><button id="dismiss-hint" aria-label="Dismiss piloting tip">×</button></div>
-		<nav id="touch" aria-label="Touch driving controls"><button data-control="left" aria-label="Turn hull left">↶</button><button data-control="forward" aria-label="Increase persistent throttle">＋</button><button data-control="right" aria-label="Turn hull right">↷</button><button data-control="back" aria-label="Decrease persistent throttle">−</button><button data-control="stop">STOP</button></nav>
-	</div>
-	<section id="bridge" class="bridge-screen menu-surface" tabindex="-1" aria-label="Wayfarer command bridge"></section>
-	<section id="jump" class="jump-panel menu-surface" aria-label="Ship jump in progress" tabindex="-1" hidden><span class="eyebrow">IWV WAYFARER / JUMP TRANSIT</span><h2 id="jump-destination"></h2><div class="jump-route" aria-hidden="true"><span class="jump-ship">➤</span></div><p id="jump-copy" role="status"></p></section>
-	<section id="brief" class="brief-screen menu-surface" aria-labelledby="game-title" hidden>
-		<div class="brief-top"><a href="../../" class="back-link">← DEEGEE GAMES</a><span>PLAYABLE DEMO / 01</span></div>
-		<div class="brief-content"><div class="eyebrow"><i class="live-dot"></i> NORTHLINE DEFENSE DIVISION</div><h1 id="game-title">IRON<span>WAKE</span></h1><p class="tagline">Five frames. One last signal.</p>
-			<div class="operation-brief"><span class="eyebrow">OPERATION 09</span><h2>LAST TRANSMISSION</h2><p>The evacuation is underway. Choose your frame and its signature weapon. Build a four-mount arsenal from battlefield drops. Hold the relay through five assaults.</p></div>
-			<fieldset class="difficulty-picker"><legend>ENGAGEMENT PROTOCOL</legend><label><input type="radio" name="difficulty" data-difficulty value="story"><span>STORY</span></label><label><input type="radio" name="difficulty" data-difficulty value="standard" checked><span>STANDARD</span></label><label><input type="radio" name="difficulty" data-difficulty value="veteran"><span>VETERAN</span></label></fieldset>
-			<p id="difficulty-copy" class="muted">The intended balance of armor, heat, and pressure.</p>
-			<button id="start" class="primary"><span>CHOOSE FRAME</span><span aria-hidden="true">↗</span></button>
-			<button id="training" class="secondary training-launch">FRAME TRAINING <span>WARDEN QUALIFICATION →</span></button>
-			<button id="brief-bridge" class="secondary">← RETURN TO SHIP</button>
-			<div class="menu-links"><button id="brief-controls">PILOT HANDBOOK</button><button id="brief-settings">SETTINGS</button></div>
-			<p id="record-summary" class="record-summary">NO OPERATIONS RECORDED</p>
-		</div>
-		<div class="frame-dossier" aria-hidden="true"><span class="eyebrow">YOUR FRAME</span><b id="frame-dossier-name">WARDEN / 08</b><span id="frame-dossier-role">80T LINE FIGHTER</span><div><span>4 INDEPENDENT WEAPON MOUNTS</span><span>8 WEAPON FAMILIES</span><span>ONE SIGNAL TO PROTECT</span></div></div>
-		<footer class="brief-footer"><span>KEYBOARD + MOUSE / GAMEPAD / TOUCH</span><span>ORIGINAL MECH COMBAT</span></footer>
-	</section>
-	<aside id="hangar-preview" class="hangar-preview" aria-hidden="true"><span class="eyebrow">SELECTED FRAME</span><b id="hangar-frame-name">WARDEN / 08</b><span id="hangar-frame-role">LINE FIGHTER</span></aside>
-	<section id="loadout" class="modal armory-modal frame-hangar menu-surface" role="dialog" aria-modal="true" aria-labelledby="loadout-title" hidden>
-		<div class="frame-list" id="frame-list"><div class="modal-kicker"><span class="eyebrow">NORTHLINE / FRAME HANGAR</span><span>05 FRAMES AVAILABLE</span></div>
-		<h2 id="loadout-title">CHOOSE YOUR APPROACH.</h2><p>Each frame comes with its own starting weapon. Earn your other three mounts in combat. All frames use the same controls.</p>
-		<div id="frame-cards" class="frame-grid" aria-label="Combat frames"></div></div>
-		<div class="frame-deploy"><div class="armory-footer"><div><b id="frame-summary" role="status" aria-live="polite"></b><small>Mount 1 · Left mouse / RT / hold 1<br>Next weapon drop after 2 eliminations.</small></div><button id="deploy-loadout" class="primary">DEPLOY FRAME <span>↗</span></button></div>
-		<button id="loadout-back" class="text-button">← BACK TO BRIEFING</button></div>
-	</section>
-	<section id="requisition" class="modal armory-modal menu-surface" role="dialog" aria-modal="true" aria-labelledby="draft-title" hidden>
-		<div class="modal-kicker"><span class="eyebrow">BATTLEFIELD REQUISITION</span><span id="draft-number"></span></div>
-		<h2 id="draft-title">MORE FIREPOWER.</h2><p id="draft-copy">Choose one weapon. Combat is paused while you equip.</p>
-		<div id="draft-cards" class="arsenal-grid draft-cards"></div>
-		<div id="replace-panel" hidden><h3 id="replace-title">CHOOSE A MOUNT TO REPLACE</h3><div id="replace-cards" class="mount-summary"></div><button id="replace-back" class="secondary">← BACK TO WEAPON CHOICES</button></div>
-		<div class="loadout-strip"><span class="eyebrow">CURRENT LOADOUT</span><div id="draft-loadout" class="mount-summary"></div></div>
-		<p class="draft-note">HOLD MULTIPLE BUTTONS TO COMBINE FIRE · WATCH REACTOR HEAT</p>
-	</section>
-	<section id="pause-panel" class="modal compact menu-surface" role="dialog" aria-modal="true" aria-labelledby="pause-title" hidden>
-		<span class="eyebrow">OPERATION SUSPENDED</span><h2 id="pause-title">STANDING BY.</h2><p id="pause-copy">Your throttle and operation are preserved.</p><button id="resume" class="primary">RESUME OPERATION <span>→</span></button><div class="pause-actions"><button id="pause-controls" class="secondary">PILOT HANDBOOK</button><button id="pause-settings" class="secondary">SETTINGS</button><button id="reset" class="secondary">RESTART OPERATION</button><button id="leave" class="text-button">RETURN TO BRIEFING</button></div>
-	</section>
-	<section id="refit" class="modal refit-modal menu-surface" role="dialog" aria-modal="true" aria-labelledby="refit-title" hidden>
-		<div class="modal-kicker"><span class="eyebrow">FIELD SERVICE / RELAY 09</span><span id="refit-phase"></span></div><h2 id="refit-title">A MOMENT TO REBUILD.</h2><p id="refit-copy">Sector secured. Choose one frame upgrade before the next assault.</p><div id="refit-cards" class="refit-cards"></div><div class="refit-footer"><span id="refit-next"></span><span>SELECT AN UPGRADE TO CONTINUE →</span></div>
-	</section>
-	<section id="result" class="modal result-modal menu-surface" role="dialog" aria-modal="true" aria-labelledby="result-title" hidden>
-		<div class="modal-kicker"><span class="eyebrow">AFTER ACTION REPORT</span><span id="result-difficulty"></span></div><h2 id="result-title">SIGNAL UNBROKEN.</h2><p id="result-copy"></p><div class="report-score"><span id="result-rank">A</span><div><small>OPERATION SCORE</small><b id="result-score">0</b></div></div><div id="result-stats" class="result-stats"></div><div id="result-upgrades" class="report-upgrades"></div><p id="record-feedback" class="muted"></p><button id="restart" class="primary">DEPLOY AGAIN <span>↗</span></button><button id="result-briefing" class="text-button">RETURN TO BRIEFING</button>
-	</section>
-	<section id="settings" class="modal compact menu-surface" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
-		<span class="eyebrow">PILOT PREFERENCES</span><h2 id="settings-title">SETTINGS</h2><fieldset class="difficulty-picker"><legend>NEXT SORTIE DIFFICULTY</legend><label><input type="radio" name="settings-difficulty" data-difficulty value="story"><span>STORY</span></label><label><input type="radio" name="settings-difficulty" data-difficulty value="standard" checked><span>STANDARD</span></label><label><input type="radio" name="settings-difficulty" data-difficulty value="veteran"><span>VETERAN</span></label></fieldset><div class="slider-setting"><label for="master-volume">MASTER VOLUME</label><output id="master-output" for="master-volume">80%</output><input id="master-volume" type="range" min="0" max="100" value="80"></div><div class="slider-setting"><label for="music-volume">MUSIC</label><output id="music-output" for="music-volume">55%</output><input id="music-volume" type="range" min="0" max="100" value="55"></div><div class="slider-setting"><label for="effects-volume">EFFECTS</label><output id="effects-output" for="effects-volume">85%</output><input id="effects-volume" type="range" min="0" max="100" value="85"></div><label class="toggle-setting"><input id="reduce-motion" type="checkbox"><span>REDUCE MOTION<small>Disable camera shake and decorative motion.</small></span></label><label class="toggle-setting"><input id="controller-vibration" type="checkbox" checked><span>CONTROLLER VIBRATION<small>Weapon recoil and damage feedback, where supported.</small></span></label><label class="toggle-setting"><input id="large-interface" type="checkbox"><span>LARGE INTERFACE<small>Larger readouts and safe margins. Automatic while using a controller.</small></span></label><label class="toggle-setting"><input id="show-touch" type="checkbox"><span>SHOW TOUCH CONTROLS<small>Also shown automatically on touch-first devices.</small></span></label><p id="storage-status" class="muted">Preferences and operation records are saved on this device.</p><button id="close-settings" class="primary">DONE <span>→</span></button>
-	</section>
-	<section id="handbook" class="modal handbook-modal menu-surface" role="dialog" aria-modal="true" aria-labelledby="handbook-title" hidden>
-		<span class="eyebrow">NORTHLINE · FIELD MANUAL</span><h2 id="handbook-title">KNOW YOUR FRAME.</h2><p>Your legs and turret move independently. Set your throttle, turn the hull, and keep your guns on the target.</p><div class="handbook-grid"><div><h3>KEYBOARD + MOUSE</h3><dl><dt>W / S</dt><dd>Raise / lower persistent throttle</dd><dt>A / D</dt><dd>Turn the hull</dd><dt>X</dt><dd>Neutral. Momentum decays.</dd><dt>Mouse</dt><dd>Aim the turret</dd><dt>Mouse wheel</dt><dd>Zoom in / out</dd><dt>Mouse buttons</dt><dd>Left / right / middle / thumb fire mounts 1–4. Hold together for combined fire.</dd><dt>Hold 1 / 2 / 3 / 4</dt><dd>Fire mounts 1–4. Also Space / E / Q / F.</dd><dt>V</dt><dd>Vent coolant</dd><dt>Esc</dt><dd>Pause / resume</dd></dl></div><div><h3>GAMEPAD</h3><dl><dt>Left stick</dt><dd>Throttle and hull steering</dd><dt>Right stick</dt><dd>Aim in screen direction</dd><dt>RT / LT</dt><dd>Fire mounts 1 / 2</dd><dt>RB / LB</dt><dd>Fire mounts 3 / 4</dd><dt>B / ○</dt><dd>Vent coolant</dd><dt>X / □</dt><dd>Neutral throttle</dd><dt>Menu</dt><dd>Pause / resume</dd><dt>D-pad + A / ×</dt><dd>Navigate and confirm menus</dd></dl><h3>TOUCH</h3><p>Tap the battlefield to aim. Hold weapon buttons to fire. + / − set throttle; arrows steer.</p></div></div><div class="tactical-notes"><p><b>FRONTIER CONTRACTS.</b> Plot a course from the Wayfarer to find local work. Accepting a contract immediately costs reputation with the opposing faction. Complete the objective and hold in the extraction zone for three seconds to earn employer favor and payment. Contract reputation and earnings persist; each sortie starts with a serviced frame and fresh weapon drafts. You can relaunch an accepted sortie after reloading; its battlefield stays the same. Aborting keeps the acceptance penalty and pays nothing.</p><p><b>MANAGE HEAT.</b> Sustained fire locks your weapons at 100%. Vent with limited coolant or let the reactor cool.</p><p><b>READ THE FIELD.</b> Orange circles mark fixed artillery impacts. Leave the marked ground. Siege frames resist frontal fire; flank them or attack during the EXPOSED recovery window. The Crown commits to larger barrages below half armor.</p><p><b>BUILD YOUR ARSENAL.</b> Each frame has an assigned starting weapon; eliminations earn weapon drafts, including during assaults. Fill four mounts, then upgrade a weapon to rank III or replace one. All weapons aim with the turret; missiles guide toward a lock, rockets fly straight. Cluster ordnance bursts over an area. PPC bolts pierce targets.</p><p><b>REFIT & RECOVER.</b> Drive over salvage for repairs and coolant. Each cleared assault earns a permanent upgrade for this operation.</p></div><button id="close-handbook" class="primary">READY <span>→</span></button>
-	</section>
-	<section id="training-result" class="modal compact menu-surface" role="dialog" aria-modal="true" aria-labelledby="training-result-title" hidden><span class="eyebrow">FRAME QUALIFICATION / COMPLETE</span><h2 id="training-result-title">READY FOR THE LINE.</h2><p>Warden qualification complete: throttle, steering, weapons, heat, and artillery evasion. Each combat frame has its own handling, cooling, and armor.</p><p>In the operation, flank the armored siege frames. Their armor opens after a barrage. Keep the relay alive through all five assaults.</p><button id="training-deploy" class="primary">CHOOSE OPERATION FRAME <span>→</span></button><button id="training-briefing" class="text-button">RETURN TO BRIEFING</button></section>
-	<section id="confirm" class="modal compact menu-surface" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" hidden><span class="eyebrow">CURRENT OPERATION</span><h2 id="confirm-title">ABANDON THIS RUN?</h2><p id="confirm-copy">The current operation will be lost. Your recorded results and settings will be kept.</p><button id="confirm-action" class="primary">CONFIRM</button><button id="confirm-cancel" class="secondary">KEEP PLAYING</button></section>
-	<div class="menu-controls"><span id="controller-status" role="status"></span><span id="menu-input-hint"></span><span id="audio-status" role="status"></span></div>
-	<p id="error" role="alert" hidden></p>
-</main>
-<script type="module" src="./src/main.ts"></script>
+	<h1>Iron Wake is now Heavy Rig</h1>
+	<p><a href="https://heavyrig.deegeegames.com/">Play Heavy Rig</a></p>
+	<p>Heavy Rig starts a new campaign on its own domain. Your existing Iron Wake saves remain on this browser's old site and do not automatically transfer.</p>
 </body>
 </html>
