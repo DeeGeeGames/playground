@@ -29,10 +29,10 @@ export const experiments: readonly Experiment[] = [
 		category: 'Capital starship combat demo',
 	},
 	{
-		title: 'Iron Wake',
+		title: 'Heavy Rig',
 		thumbnail: './games/iron-wake/preview.png',
-		thumbnailAlt: 'Iron Wake demo: the Warden siege frame staged in front of Relay 09 in the industrial yard.',
-		href: './games/iron-wake/',
+		thumbnailAlt: 'Heavy Rig demo: the Warden siege frame staged in front of Relay 09 in the industrial yard.',
+		href: 'https://heavyrig.deegeegames.com/',
 		description: 'Command a mercenary dropship across three worlds. Choose faction contracts, build your reputation, and deploy five combat frames into varied surface missions.',
 		controls: 'Keyboard + Mouse · Gamepad · Touch',
 		category: 'Isometric mech combat demo',
