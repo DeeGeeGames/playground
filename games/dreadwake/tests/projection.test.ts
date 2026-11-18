@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createState } from '../src/simulation';
 import { cameraFor, pickShip, project, screenToWorld, worldToScreen, zoomForWheel } from '../src/projection';
+import { projectBearing } from '../src/tactical-labels';
 
 test('world axes project to symmetric isometric diagonals', function () {
 	const x = project({ x: 100, y: 0 }); const y = project({ x: 0, y: 100 });
@@ -62,4 +63,22 @@ test('heading picking reverses the hull-plane projection across viewports and zo
 			expect(result.x).toBeCloseTo(point.x); expect(result.y).toBeCloseTo(point.y);
 		}
 	}
+});
+
+test('landscape contacts use the open playfield and hidden contacts retain their bearing', function () {
+	const origin = { x: 334, y: 160 };
+	const status = { left: 0, top: 0, right: 300, bottom: 64 };
+	expect(projectBearing(origin, { x: 267, y: 93 }, 667, 375, [status])?.visible).toBe(true);
+	for (const contact of [{ x: 200, y: 26 }, { x: -500, y: -674 }]) {
+		const bearing = projectBearing(origin, contact, 667, 375, [status]);
+		if (!bearing || bearing.visible) throw new Error('Expected a bearing for the obscured contact');
+		const edge = bearing.point;
+		expect(edge.y).toBeGreaterThanOrEqual(status.bottom + 10);
+		expect(edge.y).toBeLessThan(origin.y);
+		expect(origin.x - edge.x).toBeCloseTo(origin.y - edge.y);
+	}
+	const coveredRay = [{ left: 295, right: 375, top: 0, bottom: 160 }];
+	const north = { x: 334, y: 62 };
+	expect(projectBearing(origin, north, 667, 375, coveredRay)?.visible).toBe(false);
+	expect(projectBearing(origin, north, 667, 375, coveredRay, 'heading')).toBeUndefined();
 });
