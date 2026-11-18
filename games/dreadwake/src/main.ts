@@ -24,6 +24,7 @@ const bindings = new Map([
 ]);
 type InputMode = 'keyboard' | 'gamepad' | 'touch';
 const maxAstern = 0.35;
+const rudderStepPercent = 25;
 const rangeKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']);
 const driveActions = new Set(['forward', 'back', 'neutral']);
 const turnActions = new Set(['left', 'right']);
@@ -31,7 +32,7 @@ const unit = function (value: number) { return Math.max(-1, Math.min(1, value));
 const battleHints = {
 	keyboard: 'Click Heading · W/S Throttle · X Neutral · A/D Rudder · Wheel Zoom',
 	gamepad: 'D-pad ↑↓ Drive · LS Turn · RS ↑↓ Zoom · Start Pause',
-	touch: 'Slide Throttle · Hold Rudder',
+	touch: 'Slide Throttle · Set Rudder',
 };
 const menuHints = {
 	keyboard: 'Enter Select · Esc Back · Tab Navigate',
@@ -161,7 +162,8 @@ const shutdown = await mountGame('game', async function (container) {
 		heading = undefined; controller.clear(); padFrame = controller.read(undefined, 0); state.shield.held = false; state.torpedoes.held = false; state.missiles.held = false; state.fireControl.held = false;
 	};
 	const active = function (action: string) { return [...keys].some(function (code) { return bindings.get(code) === action; }) || pending.has(action) || [...pointers.values()].includes(action) || (action === 'brace' && padFrame.brace); };
-	const turnOrder = function () { return unit(Number(active('right')) - Number(active('left')) + padFrame.turn + rudderOrder); };
+	const manualTurn = function () { return Number(active('right')) - Number(active('left')) + padFrame.turn; };
+	const turnOrder = function () { return unit(manualTurn() + rudderOrder); };
 	const playable = function () { return running && !graphicsLost && !paused && !settingsOpen && !confirmingRestart && !fitting && (state.arsenal?.pending ?? 0) === 0 && state.outcome === 'playing' && state.campaign?.phase !== 'refit'; };
 	const inputHint = element('input-hint');
 	const updateInputHints = function () {
@@ -661,6 +663,7 @@ const shutdown = await mountGame('game', async function (container) {
 		}
 		if (padFrame.pause) { pause(true); return; }
 		if (!playable()) return;
+		if (padFrame.turn !== 0 && !leverPointers.has(rudderLever)) centerRudder();
 		for (const action of ['pulse', 'neutral', 'autoFire'] as const) if (padFrame[action]) pending.add(action);
 		if (!pinch) zoom = Math.min(2.5, Math.max(0.5, zoom + padFrame.zoom * elapsed * 0.65));
 	};
@@ -715,7 +718,8 @@ const shutdown = await mountGame('game', async function (container) {
 				clearKeyActions(turnActions);
 				rudderKey = event.code;
 				const increase = event.code === 'ArrowUp' || event.code === 'ArrowRight' || event.code === 'PageUp';
-				setRudder(event.code === 'Home' ? -1 : event.code === 'End' ? 1 : unit(rudderOrder + (increase ? 0.25 : -0.25)));
+				const step = rudderStepPercent / 100;
+				setRudder(event.code === 'Home' ? -1 : event.code === 'End' ? 1 : unit(rudderOrder + (increase ? step : -step)));
 				return;
 			}
 		}
@@ -728,7 +732,7 @@ const shutdown = await mountGame('game', async function (container) {
 	}, options);
 	window.addEventListener('keyup', function (event) {
 		keys.delete(event.code);
-		if (event.code === rudderKey) centerRudder();
+		if (event.code === rudderKey) rudderKey = undefined;
 	}, options);
 	window.addEventListener('blur', function () { clearInput(); pause(true); audio.update(0, false, []); }, options);
 	window.screen.orientation?.addEventListener('change', clearInput, options);
@@ -762,20 +766,18 @@ const shutdown = await mountGame('game', async function (container) {
 	throttleLever.addEventListener('blur', function () {
 		if (inputMode === 'keyboard' && leverPointers.has(throttleLever)) cancelThrottleDrag();
 	}, options);
-	rudderLever.addEventListener('blur', function () {
-		if (inputMode === 'keyboard') { releaseLever(rudderLever); centerRudder(); }
-	}, options);
 	// Handle each range's pointer separately so two fingers can operate the helm.
 	for (const lever of levers) {
 		const isThrottle = lever === throttleLever;
-		const samplePointer = function (event: PointerEvent) {
+		const samplePointer = function (event: PointerEvent, step = 1) {
 			const rect = lever.getBoundingClientRect();
 			const thumbSize = Number.parseFloat(getComputedStyle(lever).getPropertyValue(isThrottle ? '--thumb-height' : '--thumb-width')) || 0;
 			const travel = (isThrottle ? rect.height : rect.width) - thumbSize;
 			if (travel <= 0) return;
 			const offset = isThrottle ? rect.bottom - event.clientY : event.clientX - rect.left;
 			const fraction = (offset - thumbSize / 2) / travel;
-			const order = Math.round(unit(fraction * 2 - 1) * 100) / 100;
+			const percent = unit(fraction * 2 - 1) * 100;
+			const order = Math.sign(percent) * Math.round(Math.abs(percent) / step) * step / 100;
 			if (isThrottle) setThrottle(order); else setRudder(order);
 		};
 		lever.addEventListener('pointerdown', function (event) {
@@ -792,9 +794,7 @@ const shutdown = await mountGame('game', async function (container) {
 		}, options);
 		lever.addEventListener('pointerup', function (event) {
 			if (leverPointers.get(lever) !== event.pointerId) return;
-			if (isThrottle) {
-				if (playable()) samplePointer(event);
-			} else centerRudder();
+			if (playable()) samplePointer(event, isThrottle ? 1 : rudderStepPercent);
 			releaseLever(lever);
 		}, options);
 		const cancel = function (event: PointerEvent) {
@@ -830,7 +830,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (playable()) event.preventDefault();
 	}, options);
 	const orderHeading = function (event: PointerEvent) {
-		if (leverPointers.has(rudderLever) || rudderKey !== undefined || turnOrder() !== 0) return;
+		if (leverPointers.has(rudderLever) || rudderKey !== undefined || manualTurn() !== 0) return;
 		const rect = canvas.getBoundingClientRect();
 		const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
 		const camera = cameraFor(rect.width, rect.height, state.player, zoom);
@@ -838,6 +838,7 @@ const shutdown = await mountGame('game', async function (container) {
 		const deadZone = Math.max(36, state.player.length * camera.scale * 0.5 + 10);
 		if (Math.hypot(point.x - ship.x, point.y - ship.y) <= deadZone) return;
 		const world = screenToWorld(point, camera, 20);
+		centerRudder();
 		heading = Math.atan2(world.y - state.player.y, world.x - state.player.x);
 	};
 	const pinchDistance = function () {

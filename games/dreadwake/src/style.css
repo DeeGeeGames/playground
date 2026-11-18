@@ -447,8 +447,9 @@ h1 em { font-style: normal; color: var(--gold); }
 	height: 44px;
 	background:
 		linear-gradient(var(--gold), var(--gold)) center / 2px 23px no-repeat,
-		linear-gradient(#65858f, #65858f) center / calc(100% - 10px) 5px no-repeat,
-		repeating-linear-gradient(to right, #4b6871 0 1px, transparent 1px 12.5%) center / calc(100% - 10px) 14px no-repeat;
+		linear-gradient(#65858f, #65858f) center / calc(100% - var(--thumb-width)) 5px no-repeat,
+		linear-gradient(#4b6871, #4b6871) right calc(var(--thumb-width) / 2 - 1px) center / 1px 14px no-repeat,
+		repeating-linear-gradient(to right, #4b6871 0 1px, transparent 1px 12.5%) center / calc(100% - var(--thumb-width)) 14px no-repeat;
 }
 .helm input::-webkit-slider-thumb {
 	appearance: none;

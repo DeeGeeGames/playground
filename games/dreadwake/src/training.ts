@@ -13,7 +13,7 @@ export const trainingInstructions = [
 	{ title: '02 / Commit to a turn',
 		keyboard: 'Click away from the ship to order a heading, or turn with A / D or the rudder slider. Turn by 20°. Use the wheel to zoom.',
 		gamepad: 'Lean the left stick left or right to turn by 20°. Move the right stick up or down to zoom.',
-		touch: 'Tap away from the ship to order a heading, or slide the rudder left or right to turn. Release it to center. Turn by 20°. Pinch the battlefield to zoom.' },
+		touch: 'Tap away from the ship to order a heading, or slide the rudder left or right to turn. Release to hold the nearest mark. Turn by 20°. Pinch the battlefield to zoom.' },
 	{ title: '03 / Hold fire',
 		keyboard: 'A Spark turret is fitted on port. Press G or click Weapons Free to select Hold Fire. Every fitted weapon stops, including flak interception.',
 		gamepad: 'A Spark turret is fitted on port. Press D-pad right to select Hold Fire. Every fitted weapon stops, including flak interception.',
