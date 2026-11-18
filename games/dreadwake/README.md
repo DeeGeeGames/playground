@@ -10,21 +10,22 @@ and browser-only, without desktop or Steam packaging.
 
 ## Playing
 
-Choose one of eight starter weapons, choose its port or starboard socket, and
-confirm deployment. The ship starts **Weapons Free**. Each direct-fire turret
+For a first run, deploy with a Seeker in port socket P1. Its guided missiles cover
+every bearing while you learn the helm. Custom fitting lets you pick any of eight
+weapons and twelve sockets. The ship starts **Weapons Free**. Each direct-fire turret
 covers the outward half of its fitted flank; Seekers can launch at any bearing.
 Bring the right flank and range to the enemy. There is no manual target selection,
 individual gun trigger, or hidden legacy armament.
 
 | Command | Keyboard / mouse | Standard controller | Touch |
 | --- | --- | --- | --- |
-| Persistent throttle | W / S, up / down | D-pad up / down | Hold + / − |
-| Neutral / coast | X | D-pad left | Neutral |
-| Steer | A / D; right-click orders a heading | Left stick horizontal | Turn arrows |
+| Persistent throttle | Hold W / S or up / down, or drag the vertical throttle | Hold D-pad up / down | Slide the vertical throttle |
+| Neutral / coast | X | D-pad left | Tap Neutral at midscale |
+| Steer | Click or right-click a heading, hold A / D, or drag the rudder | Left stick horizontal | Tap a heading or hold the horizontal rudder |
 | Weapons Free / Hold Fire | G | D-pad right | Fire-policy button |
 | Armor lock | Hold Space | Hold LB | Hold Armor Lock |
 | Aegis pulse | F | A | Aegis |
-| Zoom | Mouse wheel | Right stick vertical | — |
+| Zoom | Mouse wheel | Right stick vertical | Pinch the battlefield |
 | Pause / resume | Escape | Menu / Start | Pause |
 | Menus | Tab or arrows; Enter; Escape back | D-pad / left stick; A select; B back | Tap |
 
@@ -35,11 +36,21 @@ armor lock cancel an unfinished Helios charge. Armor reduces incoming damage by
 seconds. These defenses do not stack. There is no built-in point defense: fit flak
 for interception, or avoid and absorb incoming fire with the helm and defenses.
 
+Click or tap open space to give the bow a bearing. Throttle is an independent
+order, so the cruiser can turn while coasting. The vertical throttle stays where
+you set it. Its upper half orders ahead thrust and its lower half orders astern.
+Tap Neutral to coast. The horizontal rudder gives proportional steering to port
+or starboard and centers on release. Manual steering takes over from a heading
+order. The cruiser keeps its momentum through a turn.
+
 Menus and drafts freeze simulation. Controller transitions require released
 controls before rearming. Disconnection, focus loss and graphics interruption
-pause combat. Wheel zoom ranges from 0.5× to 2.5×; browser zoom and menu scrolling
-remain available. Inspect pauses the game and shows each socket's weapon, rank,
-statistics and current firing constraint.
+pause combat. Battlefield zoom ranges from 0.5× to 2.5×; browser zoom and menu scrolling
+remain available. The transit clock shows how long to survive, and the salvage
+meter tracks damage toward the next weapon choice. The live battery readout
+shows a fitted weapon’s coverage and firing condition, including range and flank
+advice. Inspect pauses combat to show the rank, statistics and firing condition
+of every installed weapon.
 
 ## The battery
 
@@ -151,9 +162,7 @@ Simulation and browser checks establish behavior under automated inputs. They do
 not establish physical controller or touch feel, rumble, speaker mix, hardware GPU
 performance, human difficulty or owner acceptance of balance.
 
-Production evidence: [starter fitting](../../docs/evidence/dreadwake-arsenal/desktop-starter.png),
-[earned draft](../../docs/evidence/dreadwake-arsenal/desktop-draft.png),
-[phone combat](../../docs/evidence/dreadwake-arsenal/phone-combat.png),
-[short landscape](../../docs/evidence/dreadwake-arsenal/landscape-combat.png), and
-[Helios charge](../../docs/evidence/dreadwake-arsenal/training-charge.png).
-Browser and simulation results are recorded in the same evidence directory.
+See the production captures of [first deployment](../../docs/evidence/dreadwake-helm/starter.png),
+[desktop combat](../../docs/evidence/dreadwake-helm/desktop.png),
+[phone combat](../../docs/evidence/dreadwake-helm/portrait.png), and
+[short landscape](../../docs/evidence/dreadwake-helm/landscape.png).

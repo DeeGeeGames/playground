@@ -1,11 +1,11 @@
 import { createDriveAnimator, shieldEnvelope } from './effect-motion';
 import * as THREE from 'three';
 import { createShipModels, type HullKind } from './ship-model';
-import { hudObstacles, clearLabelPosition, type LabelObstacle } from './tactical-labels';
+import { hudObstacles, clearLabelPosition, projectBearing, type LabelObstacle } from './tactical-labels';
 import { CEL } from './visual-theme';
 import { createCombatEffectsRenderer } from './combat-effects';
 import { cameraFor, worldToScreen, type Camera } from './projection';
-import { ARC, clamp, distance, sideAngle, targetFor, torpedoTargetFor, type Point, type Ship, type State, type Wreck } from './simulation';
+import { ARC, distance, sideAngle, targetFor, torpedoTargetFor, type Point, type Ship, type State, type Wreck } from './simulation';
 import { createBackdrop } from './backdrop';
 import { MOUNT_SOCKETS, type WeaponId } from './weapons';
 
@@ -129,7 +129,8 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 		}
 	};
 	const drawTactical = function (view: Camera, state: State, width: number, height: number, heading: number | undefined) {
-		occupied = hudObstacles(canvas);
+		const hud = hudObstacles(canvas);
+		occupied = [...hud];
 		const p = state.player; const compact = width < 700; const font = compact ? 10 : 12;
 		const center = worldToScreen(p, view, 20);
 		// Short arc sectors explain the broadside orientation without filling the field.
@@ -170,12 +171,8 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 			const at = { x: hull.x, y: hull.y - (enemy.length * 0.38 + 33) * view.scale - 18 };
 			const selected = state.arsenal ? state.arsenal.mounts.some(function (mount) { return mount?.target === enemy.id; }) : enemy.id === state.priorityTarget;
 			const color = selected || enemy.command ? GOLD : '#d8a69e';
-			const safeTop = height < 500 ? 80 : compact ? 180 : 145;
-			const safeBottom = height - (state.arsenal ? height < 500 ? 120 : compact ? 250 : 180 : height < 500 ? 170 : compact ? 335 : 245);
-			const behindLeftPanel = !compact && hull.x < 250 && hull.y < 335;
-			const behindRightPanel = !compact && hull.x > width - 270 && hull.y < 285;
-			const onScreen = hull.x > 55 && hull.x < width - 55 && at.y > safeTop && hull.y < safeBottom && !behindLeftPanel && !behindRightPanel;
-			if (onScreen) {
+			const bearing = projectBearing(center, hull, width, height, hud);
+			if (bearing?.visible) {
 				const name = enemy.command ? 'COMMAND' : enemy.kind === 'cruiser' ? 'CRUISER' : 'FRIGATE';
 				text(`${selected ? '◆ ' : ''}${name} ${String(enemy.id).padStart(2, '0')}`, at.x, at.y - 8, color, font);
 				line({ x: at.x - 26, y: at.y + 6 }, { x: at.x + 26, y: at.y + 6 }, '#49343a', 3);
@@ -189,13 +186,9 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 					}
 				}
 				if (enemy === torpedoTarget && state.torpedoes.reload === 0 && !p.braced) text('BOW LOCK', hull.x, hull.y + enemy.length * view.scale * 0.45 + 13, GOLD, font - 1);
-			} else {
+			} else if (bearing) {
+				const edge = bearing.point;
 				const dx = hull.x - center.x; const dy = hull.y - center.y;
-				const top = safeTop; const bottom = Math.max(top + 30, safeBottom);
-				const horizontal = (width / 2 - 45) / Math.max(1, Math.abs(dx));
-				const vertical = (dy < 0 ? center.y - top : bottom - center.y) / Math.max(1, Math.abs(dy));
-				const fraction = Math.max(0.08, Math.min(1, horizontal, vertical));
-				const edge = { x: clamp(center.x + dx * fraction, compact ? 40 : 265, width - (compact ? 40 : 275)), y: clamp(center.y + dy * fraction, top, bottom) };
 				chevron(edge, Math.atan2(dy, dx), enemy.warning > 0 ? '#ffca86' : CORAL);
 				text(`${Math.round(distance(p, enemy))} m`, edge.x, edge.y + 19, color, font - 1);
 			}
@@ -209,9 +202,12 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 		}
 		if (heading !== undefined) {
 			const world = { x: p.x + Math.cos(heading) * 290, y: p.y + Math.sin(heading) * 290 };
-			const at = worldToScreen(world, view, 20);
-			ink.setLineDash([4, 7]); line(center, at, '#9ce8e894'); ink.setLineDash([]);
-			chevron(at, Math.atan2(at.y - center.y, at.x - center.x), CYAN, 7);
+			const course = worldToScreen(world, view, 20);
+			const at = projectBearing(center, course, width, height, hud, 'heading')?.point;
+			if (at) {
+				ink.setLineDash([4, 7]); line(center, at, '#9ce8e894'); ink.setLineDash([]);
+				chevron(at, Math.atan2(course.y - center.y, course.x - center.x), CYAN, 7);
+			}
 		}
 
 		if (p.braced || state.shield.active > 0) text(state.shield.active > 0 ? 'AEGIS ACTIVE' : 'ARMOR LOCK', center.x, center.y + (p.length * 0.4 + 34) * view.scale, state.shield.active > 0 ? CYAN : GOLD, font);

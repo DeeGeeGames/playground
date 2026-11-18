@@ -3,14 +3,33 @@ import { installStarter, prepareDraft } from './arsenal';
 import { createMount } from './weapons';
 
 export interface Training { lesson: number; progress: number; originAngle: number }
+const draftCopy = 'This practice salvage choice freezes combat. Choose an upgrade, or install a weapon and select its socket. Damage earns these choices in the campaign.';
+const chargeCopy = 'Training refit: Helios is now fitted on port. Its charge grows visibly, then the aim line locks before firing. Keep the hulk on your port flank. Hold Fire or armor lock cancels a charge.';
 export const trainingInstructions = [
-	{ title: '01 / Bring the drive online', keyboard: 'Hold W or the + helm button to raise thrust. Release it: the order stays set. X or Neutral selects coast; momentum takes time to decay.', gamepad: 'Hold D-pad up to raise thrust. Release it: the order stays set. D-pad left selects neutral; momentum takes time to decay.' },
-	{ title: '02 / Commit to a turn', keyboard: 'Hold A / D or the turn buttons. Bring the heading around by 20°. Turrets cover the flank where you install them.', gamepad: 'Lean the left stick left or right. Bring the heading around by 20°. Turrets cover the flank where you install them.' },
-	{ title: '03 / Hold fire', keyboard: 'A Spark turret is fitted on port. Press G or the Weapons Free button to select Hold Fire. Every fitted weapon stops, including flak interception.', gamepad: 'A Spark turret is fitted on port. Press D-pad right to select Hold Fire. Every fitted weapon stops, including flak interception.' },
-	{ title: '04 / Let the crew work', keyboard: 'Press G or Hold Fire again to select Weapons Free. The port turret finds and fires at the hulk automatically. You control position, not individual guns.', gamepad: 'Press D-pad right again to select Weapons Free. The port turret finds and fires at the hulk automatically. You control position, not individual guns.' },
-	{ title: '05 / Build the battery', keyboard: 'This practice salvage choice freezes combat. Choose an upgrade, or install a weapon and select its socket. Damage earns these choices in the campaign.', gamepad: 'This practice salvage choice freezes combat. Navigate with the D-pad and select with A. Upgrade, or install a weapon and select its socket. Damage earns choices in the campaign.' },
-	{ title: '06 / Watch the charge', keyboard: 'Training refit: Helios is now fitted on port. Its charge grows visibly, then the aim line locks before firing. Keep the hulk on your port flank. Hold Fire or armor lock cancels a charge.', gamepad: 'Training refit: Helios is now fitted on port. Its charge grows visibly, then the aim line locks before firing. Keep the hulk on your port flank. Hold Fire or armor lock cancels a charge.' },
-	{ title: '07 / Layer your defenses', keyboard: 'Hold Space or Armor Lock, then press F or Aegis. Armor reduces damage and inhibits weapons. Aegis gives brief stronger protection. Defenses do not stack.', gamepad: 'Hold LB for armor lock, then press A for Aegis. Armor reduces damage and inhibits weapons. Aegis gives brief stronger protection. Defenses do not stack.' },
+	{ title: '01 / Bring the drive online',
+		keyboard: 'Hold W or slide the throttle up to at least 70% ahead. The throttle holds its setting. Hold S to lower it, or press X or select Neutral to coast.',
+		gamepad: 'Hold D-pad up to raise thrust or down to lower it. The drive keeps its order. Press D-pad left to coast.',
+		touch: 'Slide the throttle up to at least 70% ahead. It holds its setting after release. Tap Neutral at midscale to coast.' },
+	{ title: '02 / Commit to a turn',
+		keyboard: 'Click away from the ship to order a heading, or turn with A / D or the rudder slider. Turn by 20°. Use the wheel to zoom.',
+		gamepad: 'Lean the left stick left or right to turn by 20°. Move the right stick up or down to zoom.',
+		touch: 'Tap away from the ship to order a heading, or slide the rudder left or right to turn. Release it to center. Turn by 20°. Pinch the battlefield to zoom.' },
+	{ title: '03 / Hold fire',
+		keyboard: 'A Spark turret is fitted on port. Press G or click Weapons Free to select Hold Fire. Every fitted weapon stops, including flak interception.',
+		gamepad: 'A Spark turret is fitted on port. Press D-pad right to select Hold Fire. Every fitted weapon stops, including flak interception.',
+		touch: 'A Spark turret is fitted on port. Tap Weapons Free to select Hold Fire. Every fitted weapon stops, including flak interception.' },
+	{ title: '04 / Let the crew work',
+		keyboard: 'Press G or click Hold Fire to select Weapons Free. The port turret finds and fires at the hulk automatically.',
+		gamepad: 'Press D-pad right again to select Weapons Free. The port turret finds and fires at the hulk automatically.',
+		touch: 'Tap Hold Fire to select Weapons Free. The port turret finds and fires at the hulk automatically.' },
+	{ title: '05 / Build the battery', keyboard: draftCopy,
+		gamepad: 'This practice salvage choice freezes combat. Navigate with the D-pad and select with A. Upgrade, or install a weapon and select its socket. Damage earns choices in the campaign.',
+		touch: draftCopy },
+	{ title: '06 / Watch the charge', keyboard: chargeCopy, gamepad: chargeCopy, touch: chargeCopy },
+	{ title: '07 / Layer your defenses',
+		keyboard: 'Hold Space for Armor Lock, then press F for Aegis. Armor reduces damage and inhibits weapons. Aegis gives brief stronger protection. Defenses do not stack.',
+		gamepad: 'Hold LB for Armor Lock, then press A for Aegis. Armor reduces damage and inhibits weapons. Aegis gives brief stronger protection. Defenses do not stack.',
+		touch: 'Hold Armor Lock with one finger and tap Aegis with another. Armor reduces damage and inhibits weapons. Aegis gives brief stronger protection. Defenses do not stack.' },
 ] as const;
 
 const positionTarget = function (state: State, lesson: number) {

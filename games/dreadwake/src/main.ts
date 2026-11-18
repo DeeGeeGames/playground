@@ -1,10 +1,10 @@
 import { MISSION_PACING } from './pacing';
 import { mountGame } from '../../../shared/lifecycle';
-import { createArsenalCampaign, CAMPAIGN_MISSIONS, REFIT_CHOICES, chooseRefit, distance, MAX_HULL, SHIELD_COOLDOWN, step, type Controls, type State } from './simulation';
+import { createArsenalCampaign, CAMPAIGN_MISSIONS, REFIT_CHOICES, chooseRefit, SHIELD_COOLDOWN, step, type Controls, type State } from './simulation';
 import { WEAPONS, WEAPON_IDS, MOUNT_SOCKETS, type WeaponId, type WeaponRank } from './weapons';
 import { installStarter, draftCost, prepareDraft, applyDraft, rerollDraft, resolveDraft, weaponSummary, MAX_DRAFTS, type DraftOffer } from './arsenal';
 import { createRenderer } from './render';
-import { cameraFor, screenToWorld, zoomForWheel } from './projection';
+import { cameraFor, screenToWorld, worldToScreen, zoomForWheel } from './projection';
 import { createAudio } from './audio';
 import { readCampaign, writeCampaign, clearCampaign, captureCampaign, restoreCampaign } from './campaign-save';
 import { createWorldRenderer } from './world';
@@ -22,6 +22,31 @@ const bindings = new Map([
 	['KeyA', 'left'], ['ArrowLeft', 'left'], ['KeyD', 'right'], ['ArrowRight', 'right'],
 	['KeyX', 'neutral'], ['Space', 'brace'], ['KeyF', 'pulse'], ['KeyG', 'autoFire'],
 ]);
+type InputMode = 'keyboard' | 'gamepad' | 'touch';
+const maxAstern = 0.35;
+const rangeKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']);
+const driveActions = new Set(['forward', 'back', 'neutral']);
+const turnActions = new Set(['left', 'right']);
+const unit = function (value: number) { return Math.max(-1, Math.min(1, value)); };
+const battleHints = {
+	keyboard: 'Click Heading · W/S Throttle · X Neutral · A/D Rudder · Wheel Zoom',
+	gamepad: 'D-pad ↑↓ Drive · LS Turn · RS ↑↓ Zoom · Start Pause',
+	touch: 'Slide Throttle · Hold Rudder',
+};
+const menuHints = {
+	keyboard: 'Enter Select · Esc Back · Tab Navigate',
+	gamepad: 'A Select · B Back · D-pad Navigate',
+	touch: '',
+};
+interface BattlefieldPointer {
+	type: string;
+	button: number;
+	startX: number;
+	startY: number;
+	x: number;
+	y: number;
+	startedAt: number;
+}
 const shutdown = await mountGame('game', async function (container) {
 	let canvas = container.querySelector('canvas'); if (!canvas) throw new Error('Missing battlefield');
 	let draw: ReturnType<typeof createWorldRenderer>;
@@ -43,7 +68,7 @@ const shutdown = await mountGame('game', async function (container) {
 	const ui = {
 		brief: element('brief'), pausePanel: element('pause-panel'), result: element('result'), pause: element('pause'),
 		phase: element('phase'), objective: element('objective'), hull: element('hull-value'), hullFill: element('hull-fill'),
-		throttle: element('throttle-value'), throttleFill: element('throttle-fill'), speed: element('speed-value'), motion: element('motion'),
+		throttle: element('throttle-value'), rudder: element('rudder-value'), speed: element('speed-value'), motion: element('motion'),
 		message: element('message'), sound: element('sound'), brace: element('brace'),
 		pulse: element('pulse'), pulseState: element('pulse-state'), pulseFill: element('pulse-fill'), shield: element('shield-readout'),
 		autoFire: element('auto-fire'), autoState: element('auto-state'), defenseCount: element('defense-count'),
@@ -61,12 +86,26 @@ const shutdown = await mountGame('game', async function (container) {
 	let lastHaptic = 0;
 	const audio = createAudio(); const abort = new AbortController(); const options = { signal: abort.signal };
 	const keys = new Set<string>(); const pending = new Set<string>(); const pointers = new Map<number, string>();
+	const battlefieldPointers = new Map<number, BattlefieldPointer>();
+	let tapCandidate: number | undefined;
+	let pinch: { distance: number; zoom: number } | undefined;
+	let inputMode: InputMode = 'keyboard';
 	const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 	const buttons = [...container.querySelectorAll<HTMLButtonElement>('[data-action]')];
+	const throttleLever = element('throttle-lever');
+	const rudderLever = element('rudder-lever');
+	const throttleNeutral = element('throttle-neutral');
+	if (!(throttleLever instanceof HTMLInputElement) || !(rudderLever instanceof HTMLInputElement) || !(throttleNeutral instanceof HTMLButtonElement)) throw new Error('Invalid helm controls');
+	const levers = [throttleLever, rudderLever];
+	const leverPointers = new Map<HTMLInputElement, number>();
+	let throttleOrder: number | undefined;
+	let rudderOrder = 0;
+	let rudderKey: string | undefined;
 
 	let heading: number | undefined;
 	let state = createArsenalCampaign(); let running = false; let paused = false; let muted = false;
 	let fitting: 'starter' | 'draft' | undefined;
+	let fittingStep: 'recommended' | 'weapons' | 'review' = 'recommended';
 	let starterState: State | undefined;
 	let selectedWeapon: WeaponId | undefined;
 	let selectedOffer: number | undefined;
@@ -96,13 +135,40 @@ const shutdown = await mountGame('game', async function (container) {
 	else if (loadedCampaign.status === 'invalid') setSaveStatus('The previous checkpoint could not be read. Start a new campaign to replace it.', true);
 	else setSaveStatus('Progress saves in this browser at mission starts and field refits.');
 	let frame = 0; let previous = 0; let accumulator = 0; let zoom = 1;
-	const clearInput = function () {
-		heading = undefined; keys.clear(); pending.clear(); controller.clear(); padFrame = controller.read(undefined, 0); state.shield.held = false; state.torpedoes.held = false; state.missiles.held = false; state.fireControl.held = false;
+	const clearBattlefieldPointers = function () {
+		const captured = [...battlefieldPointers.keys()];
+		battlefieldPointers.clear(); tapCandidate = undefined; pinch = undefined;
+		for (const id of captured) if (canvas.hasPointerCapture(id)) canvas.releasePointerCapture(id);
+	};
+	const releaseLever = function (lever: HTMLInputElement) {
+		const id = leverPointers.get(lever);
+		leverPointers.delete(lever);
+		if (id !== undefined && lever.hasPointerCapture(id)) lever.releasePointerCapture(id);
+	};
+	const centerRudder = function () {
+		rudderOrder = 0;
+		rudderKey = undefined;
+	};
+	const clearHeldInputs = function () {
+		keys.clear(); pending.clear(); throttleOrder = undefined; centerRudder();
+		for (const lever of levers) releaseLever(lever);
+		clearBattlefieldPointers();
 		for (const button of buttons) for (const id of pointers.keys()) if (button.hasPointerCapture(id)) button.releasePointerCapture(id);
 		pointers.clear();
 	};
+	const clearInput = function () {
+		clearHeldInputs();
+		heading = undefined; controller.clear(); padFrame = controller.read(undefined, 0); state.shield.held = false; state.torpedoes.held = false; state.missiles.held = false; state.fireControl.held = false;
+	};
 	const active = function (action: string) { return [...keys].some(function (code) { return bindings.get(code) === action; }) || pending.has(action) || [...pointers.values()].includes(action) || (action === 'brace' && padFrame.brace); };
+	const turnOrder = function () { return unit(Number(active('right')) - Number(active('left')) + padFrame.turn + rudderOrder); };
 	const playable = function () { return running && !graphicsLost && !paused && !settingsOpen && !confirmingRestart && !fitting && (state.arsenal?.pending ?? 0) === 0 && state.outcome === 'playing' && state.campaign?.phase !== 'refit'; };
+	const inputHint = element('input-hint');
+	const updateInputHints = function () {
+		const pauseLabel = paused ? 'Resume' : 'Pause';
+		ui.pause.textContent = inputMode === 'touch' ? pauseLabel : `${pauseLabel} · ${inputMode === 'gamepad' ? 'Start' : 'Esc'}`;
+		inputHint.textContent = (playable() ? battleHints : menuHints)[inputMode];
+	};
 	let refitChoice: typeof REFIT_CHOICES[number]['id'] | undefined;
 	const route = element('campaign-route');
 	for (const [index, mission] of CAMPAIGN_MISSIONS.entries()) {
@@ -128,9 +194,11 @@ const shutdown = await mountGame('game', async function (container) {
 		element('refit').hidden = !running || state.campaign?.phase !== 'refit' || state.outcome !== 'playing' || confirmingRestart || settingsOpen || !!fitting;
 		const modal = [...container.querySelectorAll<HTMLElement>('.overlay')].find(function (panel) { return !panel.hidden; });
 		for (const child of container.children) if (child instanceof HTMLElement) child.inert = !!modal && child !== modal;
-		ui.pause.textContent = paused ? 'Resume · Esc' : 'Pause · Esc';
+		updateInputHints();
 		if (ui.pause instanceof HTMLButtonElement) ui.pause.disabled = !running || state.outcome !== 'playing' || state.campaign?.phase === 'refit' || !!fitting;
 		for (const button of buttons) button.disabled = !playable();
+		for (const lever of levers) lever.disabled = !playable();
+		throttleNeutral.disabled = !playable();
 		for (const id of ['start', 'continue', 'training', 'restart', 'retry', 'confirm-start', 'resume']) { const button = element(id); if (button instanceof HTMLButtonElement) button.disabled = graphicsLost; }
 		const deploy = element('deploy'); if (deploy instanceof HTMLButtonElement) deploy.disabled = graphicsLost || !refitChoice;
 		if (fitting) updateFittingSelection();
@@ -138,76 +206,141 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const rankLabel = function (rank: WeaponRank) { return rank === 1 ? 'I' : rank === 2 ? 'II' : 'III'; };
 	const fittingState = function () { return fitting === 'starter' ? starterState : state; };
-	const confirmButton = function () { const button = element('confirm-fit'); return button instanceof HTMLButtonElement ? button : undefined; };
+	const weaponChoices = element('weapon-choices');
+	const socketChoices = element('fitting-sockets');
+	const recommendedDeploy = element('deploy-recommended');
+	const confirmFit = element('confirm-fit');
+	if (!(recommendedDeploy instanceof HTMLButtonElement) || !(confirmFit instanceof HTMLButtonElement)) throw new Error('Missing fitting buttons');
+	const focusFit = function (control: HTMLElement | null) {
+		control?.focus({ preventScroll: true });
+		control?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+	};
+	const clearFitSelection = function () {
+		selectedWeapon = undefined; selectedOffer = undefined; selectedOfferToken = undefined; selectedSocket = undefined;
+	};
 	const updateFittingSelection = function () {
-		const chosenState = fittingState(); const arsenal = chosenState?.arsenal;
-		const offer = fitting === 'draft' && selectedOffer !== undefined ? arsenal?.offers[selectedOffer] : undefined;
-		const weapon = selectedWeapon ? WEAPONS[selectedWeapon] : undefined;
-		const isInstall = fitting === 'starter' || offer?.kind === 'install';
-		const sockets = element('socket-selection'); sockets.hidden = !weapon || !isInstall;
-		const upgrade = element('upgrade-preview'); upgrade.hidden = offer?.kind !== 'upgrade'; upgrade.replaceChildren();
-		const warning = element('replacement-warning'); warning.hidden = true; warning.textContent = '';
-		const confirm = confirmButton(); if (!confirm) return;
-		confirm.disabled = graphicsLost || !weapon || (isInstall && selectedSocket === undefined);
-		confirm.textContent = !weapon ? 'SELECT A WEAPON' : 'SELECT A SOCKET';
-		for (const card of element('weapon-choices').querySelectorAll<HTMLButtonElement>('button')) card.setAttribute('aria-pressed', String(fitting === 'starter' ? card.dataset['weapon'] === selectedWeapon : card.dataset['offer'] === String(selectedOffer)));
-		if (!weapon || !arsenal) return;
+		recommendedDeploy.disabled = graphicsLost;
+		confirmFit.disabled = graphicsLost || !selectedWeapon || (selectedOfferToken?.kind !== 'upgrade' && selectedSocket === undefined);
+		const warning = element('replacement-warning');
+		warning.hidden = true;
+		if (fittingStep !== 'review') return;
+		if (selectedOfferToken?.kind === 'upgrade') {
+			const { weapon, slot, rank } = selectedOfferToken;
+			confirmFit.textContent = `Upgrade ${WEAPONS[weapon].name} to ${rankLabel(rank)} in ${MOUNT_SOCKETS[slot]?.label ?? ''}`;
+			return;
+		}
+		for (const button of socketChoices.querySelectorAll('button')) button.setAttribute('aria-pressed', String(button.dataset['slot'] === String(selectedSocket)));
+		const socket = selectedSocket === undefined ? undefined : MOUNT_SOCKETS[selectedSocket];
+		if (!socket || !selectedWeapon) { confirmFit.textContent = 'Choose a socket'; return; }
+		const previous = fittingState()?.arsenal?.mounts[socket.index];
+		const weapon = WEAPONS[selectedWeapon];
+		if (previous) {
+			warning.hidden = false;
+			warning.textContent = `${WEAPONS[previous.weapon].name} ${rankLabel(previous.rank)} in ${socket.label} will be removed, including its upgrades. The new turret starts at rank I.`;
+		}
+		confirmFit.textContent = fitting === 'starter' ? `Fit ${weapon.name} in ${socket.label} and deploy`
+			: previous ? `Replace ${socket.label} with ${weapon.name} I` : `Install ${weapon.name} I in ${socket.label}`;
+	};
+	const showFittingStep = function (step: typeof fittingStep) {
+		fittingStep = step;
+		const starter = fitting === 'starter';
+		const upgrade = selectedOfferToken?.kind === 'upgrade';
+		element('recommended-fit').hidden = step !== 'recommended';
+		weaponChoices.hidden = step !== 'weapons';
+		element('fit-review').hidden = step !== 'review';
+		element('upgrade-preview').hidden = !upgrade;
+		element('socket-selection').hidden = upgrade;
+		element('draft-alternatives').hidden = starter || step !== 'weapons';
+		element('fit-navigation').hidden = !starter && step === 'weapons';
+		const back = element('back-fitting');
+		back.hidden = step === 'recommended' || (!starter && step === 'weapons');
+		back.textContent = step === 'weapons' ? 'Back to recommended fit' : starter ? 'Choose another weapon' : 'Choose another reward';
+		element('fitting-title').textContent = step === 'recommended' ? 'Ready to deploy'
+			: step === 'weapons' ? starter ? 'Choose a starter weapon' : 'Choose a salvage reward'
+			: upgrade ? 'Review upgrade' : 'Choose a socket';
+		const copy = element('fitting-copy');
+		copy.hidden = step === 'review';
+		copy.textContent = step === 'recommended' ? `Survive ${MISSION_PACING[0].duration} seconds in Outer Picket. Damage enemies to earn salvage for your next fit.`
+			: starter ? 'Pick a weapon to see its stats and place it on your ship.' : 'Combat is paused while you choose. Your ship keeps its momentum.';
+		element('fitting-panel').scrollTop = 0;
+		updateFittingSelection();
+	};
+	const renderFitReview = function (id: WeaponId, offer?: DraftOffer) {
+		const arsenal = fittingState()?.arsenal;
+		if (!arsenal) return;
+		const weapon = WEAPONS[id];
+		const title = document.createElement('strong');
+		const detail = document.createElement('p');
+		const stats = document.createElement('p');
+		stats.className = 'fit-stats';
 		if (offer?.kind === 'upgrade') {
 			const mount = arsenal.mounts[offer.slot];
-			if (!mount) { confirm.disabled = true; return; }
-			const name = document.createElement('strong'); name.textContent = `${MOUNT_SOCKETS[offer.slot]?.label ?? ''} · ${weapon.name} ${rankLabel(mount.rank)} → ${rankLabel(offer.rank)}`;
-			const before = document.createElement('p'); before.textContent = `NOW: ${weaponSummary(mount.weapon, mount.rank)}`;
-			const after = document.createElement('p'); after.textContent = `AFTER: ${weaponSummary(offer.weapon, offer.rank)}`;
-			upgrade.append(name, before, after); confirm.textContent = `CONFIRM UPGRADE · ${weapon.name.toUpperCase()} ${rankLabel(offer.rank)}`; return;
+			if (!mount) return;
+			title.textContent = `${MOUNT_SOCKETS[offer.slot]?.label ?? ''} · ${weapon.name} ${rankLabel(mount.rank)} → ${rankLabel(offer.rank)}`;
+			detail.textContent = `Current · ${weaponSummary(id, mount.rank)}`;
+			stats.textContent = `Upgraded · ${weaponSummary(id, offer.rank)}`;
+			element('upgrade-preview').replaceChildren(title, detail, stats);
+			showFittingStep('review'); focusFit(confirmFit);
+			return;
 		}
-		element('socket-coverage').textContent = weapon.id === 'seeker' ? 'Seeker launches at any bearing from either flank. Pick an empty mount or explicitly replace an existing turret.' : 'Each turret covers its own outward half of the ship. Port fires left; starboard fires right. Steer to bring that flank toward contacts.';
-		const choices = element('fitting-sockets'); choices.replaceChildren();
-		for (const position of [0, 1, 2, 3, 4, 5]) for (const bank of [0, 6]) {
+
+		title.textContent = `${weapon.name} I · ${weapon.family}`;
+		detail.textContent = `${weapon.role} ${weapon.tradeoff}`;
+		stats.textContent = weaponSummary(id, 1);
+		const coverage = document.createElement('p');
+		coverage.textContent = id === 'seeker' ? 'All bearings from either side.' : 'Covers the outward half of the ship on the side you choose.';
+		element('install-preview').replaceChildren(title, coverage, detail, stats);
+		socketChoices.replaceChildren();
+		const bankSize = MOUNT_SOCKETS.length / 2;
+		for (let position = 0; position < bankSize; position++) for (const bank of [0, bankSize]) {
 			const socket = MOUNT_SOCKETS[position + bank]; if (!socket) continue;
-			const mount = arsenal.mounts[socket.index]; const button = document.createElement('button'); button.type = 'button'; button.className = 'socket-choice';
-			button.setAttribute('aria-pressed', String(selectedSocket === socket.index)); button.dataset['slot'] = String(socket.index);
+			const mount = arsenal.mounts[socket.index];
+			const button = document.createElement('button'); button.type = 'button'; button.dataset['slot'] = String(socket.index);
 			const label = document.createElement('b'); label.textContent = socket.label;
-			const fitted = document.createElement('span'); fitted.textContent = mount ? `${WEAPONS[mount.weapon].name} ${rankLabel(mount.rank)}` : 'EMPTY';
-			button.append(label, fitted); button.setAttribute('aria-label', `${socket.side} socket ${position + 1}, ${fitted.textContent}`);
-			button.addEventListener('click', function () { selectedSocket = socket.index; updateFittingSelection(); element('fitting-sockets').querySelector<HTMLButtonElement>(`[data-slot="${socket.index}"]`)?.focus({ preventScroll: true }); }, options);
-			choices.append(button);
+			const fitted = document.createElement('span'); fitted.textContent = mount ? `${WEAPONS[mount.weapon].name} ${rankLabel(mount.rank)}` : 'Empty';
+			button.append(label, fitted);
+			button.addEventListener('click', function () {
+				selectedSocket = socket.index;
+				updateFittingSelection();
+				if (!confirmFit.disabled) focusFit(confirmFit);
+			}, options);
+			socketChoices.append(button);
 		}
-		const socket = selectedSocket === undefined ? undefined : MOUNT_SOCKETS[selectedSocket];
-		const previousMount = selectedSocket === undefined ? undefined : arsenal.mounts[selectedSocket];
-		element('fitting-selection').textContent = socket ? `${weapon.name} I → ${socket.label} · ${weapon.id === 'seeker' ? '360° coverage' : `${socket.side} 180° coverage`}` : 'Choose a socket to confirm the fit.';
-		if (previousMount) { warning.hidden = false; warning.textContent = `REPLACEMENT: ${WEAPONS[previousMount.weapon].name} ${rankLabel(previousMount.rank)} in ${socket?.label ?? ''} will be removed. Its upgrades are lost. The new turret starts at rank I.`; }
-		if (socket) confirm.textContent = fitting === 'starter' ? `FIT ${weapon.name.toUpperCase()} · ${socket.label} & DEPLOY` : `${previousMount ? 'CONFIRM REPLACEMENT' : 'CONFIRM INSTALL'} · ${socket.label}`;
+		showFittingStep('review'); focusFit(socketChoices.querySelector('button'));
 	};
 	const finishDraft = function () {
-		clearInput(); accumulator = 0; selectedWeapon = undefined; selectedOffer = undefined; selectedOfferToken = undefined; selectedSocket = undefined;
+		clearInput(); accumulator = 0; clearFitSelection();
 		if ((state.arsenal?.pending ?? 0) > 0) { showDraft(); return; }
 		fitting = undefined; syncPanels(); canvas.focus({ preventScroll: true }); unlock();
 	};
 	const renderFitting = function () {
-		const starter = fitting === 'starter'; const arsenal = fittingState()?.arsenal; if (!arsenal) return;
-		element('fitting-eyebrow').textContent = starter ? 'INITIAL FIT / ONE TURRET' : `SALVAGE RECOVERED / ${arsenal.pending} CHOICE${arsenal.pending === 1 ? '' : 'S'} QUEUED`;
-		element('fitting-title').textContent = starter ? 'BUILD YOUR BATTERY.' : 'MAKE IT YOUR SHIP.';
-		element('fitting-copy').textContent = starter ? 'Choose one starter, then its socket. Eleven mounts stay empty. Each weapon rewards a different way of flying.' : 'Combat is frozen. Install another weapon or strengthen a fitted turret. Your ship keeps its course and momentum.';
-		element('cancel-fitting').hidden = !starter; element('draft-alternatives').hidden = starter;
-		const choices = element('weapon-choices'); choices.replaceChildren(); choices.classList.toggle('starter-choices', starter);
-		const card = function (id: WeaponId, rank: WeaponRank, index?: number) {
-			const weapon = WEAPONS[id]; const offer = index === undefined ? undefined : arsenal.offers[index];
-			const button = document.createElement('button'); button.type = 'button'; button.className = 'weapon-card'; button.dataset['weapon'] = id; if (index !== undefined) button.dataset['offer'] = String(index);
-			button.style.setProperty('--weapon-color', weapon.color); button.setAttribute('aria-pressed', 'false');
-			const family = document.createElement('small'); family.className = 'weapon-family'; family.textContent = `${offer?.kind === 'upgrade' ? `UPGRADE ${MOUNT_SOCKETS[offer.slot]?.label ?? ''}` : starter ? 'STARTER' : 'INSTALL'} / ${weapon.family}`;
-			const title = document.createElement('strong'); title.textContent = `${weapon.name} ${rankLabel(rank)}`;
-			const role = document.createElement('span'); role.className = 'weapon-role'; role.textContent = weapon.role;
-			const tradeoff = document.createElement('span'); tradeoff.className = 'weapon-tradeoff'; tradeoff.textContent = weapon.tradeoff;
-			const stats = document.createElement('small'); stats.className = 'weapon-stats'; stats.textContent = weaponSummary(id, rank);
-			button.append(family, title, role, tradeoff, stats);
+		const starter = fitting === 'starter';
+		const arsenal = fittingState()?.arsenal; if (!arsenal) return;
+		element('fitting-eyebrow').textContent = starter ? 'INITIAL FIT / OUTER PICKET' : `SALVAGE RECOVERED / ${arsenal.pending} CHOICE${arsenal.pending === 1 ? '' : 'S'} QUEUED`;
+		const cancel = element('cancel-fitting');
+		cancel.hidden = !starter;
+		cancel.textContent = running ? 'Return to current run' : 'Return to title';
+		element('fitting-save-note').hidden = starter;
+		weaponChoices.replaceChildren();
+		const choice = function (id: WeaponId, index?: number) {
+			const weapon = WEAPONS[id];
+			const offer = index === undefined ? undefined : arsenal.offers[index];
+			const upgrade = offer?.kind === 'upgrade';
+			const button = document.createElement('button'); button.type = 'button'; button.dataset['weapon'] = id;
+			if (index !== undefined) button.dataset['offer'] = String(index);
+			button.style.setProperty('--weapon-color', weapon.color);
+			const title = document.createElement('strong'); title.textContent = upgrade ? `${weapon.name} ${rankLabel(offer.rank)}` : weapon.name;
+			const family = document.createElement('small'); family.textContent = upgrade ? `Upgrade ${MOUNT_SOCKETS[offer.slot]?.label ?? ''}` : starter ? weapon.family : `Install · ${weapon.family}`;
+			button.append(title, family);
 			button.addEventListener('click', function () {
-				if (offer && state.arsenal?.offers[index ?? -1] !== offer) return;
-				selectedWeapon = id; selectedOffer = index; selectedOfferToken = offer; selectedSocket = undefined; updateFittingSelection();
-				const next = offer?.kind === 'upgrade' ? confirmButton() : element('fitting-sockets').querySelector('button'); next?.focus({ preventScroll: true }); next?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
-			}, options); choices.append(button);
+				if (fittingStep !== 'weapons' || (index !== undefined && state.arsenal?.offers[index] !== offer)) return;
+				selectedWeapon = id; selectedOffer = index; selectedOfferToken = offer; selectedSocket = undefined;
+				renderFitReview(id, offer);
+			}, options);
+			weaponChoices.append(button);
 		};
-		if (starter) for (const id of WEAPON_IDS) card(id, 1);
-		else arsenal.offers.forEach(function (offer, index) { card(offer.weapon, offer.kind === 'upgrade' ? offer.rank : 1, index); });
+		if (starter) for (const id of WEAPON_IDS) choice(id);
+		else arsenal.offers.forEach(function (offer, index) { choice(offer.weapon, index); });
 		const alternatives = element('draft-alternatives'); alternatives.replaceChildren();
 		if (!starter) {
 			const expectedOffers = arsenal.offers;
@@ -216,70 +349,140 @@ const shutdown = await mountGame('game', async function (container) {
 				button.textContent = action === 'reroll' ? arsenal.rerolled ? 'Reroll used' : 'Reroll · 1 available' : action === 'repair' ? `Repair hull · ${Math.ceil(state.player.hp / state.player.maxHp * 100)}% → ${Math.ceil(Math.min(1, state.player.hp / state.player.maxHp + 0.15) * 100)}%` : 'Skip this reward';
 				button.disabled = action === 'reroll' ? arsenal.rerolled : action === 'repair' && state.player.hp >= state.player.maxHp;
 				button.addEventListener('click', function (event) {
-					if (fitting !== 'draft' || state.arsenal?.offers !== expectedOffers || event.detail > 1) return;
-					if (action === 'reroll') { if (!rerollDraft(state)) return; selectedWeapon = undefined; selectedOffer = undefined; selectedOfferToken = undefined; selectedSocket = undefined; renderFitting(); choices.querySelector('button')?.focus(); clearInput(); }
-					else if (resolveDraft(state, action)) finishDraft();
-				}, options); alternatives.append(button);
+					if (fitting !== 'draft' || fittingStep !== 'weapons' || state.arsenal?.offers !== expectedOffers || event.detail > 1) return;
+					if (action === 'reroll') {
+						if (!rerollDraft(state)) return;
+						clearFitSelection(); renderFitting(); focusFit(weaponChoices.querySelector('button')); clearInput();
+					} else if (resolveDraft(state, action)) finishDraft();
+				}, options);
+				alternatives.append(button);
 			}
 		}
-		updateFittingSelection();
+		showFittingStep(starter ? 'recommended' : 'weapons');
 	};
 	const showDraft = function () {
 		if (!state.arsenal || state.arsenal.pending <= 0 || state.outcome !== 'playing') return;
-		prepareDraft(state); fitting = 'draft'; selectedWeapon = undefined; selectedOffer = undefined; selectedOfferToken = undefined; selectedSocket = undefined; clearInput(); accumulator = 0; audio.update(0, false, []);
-		renderFitting(); syncPanels(); element('weapon-choices').querySelector('button')?.focus({ preventScroll: true });
+		prepareDraft(state); fitting = 'draft'; clearFitSelection(); clearInput(); accumulator = 0; audio.update(0, false, []);
+		renderFitting(); syncPanels(); focusFit(weaponChoices.querySelector('button'));
 	};
 	const cancelFitting = function () {
 		if (fitting !== 'starter') return;
-		fitting = undefined; starterState = undefined; clearInput(); syncPanels(); restartSource.focus({ preventScroll: true });
+		fitting = undefined; starterState = undefined; clearFitSelection(); clearInput(); syncPanels(); restartSource.focus({ preventScroll: true });
+	};
+	const backFitting = function () {
+		if (fittingStep === 'review') {
+			const prior = [...weaponChoices.querySelectorAll('button')].find(function (button) {
+				return fitting === 'starter' ? button.dataset['weapon'] === selectedWeapon : button.dataset['offer'] === String(selectedOffer);
+			});
+			clearFitSelection(); showFittingStep('weapons'); focusFit(prior ?? weaponChoices.querySelector('button'));
+		} else if (fitting === 'starter' && fittingStep === 'weapons') {
+			showFittingStep('recommended'); focusFit(element('custom-fit'));
+		} else cancelFitting();
+	};
+	const deployStarter = function (weapon: WeaponId, socket: number) {
+		if (graphicsLost || fitting !== 'starter' || !starterState || !installStarter(starterState, weapon, socket)) return;
+		state = starterState; starterState = undefined; fitting = undefined; clearFitSelection();
+		training = undefined; trainingCompleted = false; running = true; paused = false; accumulator = 0; zoom = 1;
+		clearInput(); saveCheckpoint(); syncPanels(); canvas.focus({ preventScroll: true }); unlock();
 	};
 	element('cancel-fitting').addEventListener('click', cancelFitting, options);
-	element('confirm-fit').addEventListener('click', function (event) {
-		if (graphicsLost || event.detail > 1 || !selectedWeapon) return;
+	element('back-fitting').addEventListener('click', backFitting, options);
+	element('custom-fit').addEventListener('click', function () {
+		showFittingStep('weapons'); focusFit(weaponChoices.querySelector('button'));
+	}, options);
+	recommendedDeploy.addEventListener('click', function () {
+		if (fittingStep === 'recommended') deployStarter('seeker', 0);
+	}, options);
+	confirmFit.addEventListener('click', function (event) {
+		if (graphicsLost || fittingStep !== 'review' || event.detail > 1 || !selectedWeapon) return;
 		if (fitting === 'starter') {
-			if (!starterState || selectedSocket === undefined || !installStarter(starterState, selectedWeapon, selectedSocket)) return;
-			state = starterState; starterState = undefined; fitting = undefined; training = undefined; trainingCompleted = false; running = true; paused = false; accumulator = 0; zoom = 1; clearInput(); saveCheckpoint(); syncPanels(); canvas.focus({ preventScroll: true }); unlock();
+			if (selectedSocket !== undefined) deployStarter(selectedWeapon, selectedSocket);
 		} else if (fitting === 'draft' && selectedOffer !== undefined && selectedOfferToken && state.arsenal?.offers[selectedOffer] === selectedOfferToken && applyDraft(state, selectedOffer, selectedSocket)) finishDraft();
 	}, options);
-	const socketIndicators = MOUNT_SOCKETS.map(function (socket) {
-		const button = document.createElement('button'); button.type = 'button'; button.className = 'socket-indicator'; button.textContent = socket.label;
-		button.addEventListener('click', function () { if (!playable()) return; pause(true); updateBatteryHud(); element('battery-inspection').querySelector<HTMLElement>(`[data-slot="${socket.index}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'instant' }); }, options);
-		element('battery-sockets').append(button); return button;
-	});
 	let inspectedBuild = '';
 	const updateBatteryHud = function () {
-		const arsenal = state.arsenal; if (!arsenal) return;
+		const arsenal = state.arsenal;
+		if (!arsenal) return;
 		const installed = arsenal.mounts.filter(function (mount) { return mount !== null; });
 		element('battery-count').textContent = `${installed.length} / ${MOUNT_SOCKETS.length}`;
-		const batteryLabel = container.querySelector('.arsenal-heading > span');
-		if (batteryLabel) batteryLabel.textContent = `BATTERY · ${installed.length} / ${MOUNT_SOCKETS.length}`;
-		element('salvage-value').textContent = arsenal.rewards >= MAX_DRAFTS ? 'BATTERY COMPLETE' : `${Math.floor(arsenal.salvage)} / ${draftCost(arsenal.rewards)}`;
-		element('salvage-fill').style.width = `${arsenal.rewards >= MAX_DRAFTS ? 100 : Math.min(100, arsenal.salvage / draftCost(arsenal.rewards) * 100)}%`;
-		element('salvage-hint').textContent = arsenal.rewards >= MAX_DRAFTS ? 'All salvage rewards recovered' : state.campaign?.clock && state.campaign.clock.salvageEarned >= (MISSION_PACING[state.wave - 1]?.salvageBudget ?? Infinity) ? 'Sector salvage recovered · survive to transit' : `Damage earns choice ${arsenal.rewards + 1} / ${MAX_DRAFTS}`;
-		for (const [index, indicator] of socketIndicators.entries()) {
-			const mount = arsenal.mounts[index]; const socket = MOUNT_SOCKETS[index];
-			indicator.classList.toggle('occupied', !!mount); indicator.style.setProperty('--weapon-color', mount ? WEAPONS[mount.weapon].color : 'var(--line)');
-			indicator.textContent = mount ? `${socket?.label ?? ''} ${rankLabel(mount.rank)}` : socket?.label ?? '';
-			indicator.title = mount ? `${socket?.label ?? ''} · ${WEAPONS[mount.weapon].name} ${rankLabel(mount.rank)} · ${mount.status}` : `${socket?.label ?? ''} · EMPTY`;
-			indicator.setAttribute('aria-label', `${indicator.title}. Pause to inspect battery.`); indicator.disabled = !playable();
+
+		const capped = arsenal.rewards >= MAX_DRAFTS;
+		const cost = draftCost(arsenal.rewards);
+		const budget = MISSION_PACING[state.wave - 1]?.salvageBudget ?? Infinity;
+		const sectorRecovered = (state.campaign?.clock?.salvageEarned ?? 0) >= budget;
+		element('salvage-value').textContent = training ? 'PRACTICE' : capped ? 'COMPLETE' : `${Math.floor(arsenal.salvage)}/${cost}`;
+		element('salvage-fill').style.width = training ? '0%' : `${capped ? 100 : Math.min(100, arsenal.salvage / cost * 100)}%`;
+		element('salvage-hint').textContent = training ? 'No campaign changes' : capped ? 'All choices earned'
+			: sectorRecovered ? 'Sector salvage recovered' : 'Next weapon choice';
+
+		const engaging = installed.filter(function (mount) {
+			return mount.status === 'FIRING' || mount.status === 'LOCKED' || mount.status === 'CHARGING'
+				|| mount.status === 'TRACKING' || mount.status === 'RELOADING';
+		});
+		const lead = engaging.find(function (mount) { return mount.status === 'FIRING' || mount.status === 'LOCKED' || mount.status === 'CHARGING'; })
+			?? engaging[0]
+			?? installed.find(function (mount) { return mount.status === 'OUT OF RANGE' || mount.status === 'TOO CLOSE'; })
+			?? installed[0];
+		const readout = element('battery-lead');
+		const advice = element('battery-advice');
+		if (!lead) {
+			readout.textContent = 'Battery empty';
+			advice.textContent = '';
+			readout.dataset['signal'] = 'idle';
+		} else {
+			const weapon = WEAPONS[lead.weapon];
+			const stats = weapon.ranks[lead.rank];
+			const side = MOUNT_SOCKETS[lead.slot]?.side === 'port' ? 'port' : 'starboard';
+			const sideName = side === 'port' ? 'Port' : 'Starboard';
+			const cues = {
+				'EMPTY': 'No weapon fitted',
+				'HOLD FIRE': 'Hold Fire · select Weapons Free',
+				'ARMOR LOCK': 'Armor locked · release to fire',
+				'OUT OF ARC': `Out of arc · turn contact onto ${side}`,
+				'TOO CLOSE': `Too close · open to ${stats.minRange} m`,
+				'OUT OF RANGE': `Out of range · close to ${stats.range} m`,
+				'NO CONTACT': 'Scanning for contacts',
+				'TRACKING': lead.weapon === 'seeker' ? 'Tracking · hold range' : 'Tracking · keep contact in arc',
+				'RELOADING': 'Reloading',
+				'CHARGING': 'Charging · hold bearing',
+				'LOCKED': 'Aim locked · shot imminent',
+				'FIRING': 'Firing',
+			};
+			readout.textContent = `${weapon.name} · ${sideName}${lead.weapon === 'seeker' ? ' · 360°' : ''}`;
+			readout.dataset['signal'] = engaging.length ? 'engaged'
+				: lead.status === 'OUT OF RANGE' || lead.status === 'TOO CLOSE' || lead.status === 'OUT OF ARC' ? 'attention' : 'idle';
+			advice.textContent = installed.length > 1 && engaging.length ? `${cues[lead.status]} · ${engaging.length}/${installed.length} engaged` : cues[lead.status];
 		}
+
 		if (!paused) return;
-		const signature = arsenal.mounts.map(function (mount) { return mount ? `${mount.weapon}:${mount.rank}:${mount.status}` : '-'; }).join('|');
-		if (signature === inspectedBuild) return; inspectedBuild = signature;
-		const inspection = element('battery-inspection'); inspection.replaceChildren();
-		for (const socket of MOUNT_SOCKETS) {
-			const mount = arsenal.mounts[socket.index]; const row = document.createElement('div'); row.dataset['slot'] = String(socket.index);
-			const title = document.createElement('strong'); title.textContent = `${socket.label} · ${mount ? `${WEAPONS[mount.weapon].name} ${rankLabel(mount.rank)}` : 'EMPTY'}`;
-			const status = document.createElement('span'); status.textContent = mount?.status ?? 'EMPTY';
-			row.append(title, status);
-			if (mount) { const stats = document.createElement('small'); stats.textContent = weaponSummary(mount.weapon, mount.rank); row.append(stats); }
+		const signature = `${state.stats.interceptions}|${arsenal.mounts.map(function (mount) { return mount ? `${mount.weapon}:${mount.rank}:${mount.status}` : '-'; }).join('|')}`;
+		if (signature === inspectedBuild) return;
+		inspectedBuild = signature;
+		const inspection = element('battery-inspection');
+		const heading = document.createElement('h3');
+		heading.textContent = `FITTED TURRETS · ${installed.length} / ${MOUNT_SOCKETS.length}`;
+		inspection.replaceChildren(heading);
+		for (const mount of installed) {
+			const socket = MOUNT_SOCKETS[mount.slot];
+			if (!socket) continue;
+			const row = document.createElement('div');
+			const title = document.createElement('strong');
+			title.textContent = `${socket.label} · ${WEAPONS[mount.weapon].name} ${rankLabel(mount.rank)}`;
+			const status = document.createElement('span');
+			status.textContent = mount.status;
+			const stats = document.createElement('small');
+			stats.textContent = weaponSummary(mount.weapon, mount.rank);
+			row.append(title, status, stats);
 			inspection.append(row);
 		}
+		const interceptions = document.createElement('small');
+		interceptions.textContent = `${state.stats.interceptions} rounds intercepted`;
+		inspection.append(interceptions);
 	};
 	element('inspect-battery').addEventListener('click', function () { if (playable()) { pause(true); updateBatteryHud(); element('battery-inspection').scrollIntoView({ block: 'nearest', behavior: 'instant' }); } }, options);
 	const start = function () {
-		starterState = createArsenalCampaign(); fitting = 'starter'; selectedWeapon = undefined; selectedOffer = undefined; selectedSocket = undefined; confirmingRestart = false; clearInput(); accumulator = 0;
-		renderFitting(); syncPanels(); element('weapon-choices').querySelector('button')?.focus({ preventScroll: true }); unlock();
+		starterState = createArsenalCampaign(); fitting = 'starter'; clearFitSelection(); confirmingRestart = false; clearInput(); accumulator = 0;
+		renderFitting(); syncPanels(); focusFit(recommendedDeploy.disabled ? element('custom-fit') : recommendedDeploy); unlock();
 	};
 	const pause = function (value: boolean) {
 		if (!running || confirmingRestart || fitting || state.outcome !== 'playing' || state.campaign?.phase === 'refit') return;
@@ -357,13 +560,18 @@ const shutdown = await mountGame('game', async function (container) {
 		if (playable()) canvas.focus({ preventScroll: true });
 	};
 	for (const sound of soundButtons) sound.addEventListener('click', toggleSound, options);
-	const setInputMode = function (mode: 'keyboard' | 'gamepad' | 'touch') {
-		if (container.dataset['input'] === mode) return;
+	const setInputMode = function (mode: InputMode) {
+		if (container.dataset['input'] === mode && inputMode === mode) return;
+		if (mode !== inputMode) {
+			clearHeldInputs();
+			if (inputMode === 'gamepad') { controller.clear(); padFrame = controller.read(undefined, 0); }
+		}
+		inputMode = mode;
 		container.dataset['input'] = mode;
-		for (const label of container.querySelectorAll<HTMLElement>('[data-keyboard]')) label.textContent = label.dataset[mode === 'gamepad' ? 'gamepad' : 'keyboard'] ?? '';
-		element('input-hint').textContent = mode === 'gamepad' ? 'A Select · B Back · D-pad Navigate' : 'Enter Select · Esc Back · Tab Navigate';
+		for (const label of container.querySelectorAll<HTMLElement>('[data-keyboard]')) label.textContent = label.dataset[mode] ?? '';
+		updateInputHints();
 	};
-	setInputMode('keyboard');
+	setInputMode(window.matchMedia('(hover: none) and (pointer: coarse)').matches ? 'touch' : 'keyboard');
 	const applyPreferences = function () {
 		audio.setMix(preferences);
 		container.dataset['largeHud'] = String(preferences.largeHud);
@@ -430,7 +638,7 @@ const shutdown = await mountGame('game', async function (container) {
 		unlock();
 	};
 	element('retry').addEventListener('click', retry, options);
-	container.addEventListener('pointerdown', function (event) { setInputMode(event.pointerType === 'touch' ? 'touch' : 'keyboard'); unlock(); }, options);
+	container.addEventListener('pointerdown', function (event) { setInputMode(event.pointerType === 'touch' ? 'touch' : 'keyboard'); unlock(); }, { ...options, capture: true });
 	const updateController = function (now: number, elapsed: number) {
 		pad = connectedController();
 		if (lastPadIndex !== undefined && pad?.index !== lastPadIndex) {
@@ -445,7 +653,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (modal) {
 			if (padFrame.direction) moveMenu(padFrame.direction);
 			if (padFrame.cancel || padFrame.pause) {
-				if (settingsOpen) closeSettings(); else if (fitting === 'starter') cancelFitting(); else if (confirmingRestart) cancelRestart(); else if (paused) pause(false); else if (state.outcome !== 'playing') returnToTitle();
+				if (settingsOpen) closeSettings(); else if (fitting) backFitting(); else if (confirmingRestart) cancelRestart(); else if (paused) pause(false); else if (state.outcome !== 'playing') returnToTitle();
 				return;
 			}
 			if (padFrame.confirm && document.activeElement instanceof HTMLElement && modal.contains(document.activeElement)) { unlock(); audio.cue('confirm'); document.activeElement.click(); }
@@ -454,9 +662,25 @@ const shutdown = await mountGame('game', async function (container) {
 		if (padFrame.pause) { pause(true); return; }
 		if (!playable()) return;
 		for (const action of ['pulse', 'neutral', 'autoFire'] as const) if (padFrame[action]) pending.add(action);
-		zoom = Math.min(2.5, Math.max(0.5, zoom + padFrame.zoom * elapsed * 0.65));
+		if (!pinch) zoom = Math.min(2.5, Math.max(0.5, zoom + padFrame.zoom * elapsed * 0.65));
+	};
+	const cancelThrottleDrag = function () {
+		throttleOrder = undefined;
+		releaseLever(throttleLever);
+	};
+	const setRudder = function (order: number) {
+		rudderOrder = order;
+		heading = undefined;
+	};
+	const clearKeyActions = function (actions: ReadonlySet<string>) {
+		for (const code of keys) {
+			const action = bindings.get(code);
+			if (action && actions.has(action)) keys.delete(code);
+		}
+		for (const action of actions) pending.delete(action);
 	};
 	window.addEventListener('keydown', function (event) {
+		if (event.repeat && inputMode !== 'keyboard') { event.preventDefault(); return; }
 		if (audio.status() === 'locked') unlock();
 		if (event.code === 'Tab') {
 			const modal = [...container.querySelectorAll<HTMLElement>('.overlay')].find(function (panel) { return !panel.hidden; });
@@ -474,15 +698,41 @@ const shutdown = await mountGame('game', async function (container) {
 		}
 		setInputMode('keyboard');
 		if (modalNow() && event.repeat && (event.code === 'Enter' || event.code === 'Space')) { event.preventDefault(); return; }
+		if (event.code === 'Enter' && event.target instanceof HTMLInputElement && event.target.name === 'refit-choice') {
+			event.preventDefault(); event.target.click(); return;
+		}
 		if (modalNow() && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) { event.preventDefault(); moveMenu(event.code === 'ArrowUp' ? 'up' : event.code === 'ArrowDown' ? 'down' : event.code === 'ArrowLeft' ? 'left' : 'right'); return; }
-		if (event.code === 'Escape') { if (settingsOpen) { event.preventDefault(); closeSettings(); return; } event.preventDefault(); if (!event.repeat) { if (fitting === 'starter') cancelFitting(); else if (confirmingRestart) cancelRestart(); else if (running && state.outcome !== 'playing') returnToTitle(); else pause(!paused); } return; }
+		if (event.code === 'Escape') { if (settingsOpen) { event.preventDefault(); closeSettings(); return; } event.preventDefault(); if (!event.repeat) { if (fitting) backFitting(); else if (confirmingRestart) cancelRestart(); else if (running && state.outcome !== 'playing') returnToTitle(); else pause(!paused); } return; }
+		if (playable() && rangeKeys.has(event.code)) {
+			if (event.target === throttleLever) {
+				releaseLever(throttleLever);
+				return;
+			}
+			if (event.target === rudderLever) {
+				event.preventDefault();
+				if (event.repeat && rudderKey !== event.code) return;
+				releaseLever(rudderLever);
+				clearKeyActions(turnActions);
+				rudderKey = event.code;
+				const increase = event.code === 'ArrowUp' || event.code === 'ArrowRight' || event.code === 'PageUp';
+				setRudder(event.code === 'Home' ? -1 : event.code === 'End' ? 1 : unit(rudderOrder + (increase ? 0.25 : -0.25)));
+				return;
+			}
+		}
 		const action = bindings.get(event.code); if (!action || !playable()) return;
 		if (event.code === 'Space' && event.target instanceof HTMLButtonElement) return;
 		if (event.repeat && !keys.has(event.code)) return;
+		if (driveActions.has(action)) cancelThrottleDrag();
+		if (turnActions.has(action)) { releaseLever(rudderLever); centerRudder(); }
 		event.preventDefault(); keys.add(event.code); if (!event.repeat) pending.add(action);
 	}, options);
-	window.addEventListener('keyup', function (event) { keys.delete(event.code); }, options);
+	window.addEventListener('keyup', function (event) {
+		keys.delete(event.code);
+		if (event.code === rudderKey) centerRudder();
+	}, options);
 	window.addEventListener('blur', function () { clearInput(); pause(true); audio.update(0, false, []); }, options);
+	window.screen.orientation?.addEventListener('change', clearInput, options);
+	window.matchMedia('(orientation: portrait)').addEventListener('change', clearInput, options);
 	canvas.addEventListener('webglcontextlost', function (event) {
 		event.preventDefault(); graphicsLost = true; clearInput(); pause(true); syncPanels();
 		element('pause-reason').textContent = 'Graphics device interrupted. Waiting for recovery; reload to restore your checkpoint if it does not return.';
@@ -496,74 +746,211 @@ const shutdown = await mountGame('game', async function (container) {
 	document.addEventListener('visibilitychange', function () { if (document.hidden) { clearInput(); pause(true); audio.update(0, false, []); } }, options);
 	const release = function (event: PointerEvent) { pointers.delete(event.pointerId); };
 	window.addEventListener('pointerup', release, options); window.addEventListener('pointercancel', release, options);
+	const setThrottle = function (order: number) {
+		clearKeyActions(driveActions);
+		throttleOrder = order < 0 ? order * maxAstern : order;
+	};
+	throttleLever.addEventListener('input', function () {
+		if (playable() && Number.isFinite(throttleLever.valueAsNumber)) setThrottle(unit(throttleLever.valueAsNumber / 100));
+	}, options);
+	throttleNeutral.addEventListener('click', function (event) {
+		if (!playable()) return;
+		releaseLever(throttleLever);
+		setThrottle(0);
+		if (event.detail > 0) canvas.focus({ preventScroll: true });
+	}, options);
+	throttleLever.addEventListener('blur', function () {
+		if (inputMode === 'keyboard' && leverPointers.has(throttleLever)) cancelThrottleDrag();
+	}, options);
+	rudderLever.addEventListener('blur', function () {
+		if (inputMode === 'keyboard') { releaseLever(rudderLever); centerRudder(); }
+	}, options);
+	// Handle each range's pointer separately so two fingers can operate the helm.
+	for (const lever of levers) {
+		const isThrottle = lever === throttleLever;
+		const samplePointer = function (event: PointerEvent) {
+			const rect = lever.getBoundingClientRect();
+			const thumbSize = Number.parseFloat(getComputedStyle(lever).getPropertyValue(isThrottle ? '--thumb-height' : '--thumb-width')) || 0;
+			const travel = (isThrottle ? rect.height : rect.width) - thumbSize;
+			if (travel <= 0) return;
+			const offset = isThrottle ? rect.bottom - event.clientY : event.clientX - rect.left;
+			const fraction = (offset - thumbSize / 2) / travel;
+			const order = Math.round(unit(fraction * 2 - 1) * 100) / 100;
+			if (isThrottle) setThrottle(order); else setRudder(order);
+		};
+		lever.addEventListener('pointerdown', function (event) {
+			if (!playable() || event.button !== 0 || leverPointers.has(lever)) return;
+			event.preventDefault();
+			if (event.pointerType !== 'touch') canvas.focus({ preventScroll: true });
+			if (!isThrottle) { clearKeyActions(turnActions); centerRudder(); }
+			lever.setPointerCapture(event.pointerId);
+			leverPointers.set(lever, event.pointerId);
+			samplePointer(event);
+		}, options);
+		lever.addEventListener('pointermove', function (event) {
+			if (leverPointers.get(lever) === event.pointerId && playable()) samplePointer(event);
+		}, options);
+		lever.addEventListener('pointerup', function (event) {
+			if (leverPointers.get(lever) !== event.pointerId) return;
+			if (isThrottle) {
+				if (playable()) samplePointer(event);
+			} else centerRudder();
+			releaseLever(lever);
+		}, options);
+		const cancel = function (event: PointerEvent) {
+			if (leverPointers.get(lever) !== event.pointerId) return;
+			if (isThrottle) throttleOrder = undefined; else centerRudder();
+			releaseLever(lever);
+		};
+		lever.addEventListener('pointercancel', cancel, options);
+		lever.addEventListener('lostpointercapture', cancel, options);
+	}
 	for (const button of buttons) {
 		button.addEventListener('pointerdown', function (event) {
 			const action = button.dataset['action']; if (!action || !playable() || event.button !== 0) return;
-			event.preventDefault(); button.setPointerCapture(event.pointerId); pointers.set(event.pointerId, action); pending.add(action);
+			event.preventDefault(); button.setPointerCapture(event.pointerId); pointers.set(event.pointerId, action);
+		}, options);
+		button.addEventListener('pointerup', function (event) {
+			const action = pointers.get(event.pointerId);
+			if (action && action !== 'brace' && playable() && button.contains(document.elementFromPoint(event.clientX, event.clientY))) pending.add(action);
 		}, options);
 		button.addEventListener('lostpointercapture', release, options);
 		button.addEventListener('click', function (event) {
-			const action = button.dataset['action']; if (event.detail === 0 && action && playable()) pending.add(action);
+			const action = button.dataset['action']; if (event.detail !== 0 || !action || !playable()) return;
+			pending.add(action);
 		}, options);
 	}
 
 	canvas.addEventListener('wheel', function (event) {
 		if (!playable() || event.ctrlKey || event.metaKey) return;
 		event.preventDefault();
-		zoom = zoomForWheel(zoom, event, canvas.getBoundingClientRect().height);
+		if (!pinch) zoom = zoomForWheel(zoom, event, canvas.getBoundingClientRect().height);
 	}, { ...options, passive: false });
 	canvas.addEventListener('contextmenu', function (event) {
 		if (playable()) event.preventDefault();
 	}, options);
-	canvas.addEventListener('pointerdown', function (event) {
-		if (!playable() || (event.button !== 0 && event.button !== 2)) return;
+	const orderHeading = function (event: PointerEvent) {
+		if (leverPointers.has(rudderLever) || rudderKey !== undefined || turnOrder() !== 0) return;
 		const rect = canvas.getBoundingClientRect();
 		const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
 		const camera = cameraFor(rect.width, rect.height, state.player, zoom);
-		if (event.button === 2 && event.pointerType === 'mouse') {
-			event.preventDefault();
-			const world = screenToWorld(point, camera, 20);
-			if (distance(world, state.player) > 1) heading = Math.atan2(world.y - state.player.y, world.x - state.player.x);
-		}
+		const ship = worldToScreen(state.player, camera, 20);
+		const deadZone = Math.max(36, state.player.length * camera.scale * 0.5 + 10);
+		if (Math.hypot(point.x - ship.x, point.y - ship.y) <= deadZone) return;
+		const world = screenToWorld(point, camera, 20);
+		heading = Math.atan2(world.y - state.player.y, world.x - state.player.x);
+	};
+	const pinchDistance = function () {
+		if (battlefieldPointers.size !== 2) return undefined;
+		const [first, second] = battlefieldPointers.values();
+		return first && second ? Math.max(1, Math.hypot(first.x - second.x, first.y - second.y)) : undefined;
+	};
+	const beginPinch = function () {
+		const distance = pinchDistance();
+		pinch = distance === undefined ? undefined : { distance, zoom };
+	};
+	const tapStayedClose = function (pointer: BattlefieldPointer, event: PointerEvent) {
+		return Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) <= (pointer.type === 'touch' ? 12 : 6);
+	};
+	canvas.addEventListener('pointerdown', function (event) {
+		if (!playable() || (event.button !== 0 && !(event.button === 2 && event.pointerType === 'mouse'))) return;
+		const first = battlefieldPointers.values().next().value;
+		if (first && (first.type !== 'touch' || event.pointerType !== 'touch')) return;
+		event.preventDefault(); canvas.setPointerCapture(event.pointerId);
+		tapCandidate = first ? undefined : event.pointerId;
+		battlefieldPointers.set(event.pointerId, {
+			type: event.pointerType, button: event.button, startedAt: event.timeStamp,
+			startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY,
+		});
+		beginPinch();
 		canvas.focus({ preventScroll: true });
 	}, options);
+	canvas.addEventListener('pointermove', function (event) {
+		const pointer = battlefieldPointers.get(event.pointerId);
+		if (!pointer || !playable()) return;
+		pointer.x = event.clientX; pointer.y = event.clientY;
+		if (tapCandidate === event.pointerId && !tapStayedClose(pointer, event)) tapCandidate = undefined;
+		const distance = pinchDistance();
+		if (pinch && distance !== undefined) zoom = Math.min(2.5, Math.max(0.5, pinch.zoom * distance / pinch.distance));
+	}, options);
+	canvas.addEventListener('pointerup', function (event) {
+		const pointer = battlefieldPointers.get(event.pointerId);
+		if (!pointer) return;
+		battlefieldPointers.delete(event.pointerId);
+		const isTap = tapCandidate === event.pointerId && event.button === pointer.button && tapStayedClose(pointer, event)
+			&& (pointer.type !== 'touch' || event.timeStamp - pointer.startedAt <= 500);
+		tapCandidate = undefined;
+		beginPinch();
+		if (isTap && playable() && document.elementFromPoint(event.clientX, event.clientY) === canvas) orderHeading(event);
+	}, options);
+	const cancelBattlefieldGesture = function (event: PointerEvent) {
+		if (battlefieldPointers.has(event.pointerId)) clearBattlefieldPointers();
+	};
+	canvas.addEventListener('pointercancel', cancelBattlefieldGesture, options);
+	canvas.addEventListener('lostpointercapture', cancelBattlefieldGesture, options);
 	const hud = function () {
-		ui.pause.textContent = `${paused ? 'Resume' : 'Pause'} · ${container.dataset['input'] === 'gamepad' ? 'Start' : 'Esc'}`;
-		element('input-hint').textContent = playable() ? container.dataset['input'] === 'gamepad' ? 'D-pad ↑↓ Thrust · LS Steer · Start Pause' : 'W/S Thrust · A/D Steer · Right-click Heading · Esc Pause' : container.dataset['input'] === 'gamepad' ? 'A Select · B Back · D-pad Navigate' : 'Enter Select · Esc Back · Tab Navigate';
 		if (training) {
 			const instruction = trainingInstructions[training.lesson];
 			element('training-title').textContent = instruction?.title ?? 'Flight school complete';
-			element('training-copy').textContent = (container.dataset['input'] === 'gamepad' ? instruction?.gamepad : instruction?.keyboard) ?? '';
+			element('training-copy').textContent = instruction?.[inputMode] ?? '';
 			element('training-progress').textContent = `${training.lesson + 1} / ${trainingInstructions.length}`;
 		}
-		const p = state.player; const speed = Math.hypot(p.vx, p.vy);
+		const p = state.player;
+		const speed = Math.hypot(p.vx, p.vy);
 		updateBatteryHud();
-		ui.shield.textContent = state.shield.active > 0 ? `${state.shield.active.toFixed(1)} S ACTIVE` : state.shield.cooldown > 0 ? `${state.shield.cooldown.toFixed(0)} S` : 'CHARGED';
-		ui.pulseState.textContent = state.shield.active > 0 ? `${state.shield.active.toFixed(1)} S ACTIVE` : state.shield.cooldown > 0 ? `${state.shield.cooldown.toFixed(1)} S CHARGE` : 'READY';
-		ui.pulseFill.style.width = `${(1 - state.shield.cooldown / Math.max(6, SHIELD_COOLDOWN - (state.campaign?.upgrades.capacitor ?? 0) * 3)) * 100}%`;
-		ui.pulse.classList.toggle('cooling', state.shield.cooldown > 0);
+		const shieldActive = state.shield.active > 0;
+		const shieldCooling = state.shield.cooldown > 0;
+		const recovery = Math.max(6, SHIELD_COOLDOWN - (state.campaign?.upgrades.capacitor ?? 0) * 3);
+		const shieldText = shieldActive ? `${state.shield.active.toFixed(1)} s active`
+			: shieldCooling ? `${Math.ceil(state.shield.cooldown)} s cooldown` : 'Ready';
+		ui.shield.textContent = shieldText;
+		ui.pulseState.textContent = shieldActive || shieldCooling ? shieldText : 'Ready · 3 s';
+		ui.pulseFill.style.width = `${(1 - state.shield.cooldown / recovery) * 100}%`;
+		ui.pulse.classList.toggle('cooling', shieldCooling && !shieldActive);
+		element('brace-state').textContent = p.braced ? 'Active · guns held' : 'Hold · −65%';
 		element('fire-policy').textContent = state.fireControl.automatic ? 'WEAPONS FREE' : 'HOLD FIRE';
-		ui.autoState.textContent = p.braced ? 'ARMOR LOCK / WEAPONS INHIBITED' : state.fireControl.automatic ? 'TURRETS ACQUIRE AUTOMATICALLY' : 'ALL TURRET FIRE INHIBITED';
+		ui.autoState.textContent = p.braced ? 'Armor locked' : state.fireControl.automatic ? 'Automatic fire' : 'Turrets held';
 		ui.autoFire.setAttribute('aria-pressed', String(state.fireControl.automatic));
 		ui.autoFire.setAttribute('aria-label', state.fireControl.automatic ? 'Weapons Free. Toggle Hold Fire' : 'Hold Fire. Toggle Weapons Free');
-		ui.defenseCount.textContent = `${state.stats.interceptions} ROUNDS INTERCEPTED`;
+		ui.defenseCount.textContent = `${state.stats.interceptions} INTERCEPTS`;
 		for (const [i, marker] of [...container.querySelectorAll('.mission-steps i')].entries()) {
 			marker.classList.toggle('active', i + 1 === state.wave); marker.classList.toggle('complete', i + 1 < state.wave);
 		}
-		ui.phase.textContent = training ? 'FLIGHT SCHOOL / LIVE PRACTICE' : paused ? 'CAMPAIGN PAUSED' : `MISSION ${String(state.wave).padStart(2, '0')} / ${String(CAMPAIGN_MISSIONS.length).padStart(2, '0')} · ${CAMPAIGN_MISSIONS[state.wave - 1]?.name.toUpperCase() ?? ''}`;
-		ui.objective.textContent = training ? 'Safe training · No campaign progress is changed' : state.campaign?.phase === 'refit' ? 'Transit reached · choose a field refit' : `SURVIVE ${Math.max(0, Math.ceil((MISSION_PACING[state.wave - 1]?.duration ?? 0) - (state.campaign?.clock?.elapsed ?? 0)))}s · ${state.enemies.length} hostile signatures · ${state.kills} ships broken`;
-		ui.hull.textContent = String(Math.ceil(p.hp / MAX_HULL * 100)); ui.hullFill.style.width = `${p.hp / MAX_HULL * 100}%`;
-		ui.hullFill.style.background = p.hp < MAX_HULL * 0.3 ? 'var(--danger)' : 'var(--cyan)';
-		ui.throttle.textContent = Math.abs(p.throttle) < 0.001 ? 'NEUTRAL' : p.throttle < 0 ? `ASTERN ${Math.round(-p.throttle / 0.35 * 100)}%` : `AHEAD ${Math.round(p.throttle * 100)}%`;
-		ui.throttleFill.style.width = `${Math.abs(p.throttle) / (p.throttle < 0 ? 0.35 : 1) * 100}%`; ui.throttleFill.style.background = p.throttle < 0 ? 'var(--gold)' : 'var(--cyan)';
+		const mission = CAMPAIGN_MISSIONS[state.wave - 1];
+		const transitSeconds = Math.max(0, Math.ceil((MISSION_PACING[state.wave - 1]?.duration ?? 0) - (state.campaign?.clock?.elapsed ?? 0)));
+		const minutes = String(Math.floor(transitSeconds / 60)).padStart(2, '0');
+		const seconds = String(transitSeconds % 60).padStart(2, '0');
+		ui.phase.textContent = training ? 'FLIGHT SCHOOL' : `${String(state.wave).padStart(2, '0')} / ${String(CAMPAIGN_MISSIONS.length).padStart(2, '0')} · ${mission?.name.toUpperCase() ?? ''}`;
+		ui.objective.textContent = training ? 'DRILL' : transitSeconds > 0 ? `${minutes}:${seconds}` : 'OPEN';
+		element('transit-order').textContent = training ? 'Live practice' : transitSeconds > 0 ? 'Survive to transit' : 'Transit window';
+		const hullFraction = Math.max(0, p.hp / p.maxHp);
+		ui.hull.textContent = String(Math.ceil(hullFraction * 100));
+		ui.hullFill.style.width = `${hullFraction * 100}%`;
+		ui.hullFill.style.backgroundColor = hullFraction < 0.3 ? 'var(--danger)' : 'var(--cyan)';
+		ui.hull.dataset['critical'] = String(hullFraction < 0.3);
+		const throttle = throttleOrder ?? p.throttle;
+		const throttlePercent = Math.round(throttle / (throttle < 0 ? maxAstern : 1) * 100);
+		const rudderPercent = playable() ? Math.round(turnOrder() * 100) : 0;
+		const throttleText = throttlePercent === 0 ? 'NEUTRAL' : `${throttlePercent < 0 ? 'ASTERN' : 'AHEAD'} ${Math.abs(throttlePercent)}%`;
+		const rudderText = rudderPercent === 0 ? 'CENTERED' : `${rudderPercent < 0 ? 'PORT' : 'STARBOARD'} ${Math.abs(rudderPercent)}%`;
+		if (throttleLever.valueAsNumber !== throttlePercent) throttleLever.valueAsNumber = throttlePercent;
+		if (rudderLever.valueAsNumber !== rudderPercent) rudderLever.valueAsNumber = rudderPercent;
+		if (ui.throttle.textContent !== throttleText) ui.throttle.textContent = throttleText;
+		if (ui.rudder.textContent !== rudderText) ui.rudder.textContent = rudderText;
 		ui.speed.textContent = `${Math.round(p.vx * Math.cos(p.angle) + p.vy * Math.sin(p.angle))} M/S`;
-		ui.motion.textContent = `${speed < 1 ? 'DRIVE IDLE' : 'UNDER THRUST'} / ${Math.abs(p.yaw) < 0.015 ? 'THRUSTERS CENTERED' : `${p.yaw < 0 ? 'PORT' : 'STBD'} ${Math.abs(p.yaw * 180 / Math.PI).toFixed(0)}°/S`}`;
+		ui.motion.textContent = Math.abs(p.yaw) >= 0.015 ? `TURN ${p.yaw < 0 ? 'PORT' : 'STBD'} ${Math.abs(p.yaw * 180 / Math.PI).toFixed(0)}°/S`
+			: speed < 1 ? 'DRIVE IDLE' : Math.abs(p.throttle) < 0.001 ? 'COASTING' : 'UNDER THRUST';
 
 		for (const button of buttons) button.classList.toggle('pressed', playable() && active(button.dataset['action'] ?? ''));
 		ui.brace.classList.toggle('pressed', playable() && p.braced);
-		ui.pulse.classList.toggle('pressed', playable() && state.shield.active > 0);
+		ui.pulse.classList.toggle('pressed', playable() && shieldActive);
 		ui.autoFire.classList.toggle('pressed', state.fireControl.automatic);
-		ui.message.textContent = !playable() ? '' : state.intermission > 0 ? state.wave === CAMPAIGN_MISSIONS.length ? 'FINAL CONTACT CLEAR / SECURING THE PASSAGE' : `CONTACT CLEAR / FIELD REFIT IN ${Math.max(0, Math.ceil(6 - state.intermission))} S` : state.shield.active > 0 ? 'AEGIS FIELD ACTIVE / 85% DAMAGE REDUCTION' : p.braced ? 'ARMOR LOCK / WEAPONS INHIBITED / RELOAD SLOWED' : state.enemies.some(function (enemy) { return enemy.warning > 0; }) ? 'INCOMING VOLLEY / EVADE, LOCK ARMOR OR PULSE SHIELDS' : state.time < 12 ? container.dataset['input'] === 'gamepad' ? 'D-PAD → FIRE POLICY · BRING YOUR FITTED FLANK TO BEAR' : 'G FIRE POLICY · BRING YOUR FITTED FLANK TO BEAR' : '';
+		const volley = state.enemies.some(function (enemy) { return enemy.hp > 0 && enemy.warning > 0; });
+		ui.message.dataset['danger'] = String(volley);
+		const alert = !playable() ? '' : state.intermission > 0
+			? state.wave === CAMPAIGN_MISSIONS.length ? 'Final contact clear · passage secured' : `Contact clear · refit in ${Math.max(0, Math.ceil(6 - state.intermission))} s`
+			: volley ? `Incoming volley · ${shieldActive ? 'Aegis active' : p.braced ? 'armor locked' : 'turn, lock armor or use Aegis'}` : '';
+		if (ui.message.textContent !== alert) ui.message.textContent = alert;
 	};
 	const showResult = function () {
 		if (state.outcome === 'won') { savedCampaign = undefined; if (clearCampaign()) setSaveStatus('Campaign complete. Start a new run when ready.'); else setSaveStatus('Campaign complete. Browser could not clear the old checkpoint.', true); }
@@ -581,8 +968,13 @@ const shutdown = await mountGame('game', async function (container) {
 		if (playable() && !document.hidden) {
 			accumulator += elapsed;
 			while (accumulator >= 1 / 60 && playable()) {
-				if (active('right') || active('left') || padFrame.turn !== 0) heading = undefined;
-				const input: Controls = { drive: Math.max(-1, Math.min(1, Number(active('forward')) - Number(active('back')) + padFrame.drive)), turn: Math.max(-1, Math.min(1, Number(active('right')) - Number(active('left')) + padFrame.turn)),
+				const turn = turnOrder();
+				if (turn !== 0) heading = undefined;
+				const drive = throttleOrder === undefined && !leverPointers.has(throttleLever)
+					? unit(Number(active('forward')) - Number(active('back')) + padFrame.drive) : 0;
+				if (throttleOrder !== undefined) state.player.throttle = throttleOrder;
+				throttleOrder = undefined;
+				const input: Controls = { drive, turn,
 					...(heading === undefined ? {} : { heading }), neutral: active('neutral'), port: false, starboard: false, brace: active('brace'),
 					pulse: pending.has('pulse'), torpedo: false, autoFire: pending.has('autoFire'), beam: false, missile: false };
 				step(state, input, 1 / 60); pending.clear(); accumulator -= 1 / 60;

@@ -1,20 +1,14 @@
 import { createDriveAnimator } from './effect-motion';
-import { clamp, distance, targetFor, torpedoTargetFor, type Point, type Ship, type Side, type State } from './simulation';
+import { distance, targetFor, torpedoTargetFor, type Point, type Ship, type Side, type State } from './simulation';
 import { cameraFor, worldToScreen, type Camera } from './projection';
 import { drawStarship, polygon, line } from './ship-art';
 import { createBackdrop } from './backdrop';
 import { createCombatEffectsRenderer } from './combat-effects';
-import { hudObstacles, clearLabelPosition } from './tactical-labels';
+import { hudObstacles, clearLabelPosition, projectBearing, type LabelObstacle } from './tactical-labels';
 import { CEL } from './visual-theme';
 
 const ring = function (ctx: CanvasRenderingContext2D, at: Point, radius: number, color: string) {
 	ctx.beginPath(); ctx.ellipse(at.x, at.y, radius, radius * 0.58, 0, 0, Math.PI * 2); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
-};
-const contactOnField = function (point: Point, width: number, height: number) {
-	const safeTop = height < 500 ? 70 : 100;
-	const compact = height <= 500 && width >= 540;
-	const safeBottom = height - (compact ? 180 : width <= 700 ? 300 : 280);
-	return point.x > 45 && point.x < width - 45 && point.y > safeTop && point.y < safeBottom;
 };
 const label = function (ctx: CanvasRenderingContext2D, value: string, at: Point, color: string, size = 10) {
 	ctx.font = `700 ${size}px Arial, sans-serif`; ctx.textAlign = 'center';
@@ -46,12 +40,14 @@ const drawRadar = function (ctx: CanvasRenderingContext2D, width: number, state:
 		{ x: x + Math.cos(direction - 2.5) * 5, y: y + Math.sin(direction - 2.5) * 5 }], CEL.mint);
 	label(ctx, 'TACTICAL / 900 M', { x, y: y + 85 }, CEL.muted, 8);
 };
-const drawHeading = function (ctx: CanvasRenderingContext2D, camera: Camera, player: Ship, heading: number) {
+const drawHeading = function (ctx: CanvasRenderingContext2D, camera: Camera, player: Ship, heading: number, hud: readonly LabelObstacle[]) {
 	const origin = worldToScreen(player, camera, 20);
 	const projected = worldToScreen({ x: player.x + Math.cos(heading), y: player.y + Math.sin(heading) }, camera, 20);
 	const direction = Math.atan2(projected.y - origin.y, projected.x - origin.x);
 	const length = Math.min(camera.width * 0.32, camera.height * 0.28, Math.max(110, 240 * camera.scale));
-	const at = { x: origin.x + Math.cos(direction) * length, y: origin.y + Math.sin(direction) * length };
+	const course = { x: origin.x + Math.cos(direction) * length, y: origin.y + Math.sin(direction) * length };
+	const at = projectBearing(origin, course, camera.width, camera.height, hud, 'heading')?.point;
+	if (!at) return;
 	ctx.save();
 	ctx.setLineDash([5, 7]); ctx.lineWidth = 1.5;
 	line(ctx, origin, at, `${CEL.mint}b3`); ctx.setLineDash([]);
@@ -117,13 +113,25 @@ export const createRenderer = function () {
 		const ships: Ship[] = [...state.enemies, p];
 		ships.sort(function (a, b) { return a.x + a.y - b.x - b.y; });
 		for (const ship of ships) drawStarship(ctx, camera, ship, state, reducedMotion, driveLength(ship, state, reducedMotion));
+		const hud = hudObstacles(ctx.canvas);
+		const origin = worldToScreen(p, camera, 20);
 		for (const ship of ships) {
 			const hull = worldToScreen(ship, camera, 20);
 			const at = { x: hull.x, y: hull.y - Math.max(34, ship.length * camera.scale * 0.54) - 12 };
 			if (ship.id === 0) {
 				label(ctx, state.shield.active > 0 ? 'AEGIS FIELD ACTIVE' : p.braced ? 'ARMOR LOCK / −65%' : 'DREADWAKE', at, p.braced ? CEL.amber : CEL.mint, 9);
 			} else {
-				if (!contactOnField(worldToScreen(ship, camera), width, height)) continue;
+				const bearing = projectBearing(origin, hull, width, height, hud);
+				if (!bearing) continue;
+				if (!bearing.visible) {
+					const edge = bearing.point;
+					const angle = Math.atan2(hull.y - origin.y, hull.x - origin.x);
+					polygon(ctx, [0, 2.5, -2.5].map(function (offset) {
+						return { x: edge.x + Math.cos(angle + offset) * 8, y: edge.y + Math.sin(angle + offset) * 8 };
+					}), CEL.hostile);
+					label(ctx, `${Math.round(distance(p, ship))} M`, { x: edge.x, y: edge.y + 20 }, CEL.muted, 8);
+					continue;
+				}
 				const priority = state.arsenal ? state.arsenal.mounts.some(function (mount) { return mount?.target === ship.id; }) : ship.id === state.priorityTarget;
 				const contact = state.enemies.find(function (enemy) { return enemy.id === ship.id; });
 				const designation = contact?.command ? 'COMMAND CRUISER' : ship.length > 150 ? 'CRUISER' : 'FRIGATE';
@@ -140,26 +148,13 @@ export const createRenderer = function () {
 				}
 			}
 		}
-		if (heading !== undefined) drawHeading(ctx, camera, p, heading);
+		if (heading !== undefined) drawHeading(ctx, camera, p, heading, hud);
 		drawCombatEffects(ctx, camera, state, reducedMotion);
 		for (const enemy of state.enemies) if (enemy.warning > 0) {
 			const aim = worldToScreen(enemy.aim, camera);
 			label(ctx, enemy.weapon === 'beam' ? 'LANCE CHARGING' : enemy.weapon === 'missile' ? 'MISSILE SALVO' : 'INCOMING', { x: aim.x, y: aim.y + Math.max(40, p.length * camera.scale * 0.5) }, enemy.weapon === 'beam' ? CEL.violet : CEL.hostile, 11);
 		}
 		ctx.restore();
-		for (const enemy of state.enemies) {
-			const at = worldToScreen(enemy, camera);
-			const safeTop = height < 500 ? 70 : 100;
-			const compact = height <= 500 && width >= 540;
-			const safeBottom = height - (compact ? 180 : width <= 700 ? 300 : 280);
-			if (contactOnField(at, width, height)) continue;
-			const dx = at.x - width / 2; const dy = at.y - height * 0.45;
-			const fit = Math.min((width / 2 - 35) / Math.max(1, Math.abs(dx)), (height * 0.45 - safeTop - 10) / Math.max(1, Math.abs(dy)));
-			const x = width / 2 + dx * fit; const y = clamp(height * 0.45 + dy * fit, safeTop + 5, safeBottom);
-			const angle = Math.atan2(dy, dx);
-			polygon(ctx, [0, 2.5, -2.5].map(function (offset) { return { x: x + Math.cos(angle + offset) * 8, y: y + Math.sin(angle + offset) * 8 }; }), CEL.hostile);
-			label(ctx, `${Math.round(distance(p, enemy))} M`, { x, y: y + 20 }, CEL.muted, 8);
-		}
 		if (height > 520) drawRadar(ctx, width, state);
 	};
 };

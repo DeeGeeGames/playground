@@ -7,27 +7,84 @@
 <meta name="description" content="Command a heavy star cruiser through the Lyra Passage. Fit a capital ship with autonomous turrets, earn battlefield upgrades, and survive five linked encounters.">
 <title>Dread Wake · The Lyra Passage</title>
 <link rel="stylesheet" href="./src/style.css">
+<link rel="stylesheet" href="./src/fitting.css">
 </head>
 <body>
 <main id="game" data-mode="briefing">
-	<canvas tabindex="0" aria-label="Tactical starship battlefield. W/S throttle, A/D turn, G Weapons Free or Hold Fire, Space armor lock, F Aegis, X neutral, Escape pause. Controller controls are available in pause."></canvas>
+	<canvas tabindex="0" aria-label="Tactical starship battlefield. Click or tap to order a heading. Scroll or pinch to zoom. Hold W/S for drive or A/D to turn. Open Pause for the command reference."></canvas>
 	<header class="topbar">
 		<a class="brand" href="../../" aria-label="Dread Wake, return to experiments"><span class="brand-mark" aria-hidden="true">∴</span><span>DREAD WAKE<small>THE LYRA PASSAGE</small></span></a>
-		<div class="mission"><span class="eyebrow">LYRA OPERATIONS</span><b id="phase">MISSION 01 / 05 · OUTER PICKET</b><span id="objective">Break the blockade. Secure the passage.</span><div class="mission-steps" id="mission-steps" aria-hidden="true"></div></div>
-		<div class="utility"><button id="sound" aria-pressed="false" aria-label="Mute sound">Sound on</button><button id="pause">Pause <kbd data-keyboard="Esc" data-gamepad="MENU">Esc</kbd></button></div>
-	</header>
-	<aside class="hull" aria-label="Ship status"><span class="ship-designation">CSV–07 <small>HEAVY CRUISER</small></span><div class="hull-number"><strong id="hull-value">100</strong><span>%<small>HULL</small></span></div><div class="track"><i id="hull-fill"></i></div><p id="motion">DRIVE IDLE / THRUSTERS CENTERED</p><div class="shield-readout"><span>AEGIS</span><b id="shield-readout">CHARGED</b></div><div class="point-defense"><span>BATTERY <b id="battery-count">0 / 12</b></span><small id="defense-count">0 ROUNDS INTERCEPTED</small></div></aside>
-	<aside class="arsenal-readout" aria-label="Battery and salvage"><div class="arsenal-heading"><span>FITTED BATTERY</span><button id="inspect-battery" aria-label="Pause and inspect fitted turrets">Inspect</button></div><div id="battery-sockets" class="battery-sockets" aria-label="Twelve turret sockets"></div><div class="salvage-heading"><span>SALVAGE</span><b id="salvage-value">0 / 180</b></div><div class="track"><i id="salvage-fill"></i></div><small id="salvage-hint">Damage earns your next choice</small></aside>
-	<div id="message" class="field-message" role="status"></div>
-	<p id="save-notice" class="save-notice" role="status" hidden></p>
-	<aside id="training-guide" class="training-guide" aria-label="Flight school" hidden><div class="training-heading"><span class="eyebrow">FLIGHT SCHOOL</span><span id="training-progress">01 / 06</span></div><h2 id="training-title">Take the helm.</h2><p id="training-copy">Your first command begins here.</p><button id="training-skip">Leave flight school</button></aside>
-	<div class="cockpit" aria-label="Cruiser commands">
-		<div class="armament"><button class="system" id="auto-fire" data-action="autoFire" aria-pressed="true" aria-label="Weapons Free. Toggle Hold Fire"><span class="system-heading"><kbd data-keyboard="G" data-gamepad="→">G</kbd><span id="fire-policy">WEAPONS FREE</span></span><small id="auto-state">TURRETS ACQUIRE AUTOMATICALLY</small></button></div>
-		<div class="defense">
-			<button class="system brace" data-action="brace" id="brace"><span class="system-heading"><kbd data-keyboard="SPACE" data-gamepad="LB">SPACE</kbd><span>ARMOR LOCK</span></span><small>HOLD / −65% DAMAGE</small></button>
-			<button class="system pulse" data-action="pulse" id="pulse"><span class="system-heading"><kbd data-keyboard="F" data-gamepad="A">F</kbd><span>AEGIS</span></span><small id="pulse-state">READY / 3 SECOND SHIELD</small><i id="pulse-fill"></i></button>
+		<div class="bridge-status">
+			<section class="mission bridge-instrument" aria-label="Transit status">
+				<span id="phase">01 / 05 · OUTER PICKET</span>
+				<div class="transit"><strong id="objective">01:00</strong><span id="transit-order">Survive to transit</span></div>
+				<div class="mission-steps" id="mission-steps" aria-hidden="true"></div>
+			</section>
+			<section class="hull bridge-instrument" aria-label="Hull status">
+				<div class="instrument-heading"><span>HULL</span><span class="ship-designation">CSV–07</span></div>
+				<div class="hull-number"><strong id="hull-value">100</strong><span>%</span></div>
+				<div class="track"><i id="hull-fill"></i></div>
+				<p id="motion">DRIVE IDLE</p>
+				<div class="shield-readout"><span>AEGIS</span><b id="shield-readout">READY</b></div>
+			</section>
+			<section class="salvage bridge-instrument" aria-label="Salvage progress">
+				<div class="instrument-heading">DAMAGE → SALVAGE</div>
+				<strong id="salvage-value">0 / 180</strong>
+				<div class="track"><i id="salvage-fill"></i></div>
+				<small id="salvage-hint">Earn a weapon choice</small>
+			</section>
 		</div>
-		<div class="helm"><div class="helm-title"><span>DRIVE ORDER</span><b id="throttle-value">NEUTRAL</b></div><div class="helm-input"><button data-action="left" aria-label="Turn port">↶<small data-keyboard="A" data-gamepad="LS">A</small></button><button data-action="back" aria-label="Lower throttle">−<small data-keyboard="S" data-gamepad="↓">S</small></button><div class="engine"><div class="track"><i id="throttle-fill"></i></div><span id="speed-value">0 M/S</span></div><button data-action="forward" aria-label="Raise throttle">+<small data-keyboard="W" data-gamepad="↑">W</small></button><button data-action="right" aria-label="Turn starboard">↷<small data-keyboard="D" data-gamepad="LS">D</small></button></div><button class="neutral" data-action="neutral"><span data-keyboard="X" data-gamepad="←">X</span> · NEUTRAL / COAST</button></div>
+		<div class="utility"><button id="sound" aria-pressed="false" aria-label="Mute sound">Sound on</button><button id="pause">Pause <kbd data-keyboard="Esc" data-gamepad="MENU">Esc</kbd></button></div>
+		<div class="bridge-notices">
+			<div id="message" class="field-message" role="status"></div>
+			<p id="save-notice" class="save-notice" role="status" hidden></p>
+			<aside id="training-guide" class="training-guide" aria-label="Flight school" hidden><div class="training-heading"><span class="eyebrow">FLIGHT SCHOOL</span><span id="training-progress">01 / 06</span></div><h2 id="training-title">Take the helm.</h2><p id="training-copy">Your first command begins here.</p><button id="training-skip">Leave flight school</button></aside>
+		</div>
+	</header>
+	<div class="cockpit" aria-label="Cruiser commands">
+		<div class="helm">
+			<div class="throttle-control">
+				<label for="throttle-lever">Throttle</label>
+				<div class="throttle-track">
+					<input id="throttle-lever" type="range" min="-100" max="100" step="1" value="0" orient="vertical">
+					<div class="throttle-scale">
+						<span>Ahead</span>
+						<button id="throttle-neutral" type="button">Neutral</button>
+						<span>Astern</span>
+					</div>
+				</div>
+				<output id="throttle-value" for="throttle-lever">NEUTRAL</output>
+			</div>
+			<div class="rudder-control">
+				<label for="rudder-lever">Rudder</label>
+				<div class="rudder-track">
+					<input id="rudder-lever" type="range" min="-100" max="100" step="1" value="0">
+					<div class="rudder-scale"><span>Port</span><span>Center</span><span>Starboard</span></div>
+				</div>
+				<output id="rudder-value" for="rudder-lever">CENTERED</output>
+				<div class="helm-title">
+					<span data-keyboard="Click the field to steer" data-gamepad="Left stick to steer" data-touch="Tap to steer · pinch to zoom">Click the field to steer</span>
+					<div class="engine"><span id="speed-value">0 M/S</span></div>
+				</div>
+			</div>
+		</div>
+		<div class="battery-station">
+			<aside class="arsenal-readout bridge-instrument" aria-label="Fitted battery">
+				<div class="battery-signal">
+					<div class="instrument-heading"><span>BATTERY <b id="battery-count">0 / 12</b></span><span id="defense-count">0 INTERCEPTS</span></div>
+					<strong id="battery-lead"></strong>
+					<span id="battery-advice"></span>
+				</div>
+				<button id="inspect-battery" aria-label="Pause and inspect fitted turrets">Inspect</button>
+			</aside>
+			<div class="tactical-controls">
+				<div class="armament"><button class="system" id="auto-fire" data-action="autoFire" aria-pressed="true" aria-label="Weapons Free. Toggle Hold Fire"><span class="system-heading"><kbd data-keyboard="G" data-gamepad="→">G</kbd><span id="fire-policy">WEAPONS FREE</span></span><small id="auto-state">TURRETS ACQUIRE AUTOMATICALLY</small></button></div>
+				<div class="defense">
+					<button class="system brace" data-action="brace" id="brace"><span class="system-heading"><kbd data-keyboard="SPACE" data-gamepad="LB">SPACE</kbd><span>ARMOR LOCK</span></span><small id="brace-state">Hold · −65%</small></button>
+					<button class="system pulse" data-action="pulse" id="pulse"><span class="system-heading"><kbd data-keyboard="F" data-gamepad="A">F</kbd><span>AEGIS</span></span><small id="pulse-state">Ready · 3 s</small><i id="pulse-fill"></i></button>
+				</div>
+			</div>
+		</div>
 	</div>
 	<footer id="input-hint">POSITION THE SHIP. BUILD YOUR BATTERY.</footer>
 	<section class="overlay briefing" id="brief" role="dialog" aria-modal="true" aria-labelledby="brief-title">
@@ -45,20 +102,58 @@
 	</section>
 	<section class="overlay" id="pause-panel" hidden role="dialog" aria-modal="true" aria-labelledby="pause-title"><div class="panel pause-panel">
 		<div class="pause-main"><span class="eyebrow">ORDERS HELD / SIMULATION PAUSED</span><h2 id="pause-title">STANDING BY.</h2><p id="pause-reason">Take your time. The passage can wait.</p><button class="primary" id="resume">RESUME COMMAND <span aria-hidden="true">↗</span></button><button class="secondary" id="pause-settings">Settings</button><button class="secondary subdued" id="reset">Restart campaign</button><p class="save-status" data-save-status role="status"></p></div>
-		<div class="command-reference"><h3>KNOW YOUR SHIP</h3><p class="reference-intro">Your turrets acquire and fire automatically. Bring the fitted flank toward contacts and hold the range your battery needs. Red tells announce incoming fire.</p><table class="controls-table"><caption>Combat controls</caption><thead><tr><th scope="col">Command</th><th scope="col">Keyboard</th><th scope="col">Controller</th></tr></thead><tbody><tr><th scope="row">Steer</th><td>A / D</td><td>Left stick</td></tr><tr><th scope="row">Throttle / neutral</th><td>W / S · X</td><td>D-pad ↑ ↓ · ←</td></tr><tr><th scope="row">Weapons Free / Hold Fire</th><td>G</td><td>D-pad →</td></tr><tr><th scope="row">Armor / Aegis</th><td>Space / F</td><td>LB / A</td></tr><tr><th scope="row">Zoom</th><td>Wheel</td><td>Right stick ↑ ↓</td></tr><tr><th scope="row">Pause</th><td>Esc</td><td>Menu / Start</td></tr></tbody></table><p class="reference-note">Mouse: right-click to order a heading. Weapons choose their own targets.<br>Menus: D-pad / left stick to move · A select · B back.</p><div id="battery-inspection" class="battery-inspection" aria-label="Fitted turret diagnostics"></div><div class="pause-rules"><p><b>ARMOR LOCK</b> Hold for 65% protection. Slows movement and reloads; stops fitted weapons and cancels an unfinished charge.</p><p><b>AEGIS</b> 85% protection for 3 seconds. Defenses do not stack. Flak intercepts incoming rounds when fitted and Weapons Free.</p></div></div>
+		<div class="command-reference"><h3>KNOW YOUR SHIP</h3><p class="reference-intro">Your turrets acquire and fire automatically. Bring the fitted flank toward contacts and hold the range your battery needs. Red tells announce incoming fire.</p><table class="controls-table"><caption>Combat controls</caption>
+			<thead><tr><th scope="col">Command</th><th scope="col">Keyboard / mouse</th><th scope="col">Controller</th><th scope="col">Touch</th></tr></thead>
+			<tbody>
+				<tr><th scope="row">Heading</th><td>Click or right-click away from ship</td><td></td><td>Tap away from ship</td></tr>
+				<tr><th scope="row">Manual turn</th><td>Hold A / D or drag rudder</td><td>Left stick</td><td>Drag rudder · release to center</td></tr>
+				<tr><th scope="row">Drive / neutral</th><td>Hold W / S · X, or use the throttle slider</td><td>Hold D-pad ↑ ↓ · ←</td><td>Slide throttle · tap Neutral</td></tr>
+				<tr><th scope="row">Fire policy</th><td>G</td><td>D-pad →</td><td>Weapons Free / Hold Fire</td></tr>
+				<tr><th scope="row">Armor / Aegis</th><td>Hold Space · F</td><td>Hold LB · A</td><td>Hold Armor Lock · Tap Aegis</td></tr>
+				<tr><th scope="row">Zoom</th><td>Wheel</td><td>Right stick ↑ ↓</td><td>Pinch battlefield</td></tr>
+				<tr><th scope="row">Pause</th><td>Esc</td><td>Menu / Start</td><td>Pause</td></tr>
+			</tbody>
+		</table><p class="reference-note">Throttle holds its setting. Neutral lets the ship coast. Move either focused slider with the arrow keys or use Home / End for full travel.<br>Controller menus use the D-pad or left stick to move, A to select, and B to go back.</p><div id="battery-inspection" class="battery-inspection" aria-label="Fitted turret diagnostics"></div><div class="pause-rules"><p><b>ARMOR LOCK</b> Hold for 65% protection. Slows movement and reloads; stops fitted weapons and cancels an unfinished charge.</p><p><b>AEGIS</b> 85% protection for 3 seconds. Defenses do not stack. Flak intercepts incoming rounds when fitted and Weapons Free.</p></div></div>
 	</div></section>
 	<section class="overlay" id="settings-panel" hidden role="dialog" aria-modal="true" aria-labelledby="settings-title"><div class="panel settings-panel"><span class="eyebrow">BRIDGE CONFIGURATION</span><h2 id="settings-title">YOUR COMMAND.</h2><p>Adjust the mix and display. Preferences stay in this browser.</p><fieldset class="settings-group"><legend>AUDIO</legend><label class="range-setting" for="master-volume"><span>Master volume</span><input id="master-volume" type="range" min="0" max="100" step="5" value="75"><output for="master-volume">75%</output></label><label class="range-setting" for="music-volume"><span>Music</span><input id="music-volume" type="range" min="0" max="100" step="5" value="55"><output for="music-volume">55%</output></label><label class="range-setting" for="effects-volume"><span>Effects</span><input id="effects-volume" type="range" min="0" max="100" step="5" value="80"><output for="effects-volume">80%</output></label></fieldset><fieldset class="settings-group"><legend>DISPLAY &amp; FEEDBACK</legend><label class="toggle-setting"><span>Screen shake<small>Motion reduction also follows your device preference.</small></span><input id="screen-shake" type="checkbox" checked></label><label class="toggle-setting"><span>Controller vibration<small>When supported by your controller and browser.</small></span><input id="vibration" type="checkbox" checked></label><label class="toggle-setting"><span>Large HUD<small>Larger combat text for playing from a distance.</small></span><input id="large-hud" type="checkbox"></label></fieldset><p class="settings-help">Controller: ↑ ↓ select · ← → adjust · A toggle · B back</p><button class="primary" id="settings-back">BACK <span aria-hidden="true">↩</span></button></div></section>
 	<section class="overlay" id="refit" hidden role="dialog" aria-modal="true" aria-labelledby="refit-title"><div class="panel refit-panel"><span class="eyebrow">CONTACT SECURED / FIELD REFIT</span><h2 id="refit-title">STILL IN ONE PIECE.</h2><p id="refit-summary"></p><div class="next-mission"><span class="eyebrow" id="next-mission-number"></span><h3 id="next-mission-title"></h3><p id="next-mission-intel"></p></div><fieldset class="refit-options"><legend>ONE REFIT AVAILABLE · CHOOSE YOUR PRIORITY</legend><div id="refit-choices"></div></fieldset><p class="refit-warning">Hull damage persists. Installing an upgrade does not repair your ship.</p><button class="primary" id="deploy" disabled>SELECT A REFIT TO CONTINUE <span aria-hidden="true">↗</span></button><p class="save-status" data-save-status role="status"></p></div></section>
 	<section class="overlay" id="result" hidden role="dialog" aria-modal="true" aria-labelledby="result-title"><div class="panel compact"><span class="eyebrow">LYRA PASSAGE / AFTER ACTION</span><h2 id="result-title">BLOCKADE BROKEN.</h2><p id="result-copy"></p><div id="result-stats"></div><button class="primary" id="retry" hidden>RETRY MISSION <span aria-hidden="true">↗</span></button><button class="secondary" id="restart">START A NEW CAMPAIGN</button><p class="save-status" data-save-status role="status"></p><a class="back" href="../../">Return to experiments</a></div></section>
 	<section class="overlay" id="confirm-reset" hidden role="dialog" aria-modal="true" aria-labelledby="confirm-title"><div class="panel compact"><span class="eyebrow">NEW CAMPAIGN</span><h2 id="confirm-title">LEAVE THIS RUN?</h2><p>Starting again replaces your saved campaign. Your current checkpoint is kept until you confirm a starter and socket for the new campaign.</p><button class="primary" id="cancel-reset">KEEP CURRENT CAMPAIGN <span aria-hidden="true">↩</span></button><button class="secondary subdued" id="confirm-start">Replace with a new campaign</button></div></section>
-	<section class="overlay" id="fitting-panel" hidden role="dialog" aria-modal="true" aria-labelledby="fitting-title"><div class="panel fitting-panel">
-		<span class="eyebrow" id="fitting-eyebrow">INITIAL FIT / ONE TURRET</span><h2 id="fitting-title">BUILD YOUR BATTERY.</h2><p id="fitting-copy">Choose your first weapon. Eleven sockets will remain empty. Movement and range will make it work.</p>
-		<div id="weapon-choices" class="weapon-choices"></div>
-		<div id="socket-selection" class="socket-selection" hidden><div class="socket-heading"><span class="eyebrow">SELECT A SOCKET</span><span>BOW ↑</span></div><p id="socket-coverage"></p><div class="socket-labels"><span>← PORT</span><span>STARBOARD →</span></div><div id="fitting-sockets" class="fitting-sockets"></div><p id="fitting-selection" role="status">Choose a socket to confirm the fit.</p><p id="replacement-warning" class="replacement-warning" hidden></p></div>
-		<div id="upgrade-preview" class="upgrade-preview" hidden></div><button class="primary" id="confirm-fit" disabled>SELECT A WEAPON</button>
-		<div id="draft-alternatives" class="draft-alternatives" hidden><button id="reroll-draft">Reroll · 1 available</button><button id="repair-draft">Repair hull · +15%</button><button id="skip-draft">Skip this reward</button></div>
-		<button class="secondary" id="cancel-fitting">Back</button><p class="fitting-save-note">Mission checkpoints restore the launch loadout and salvage together. Mid-mission choices are lost on retry.</p>
-	</div></section>
+	<section class="overlay" id="fitting-panel" hidden role="dialog" aria-modal="true" aria-labelledby="fitting-title">
+		<div class="panel fitting-bridge">
+			<span class="eyebrow" id="fitting-eyebrow">INITIAL FIT / OUTER PICKET</span>
+			<h2 id="fitting-title">Ready to deploy</h2>
+			<p id="fitting-copy"></p>
+			<div id="recommended-fit" hidden>
+				<div class="fit-preview fit-recommendation">
+					<span class="eyebrow">RECOMMENDED STARTER</span>
+					<strong>Seeker I · Port P1</strong>
+					<p>Guided missiles fire automatically at enemies in range on any bearing. Focus on steering and staying alive.</p>
+				</div>
+				<button type="button" class="primary" id="deploy-recommended">Deploy with Seeker in P1 <span aria-hidden="true">↗</span></button>
+				<button type="button" class="secondary" id="custom-fit">Choose weapon and socket</button>
+			</div>
+			<div id="weapon-choices" class="fit-weapons" hidden></div>
+			<div id="fit-review" hidden>
+				<div class="fit-placement" id="socket-selection" hidden>
+					<div class="fit-preview" id="install-preview"></div>
+					<div>
+						<div class="fit-banks"><span>Port · left</span><span>Bow ↑</span><span>Starboard · right</span></div>
+						<div id="fitting-sockets" class="fit-sockets"></div>
+					</div>
+				</div>
+				<div class="fit-preview" id="upgrade-preview" hidden></div>
+				<p id="replacement-warning" class="fit-warning" role="status" hidden></p>
+				<button type="button" class="primary" id="confirm-fit" disabled>Choose a socket</button>
+			</div>
+			<div id="draft-alternatives" class="fit-alternatives" hidden></div>
+			<div class="fit-navigation" id="fit-navigation">
+				<button type="button" class="secondary" id="back-fitting" hidden>Back</button>
+				<button type="button" class="secondary subdued" id="cancel-fitting">Return to title</button>
+			</div>
+			<p class="fit-save-note" id="fitting-save-note" hidden>Retry restores the mission’s launch loadout and salvage.</p>
+		</div>
+	</section>
 
 	<p id="error" role="alert" hidden></p>
 </main>
