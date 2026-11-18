@@ -21,7 +21,7 @@ individual gun trigger, or hidden legacy armament.
 | --- | --- | --- | --- |
 | Persistent throttle | Hold W / S or up / down, or drag the vertical throttle | Hold D-pad up / down | Slide the vertical throttle |
 | Neutral / coast | X | D-pad left | Tap Neutral at midscale |
-| Steer | Click or right-click a heading, hold A / D, or drag the rudder | Left stick horizontal | Tap a heading or hold the horizontal rudder |
+| Steer | Click or right-click a heading, hold A / D, or drag the rudder | Left stick horizontal | Tap a heading or drag the rudder |
 | Weapons Free / Hold Fire | G | D-pad right | Fire-policy button |
 | Armor lock | Hold Space | Hold LB | Hold Armor Lock |
 | Aegis pulse | F | A | Aegis |
@@ -40,8 +40,8 @@ Click or tap open space to give the bow a bearing. Throttle is an independent
 order, so the cruiser can turn while coasting. The vertical throttle stays where
 you set it. Its upper half orders ahead thrust and its lower half orders astern.
 Tap Neutral to coast. The horizontal rudder gives proportional steering to port
-or starboard and centers on release. Manual steering takes over from a heading
-order. The cruiser keeps its momentum through a turn.
+or starboard and holds the nearest marked position on release. Manual steering
+takes over from a heading order. The cruiser keeps its momentum through a turn.
 
 Menus and drafts freeze simulation. Controller transitions require released
 controls before rearming. Disconnection, focus loss and graphics interruption
