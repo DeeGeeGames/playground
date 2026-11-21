@@ -6,7 +6,8 @@ export const MISSION_PACING = [
 	{ duration: 90, interval: 15, activeLimit: 4, salvageBudget: 2800 },
 	{ duration: 90, interval: 15, activeLimit: 5, salvageBudget: 5240 },
 ] as const;
-export interface MissionClock { elapsed: number; reinforcement: number; salvageEarned: number }
+export const SALVAGE_DRAFT_INTERVAL = 12;
+export interface MissionClock { elapsed: number; reinforcement: number; salvageEarned: number; nextDraftAt: number }
 export const createMissionClock = function (): MissionClock {
-	return { elapsed: 0, reinforcement: 1, salvageEarned: 0 };
+	return { elapsed: 0, reinforcement: 1, salvageEarned: 0, nextDraftAt: SALVAGE_DRAFT_INTERVAL };
 };

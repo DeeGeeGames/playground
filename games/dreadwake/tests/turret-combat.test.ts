@@ -175,7 +175,10 @@ test('every starter can earn its first draft through normal helm input without a
 test('a clearing reward freezes combat, but final timed extraction never opens an unusable draft', function () {
 	for (const wave of [1, 5]) {
 		const { state, arsenal, mount, target } = fixture('helios');
-		if (wave === 5 && state.campaign?.clock) state.campaign.clock.elapsed = 90 - 1 / 120;
+		const clock = state.campaign?.clock;
+		if (!clock) throw new Error('Missing clock');
+		clock.elapsed = (wave === 5 ? 90 : clock.nextDraftAt) - 1 / 120;
+		clock.reinforcement = 2;
 		state.wave = wave; target.hp = 200; mount.charge = 1.99; mount.locked = true; mount.lockHeading = -Math.PI / 2;
 		step(state, idle, 1 / 60);
 		expect(state.enemies).toHaveLength(0);

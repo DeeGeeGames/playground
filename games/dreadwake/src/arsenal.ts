@@ -1,4 +1,4 @@
-import { MISSION_PACING } from './pacing';
+import { MISSION_PACING, SALVAGE_DRAFT_INTERVAL } from './pacing';
 import type { State } from './simulation';
 import { createMount, MOUNT_SOCKETS, nextRank, WEAPON_IDS, type MountState, type WeaponId, type WeaponRank } from './weapons';
 export { weaponSummary } from './weapons';
@@ -38,9 +38,18 @@ export const awardSalvage = function (state: State, damage: number) {
 	const earned = clock && pacing ? Math.min(damage, Math.max(0, pacing.salvageBudget - clock.salvageEarned)) : damage;
 	if (clock) clock.salvageEarned += earned;
 	arsenal.salvage += earned;
-	while (arsenal.rewards < MAX_DRAFTS && arsenal.salvage >= draftCost(arsenal.rewards)) {
-		arsenal.salvage -= draftCost(arsenal.rewards); arsenal.rewards++; arsenal.pending++;
-	}
+};
+export const queueSalvageDraft = function (state: State) {
+	const arsenal = state.arsenal;
+	if (!arsenal || arsenal.pending > 0 || arsenal.rewards >= MAX_DRAFTS) return;
+	const clock = state.campaign?.clock;
+	if (clock && clock.elapsed < clock.nextDraftAt) return;
+	const cost = draftCost(arsenal.rewards);
+	if (arsenal.salvage < cost) return;
+	arsenal.salvage -= cost;
+	arsenal.rewards++;
+	arsenal.pending = 1;
+	if (clock) clock.nextDraftAt = clock.elapsed + SALVAGE_DRAFT_INTERVAL;
 };
 const makeOffers = function (arsenal: Arsenal, excluded: readonly WeaponId[] = []): DraftOffer[] {
 	const upgrades: DraftOffer[] = arsenal.mounts.filter(function (mount): mount is MountState { return mount !== null && mount.rank < 3; })
