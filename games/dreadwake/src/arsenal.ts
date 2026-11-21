@@ -1,5 +1,4 @@
-import { MISSION_PACING, SALVAGE_DRAFT_INTERVAL } from './pacing';
-import type { State } from './simulation';
+import type { Enemy, Point, State } from './simulation';
 import { createMount, MOUNT_SOCKETS, nextRank, WEAPON_IDS, type MountState, type WeaponId, type WeaponRank } from './weapons';
 export { weaponSummary } from './weapons';
 
@@ -15,6 +14,8 @@ export interface Arsenal {
 	legacy?: boolean;
 }
 export const MAX_DRAFTS = 14;
+export const SALVAGE_RECOVERY_RANGE = 180;
+export interface SalvageCache extends Point { amount: number }
 export const draftCost = function (rewards: number): number { return 180 + 100 * rewards; };
 export const createArsenal = function (seed = Math.floor(Math.random() * 0x100000000)): Arsenal {
 	return { mounts: MOUNT_SOCKETS.map(function () { return null; }), salvage: 0, rewards: 0, pending: 0, offers: [], rerolled: false, seed: seed >>> 0 };
@@ -30,26 +31,29 @@ export const installStarter = function (state: State, weapon: WeaponId, slot: nu
 	state.fireControl.automatic = true;
 	return true;
 };
-export const awardSalvage = function (state: State, damage: number) {
+export const dropSalvage = function (state: State, enemy: Enemy) {
 	const arsenal = state.arsenal;
-	if (!arsenal || !state.campaign || state.outcome !== 'playing' || !Number.isFinite(damage) || damage <= 0 || arsenal.rewards >= MAX_DRAFTS) return;
-	const clock = state.campaign.clock;
-	const pacing = clock ? MISSION_PACING[state.wave - 1] : undefined;
-	const earned = clock && pacing ? Math.min(damage, Math.max(0, pacing.salvageBudget - clock.salvageEarned)) : damage;
-	if (clock) clock.salvageEarned += earned;
-	arsenal.salvage += earned;
+	if (!arsenal || !state.campaign || enemy.training || arsenal.rewards >= MAX_DRAFTS) return;
+	state.salvageCaches.push({ x: enemy.x, y: enemy.y, amount: enemy.command ? 900 : enemy.kind === 'cruiser' ? 550 : 240 });
 };
-export const queueSalvageDraft = function (state: State) {
+export const recoverSalvage = function (state: State) {
+	const arsenal = state.arsenal;
+	if (!arsenal || state.salvageCaches.length === 0) return;
+	state.salvageCaches = state.salvageCaches.filter(function (cache) {
+		if (Math.hypot(cache.x - state.player.x, cache.y - state.player.y) > SALVAGE_RECOVERY_RANGE) return true;
+		arsenal.salvage += cache.amount;
+		return false;
+	});
+};
+export const queueSalvageDrafts = function (state: State) {
 	const arsenal = state.arsenal;
 	if (!arsenal || arsenal.pending > 0 || arsenal.rewards >= MAX_DRAFTS) return;
-	const clock = state.campaign?.clock;
-	if (clock && clock.elapsed < clock.nextDraftAt) return;
-	const cost = draftCost(arsenal.rewards);
-	if (arsenal.salvage < cost) return;
-	arsenal.salvage -= cost;
-	arsenal.rewards++;
-	arsenal.pending = 1;
-	if (clock) clock.nextDraftAt = clock.elapsed + SALVAGE_DRAFT_INTERVAL;
+	while (arsenal.rewards < MAX_DRAFTS && arsenal.salvage >= draftCost(arsenal.rewards)) {
+		arsenal.salvage -= draftCost(arsenal.rewards);
+		arsenal.rewards++;
+		arsenal.pending++;
+	}
+	if (arsenal.rewards === MAX_DRAFTS) state.salvageCaches = [];
 };
 const makeOffers = function (arsenal: Arsenal, excluded: readonly WeaponId[] = []): DraftOffer[] {
 	const upgrades: DraftOffer[] = arsenal.mounts.filter(function (mount): mount is MountState { return mount !== null && mount.rank < 3; })

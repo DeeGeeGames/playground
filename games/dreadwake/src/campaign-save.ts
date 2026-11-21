@@ -4,6 +4,7 @@ import { createArsenal, draftCost, MAX_DRAFTS } from './arsenal';
 import { createMount, isWeaponId, isWeaponRank, MOUNT_SOCKETS, type WeaponId, type WeaponRank } from './weapons';
 
 export const CAMPAIGN_SAVE_KEY = 'dreadwake.campaign.v1';
+const LEGACY_SALVAGE_BUDGETS = [720, 2160, 2840, 2800, 5240];
 export interface CampaignSave {
 	version: 1 | 2;
 	wave: number;
@@ -40,7 +41,7 @@ const parseArsenal = function (value: unknown, completedSalvageBudget: number): 
 		|| !integer(value['rewards'], 0, MAX_DRAFTS) || !integer(value['seed'], 0, 0xffffffff)
 		|| !number(value['salvage'], 0, 1000000) || typeof value['legacy'] !== 'boolean') return undefined;
 	if (value['rewards'] < MAX_DRAFTS && value['salvage'] >= draftCost(value['rewards'])) {
-		// A cooldown can leave enough salvage for a choice banked at extraction.
+		// Older checkpoints could bank a funded choice at extraction.
 		const spent = Array.from({ length: value['rewards'] }, function (_, index) { return draftCost(index); })
 			.reduce(function (total, cost) { return total + cost; }, 0);
 		if (spent + value['salvage'] > completedSalvageBudget + 1e-8) return undefined;
@@ -74,7 +75,7 @@ const parseSave = function (value: unknown): CampaignSave | undefined {
 	if (!integer(stats['salvos'], 0, 1000000) || !integer(stats['torpedoSalvos'], 0, 1000000)
 		|| !integer(stats['interceptions'], 0, 1000000) || !integer(stats['hits'], 0, 10000000)
 		|| !number(stats['damageBlocked'], 0, 100000000)) return undefined;
-	const salvageBudget = completedSectors.reduce(function (total, pacing) { return total + pacing.salvageBudget; }, 0);
+	const salvageBudget = LEGACY_SALVAGE_BUDGETS.slice(0, completedCount).reduce(function (total, budget) { return total + budget; }, 0);
 	const arsenal = value['arsenal'] === undefined ? undefined : parseArsenal(value['arsenal'], salvageBudget);
 	if (value['arsenal'] !== undefined && !arsenal) return undefined;
 	return { version: value['version'], wave: value['wave'], phase: value['phase'], hull: value['hull'], rails: value['rails'],

@@ -1,4 +1,30 @@
-import type { Point } from './simulation';
+import type { Point, State } from './simulation';
+import { worldToScreen, type Camera } from './projection';
+import { CEL } from './visual-theme';
+
+export const drawSalvageMarkers = function (ctx: CanvasRenderingContext2D, view: Camera, state: State, hud: readonly LabelObstacle[], label: (value: string, at: Point) => void) {
+	const origin = worldToScreen(state.player, view, 20);
+	for (const cache of state.salvageCaches) {
+		const projected = worldToScreen(cache, view, 22);
+		const bearing = projectBearing(origin, projected, view.width, view.height, hud);
+		if (!bearing) continue;
+		const { x, y } = bearing.point;
+		ctx.beginPath();
+		if (bearing.visible) {
+			ctx.moveTo(x, y - 7); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 7); ctx.lineTo(x - 7, y);
+		} else {
+			const angle = Math.atan2(projected.y - origin.y, projected.x - origin.x);
+			ctx.moveTo(x + Math.cos(angle) * 8, y + Math.sin(angle) * 8);
+			ctx.lineTo(x + Math.cos(angle + 2.5) * 8, y + Math.sin(angle + 2.5) * 8);
+			ctx.lineTo(x + Math.cos(angle - 2.5) * 8, y + Math.sin(angle - 2.5) * 8);
+		}
+		ctx.closePath();
+		ctx.fillStyle = CEL.hud; ctx.fill();
+		ctx.strokeStyle = CEL.amber; ctx.lineWidth = 2; ctx.stroke();
+		const range = Math.round(Math.hypot(cache.x - state.player.x, cache.y - state.player.y));
+		label(`+${cache.amount} SALVAGE · ${range} m`, { x, y: y + 17 });
+	}
+};
 
 export interface LabelObstacle { left: number; top: number; right: number; bottom: number }
 

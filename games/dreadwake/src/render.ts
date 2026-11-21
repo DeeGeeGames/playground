@@ -4,7 +4,7 @@ import { cameraFor, worldToScreen, type Camera } from './projection';
 import { drawStarship, polygon, line } from './ship-art';
 import { createBackdrop } from './backdrop';
 import { createCombatEffectsRenderer } from './combat-effects';
-import { hudObstacles, clearLabelPosition, projectBearing, type LabelObstacle } from './tactical-labels';
+import { hudObstacles, clearLabelPosition, drawSalvageMarkers, projectBearing, type LabelObstacle } from './tactical-labels';
 import { CEL } from './visual-theme';
 
 const ring = function (ctx: CanvasRenderingContext2D, at: Point, radius: number, color: string) {
@@ -115,6 +115,7 @@ export const createRenderer = function () {
 		for (const ship of ships) drawStarship(ctx, camera, ship, state, reducedMotion, driveLength(ship, state, reducedMotion));
 		const hud = hudObstacles(ctx.canvas);
 		const origin = worldToScreen(p, camera, 20);
+		drawSalvageMarkers(ctx, camera, state, hud, function (value, at) { label(ctx, value, at, CEL.amber); });
 		for (const ship of ships) {
 			const hull = worldToScreen(ship, camera, 20);
 			const at = { x: hull.x, y: hull.y - Math.max(34, ship.length * camera.scale * 0.54) - 12 };

@@ -2,7 +2,7 @@
 
 A browser capital-ship combat demo. Keep a heavy cruiser moving through five linked
 timed encounters, beginning with one chosen turret and eleven empty sockets. Weapons
-acquire and fire autonomously. Damage earns paused salvage choices: install another
+acquire and fire autonomously. Salvage recovered from wrecks earns weapon choices: install another
 weapon, strengthen a fitted turret, or repair the hull.
 
 Open `games/dreadwake/` through the workspace launcher. The game is self-contained
@@ -47,7 +47,7 @@ Menus and drafts freeze simulation. Controller transitions require released
 controls before rearming. Disconnection, focus loss and graphics interruption
 pause combat. Battlefield zoom ranges from 0.5× to 2.5×; browser zoom and menu scrolling
 remain available. The transit clock shows how long to survive, and the salvage
-meter tracks damage toward the next weapon choice. The live battery readout
+meter tracks recovered salvage toward the next weapon choice. The live battery readout
 shows a fitted weapon’s coverage and firing condition, including range and flank
 advice. Inspect pauses combat to show the rank, statistics and firing condition
 of every installed weapon.
@@ -81,12 +81,11 @@ approved set, numerical baseline and independent panel feedback.
 
 ## Salvage and campaign
 
-Actual enemy hull damage from fitted weapons earns salvage. Overkill, interceptions,
-ramming and training award none. The first reward costs 180 damage, with the next
-cost increasing by 100 each time, up to fourteen rewards. The first draft in a
-sector can open after 12 combat seconds. Each subsequent draft requires another
-12 combat seconds. Excess salvage is banked and carries forward between sectors.
-Final victory does not interrupt the ending with unusable weapon rewards.
+Destroyed enemy ships leave gold salvage markers. Steer within 180 m of a
+marker to recover the cache. Frigates drop 240 salvage, cruisers 550 and the
+command cruiser 900. The first choice costs 180 salvage, and the cost increases
+by 100 per choice, up to fourteen choices across the campaign. A choice opens
+as soon as the recovered salvage covers its cost.
 
 Each three-card draft includes an installation and an upgrade for an eligible
 fitted socket when one exists, plus a flex choice. Upgrades favor an already
@@ -103,11 +102,9 @@ arrivals instead of accumulating a burst. Transit clears surviving contacts and
 projectiles without awarding kills or salvage. Death on the last tick is defeat.
 The final mission also ends on survival; killing its commander is optional.
 
-Salvage per sector is capped at the old roster's damage budget: 720, 2,160, 2,840,
-2,800 and 5,240. Reinforcements cannot accelerate the economy without limit. The
-HUD shows the countdown when a draft is funded and reports when a sector's salvage
-is exhausted. Unused sector budget expires at transit. A draft that becomes
-available on the last tick resolves before refit, with no draft at final extraction.
+Uncollected caches remain until transit. Recovered salvage carries into the
+next sector. A choice funded on the last tick resolves before refit. Final
+extraction takes precedence over salvage recovery and weapon choices.
 
 The five encounters introduce flankers, missile cruisers, close brawlers and a
 beam-armed command ship. Violet charge tells announce enemy beams that flak cannot

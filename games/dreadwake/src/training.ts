@@ -3,7 +3,7 @@ import { installStarter, prepareDraft } from './arsenal';
 import { createMount } from './weapons';
 
 export interface Training { lesson: number; progress: number; originAngle: number }
-const draftCopy = 'This practice salvage choice freezes combat. Choose an upgrade, or install a weapon and select its socket. Damage earns these choices in the campaign.';
+const draftCopy = 'This practice salvage choice freezes combat. Choose an upgrade, or install a weapon and select its socket. Recover salvage from wrecks to earn choices in the campaign.';
 const chargeCopy = 'Training refit: Helios is now fitted on port. Its charge grows visibly, then the aim line locks before firing. Keep the hulk on your port flank. Hold Fire or armor lock cancels a charge.';
 export const trainingInstructions = [
 	{ title: '01 / Bring the drive online',
@@ -23,7 +23,7 @@ export const trainingInstructions = [
 		gamepad: 'Press D-pad right again to select Weapons Free. The port turret finds and fires at the hulk automatically.',
 		touch: 'Tap Hold Fire to select Weapons Free. The port turret finds and fires at the hulk automatically.' },
 	{ title: '05 / Build the battery', keyboard: draftCopy,
-		gamepad: 'This practice salvage choice freezes combat. Navigate with the D-pad and select with A. Upgrade, or install a weapon and select its socket. Damage earns choices in the campaign.',
+		gamepad: 'This practice salvage choice freezes combat. Navigate with the D-pad and select with A. Upgrade, or install a weapon and select its socket. Recover salvage from wrecks to earn choices in the campaign.',
 		touch: draftCopy },
 	{ title: '06 / Watch the charge', keyboard: chargeCopy, gamepad: chargeCopy, touch: chargeCopy },
 	{ title: '07 / Layer your defenses',

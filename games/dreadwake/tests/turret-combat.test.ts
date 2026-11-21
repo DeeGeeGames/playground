@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { draftCost, installStarter } from '../src/arsenal';
+import { installStarter } from '../src/arsenal';
 import { angleDelta, chooseRefit, createArsenalCampaign, distance, step, type Controls, type Enemy, type State } from '../src/simulation';
 import { updateTurretProjectiles, updateTurrets } from '../src/turret-combat';
 import { createMount, WEAPON_IDS, weaponStats, type WeaponId, type WeaponRank } from '../src/weapons';
@@ -19,10 +19,6 @@ const advanceWeapons = function (state: State, seconds: number) {
 		updateTurrets(state, 1 / 60); updateTurretProjectiles(state, 1 / 60);
 		state.shells = state.shells.filter(function (shell) { return shell.life > 0; });
 	}
-};
-const earnedSalvage = function (state: State) {
-	const arsenal = state.arsenal; if (!arsenal) return 0;
-	return arsenal.salvage + Array.from({ length: arsenal.rewards }, function (_, index) { return draftCost(index); }).reduce(function (total, cost) { return total + cost; }, 0);
 };
 const another = function (target: Enemy, id: number, x: number, y: number): Enemy { return { ...target, id, x, y }; };
 
@@ -85,7 +81,7 @@ describe('fitted fire policy and commitment', function () {
 });
 
 describe('weapon role and damage guarantees', function () {
-	test('a fast rail pierces in hull order only once per hull and credits actual damage rather than overkill', function () {
+	test('a fast rail pierces in hull order only once per hull without crediting salvage on hit', function () {
 		const { state, target } = fixture('rail', 3);
 		target.y = -250; target.hp = 100;
 		const second = another(target, 2, 14, -420); second.hp = 1000;
@@ -94,14 +90,13 @@ describe('weapon role and damage guarantees', function () {
 		advanceWeapons(state, 1.3);
 		expect(target.hp).toBe(0); expect(second.hp).toBeCloseTo(1000 - 330 * 0.65, 6);
 		expect(third.hp).toBeCloseTo(1000 - 330 * 0.65 ** 2, 6);
-		expect(state.stats.hits).toBe(3); expect(earnedSalvage(state)).toBeCloseTo(100 + 330 * 0.65 + 330 * 0.65 ** 2, 6);
+		expect(state.stats.hits).toBe(3); expect(state.arsenal?.salvage).toBe(0);
 	});
 	test('Breach applies full direct damage once and reduced splash to neighboring hulls', function () {
 		const { state, target } = fixture('torpedo');
 		const neighbor = another(target, 2, 80, -330); state.enemies.push(neighbor);
 		advanceWeapons(state, 2);
 		expect(target.hp).toBe(760); expect(neighbor.hp).toBe(868);
-		expect(earnedSalvage(state)).toBe(372);
 	});
 	test('flak shares its reload between interception and offense and cannot indefinitely starve its anti-ship shot', function () {
 		const { state, mount, target } = fixture('flak');
@@ -116,7 +111,6 @@ describe('weapon role and damage guarantees', function () {
 			if (volley < 2) { expect(target.hp).toBe(1000); expect(mount.defensiveBursts).toBe(volley + 1); }
 		}
 		expect(state.stats.interceptions).toBe(4); expect(target.hp).toBe(955); expect(mount.defensiveBursts).toBe(0);
-		expect(earnedSalvage(state)).toBe(45);
 	});
 	test('Spark is stopped by the first hull even when its fastest chosen contact lies behind it', function () {
 		const { state, mount, target } = fixture('spark');
@@ -148,9 +142,10 @@ describe('weapon role and damage guarantees', function () {
 		expect(target.cooldown).toBeCloseTo(cooldown - 1 / 60, 6);
 		expect(Math.hypot(target.vx, target.vy)).toBeCloseTo(48 * 0.8, 6);
 	});
-	test('training damage does not generate campaign drafts', function () {
+	test('destroyed training targets never drop salvage', function () {
 		const { state, target } = fixture('spark'); target.training = true;
-		advanceWeapons(state, 4); expect(target.hp).toBeLessThan(800); expect(earnedSalvage(state)).toBe(0);
+		target.hp = 1; step(state, idle, 1 / 60);
+		expect(target.hp).toBe(0); expect(state.salvageCaches).toHaveLength(0);
 	});
 });
 
@@ -161,6 +156,13 @@ test('every starter can earn its first draft through normal helm input without a
 		let closest = Number.POSITIVE_INFINITY;
 		for (let frame = 0; frame < 60 * 65 && (state.arsenal?.pending ?? 0) === 0 && state.outcome === 'playing'; frame++) {
 			const target = state.enemies.filter(function (enemy) { return enemy.hp > 0; }).sort(function (a, b) { return Math.hypot(a.x - state.player.x, a.y - state.player.y) - Math.hypot(b.x - state.player.x, b.y - state.player.y); })[0];
+			const cache = state.salvageCaches[0];
+			if (!target && !cache) break;
+			if (cache) {
+				const heading = Math.atan2(cache.y - state.player.y, cache.x - state.player.x);
+				step(state, { ...idle, heading, drive: state.player.throttle < 0.65 ? 1 : 0 }, 1 / 60);
+				continue;
+			}
 			if (!target) break;
 			const range = Math.hypot(target.x - state.player.x, target.y - state.player.y); closest = Math.min(closest, range);
 			const bearing = Math.atan2(target.y - state.player.y, target.x - state.player.x);
@@ -172,12 +174,13 @@ test('every starter can earn its first draft through normal helm input without a
 	}
 });
 
-test('a clearing reward freezes combat, but final timed extraction never opens an unusable draft', function () {
+test('a recovered cache freezes combat, but final extraction never opens an unusable draft', function () {
 	for (const wave of [1, 5]) {
 		const { state, arsenal, mount, target } = fixture('helios');
 		const clock = state.campaign?.clock;
 		if (!clock) throw new Error('Missing clock');
-		clock.elapsed = (wave === 5 ? 90 : clock.nextDraftAt) - 1 / 120;
+		clock.elapsed = wave === 5 ? 90 - 1 / 120 : 0;
+		state.salvageCaches.push({ x: 0, y: 0, amount: 240 });
 		clock.reinforcement = 2;
 		state.wave = wave; target.hp = 200; mount.charge = 1.99; mount.locked = true; mount.lockHeading = -Math.PI / 2;
 		step(state, idle, 1 / 60);
