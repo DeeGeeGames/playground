@@ -1,6 +1,6 @@
 import { MISSION_PACING, createMissionClock, type MissionClock } from './pacing';
 import { hullMuzzle } from './effect-motion';
-import { createArsenal, prepareDraft, type Arsenal } from './arsenal';
+import { createArsenal, prepareDraft, queueSalvageDraft, type Arsenal } from './arsenal';
 import { resetTurrets, updateTurretProjectiles, updateTurrets } from './turret-combat';
 import type { WeaponId } from './weapons';
 
@@ -481,7 +481,10 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	if (state.arsenal) {
 		if (state.campaign && state.wave === CAMPAIGN_MISSIONS.length && (clock && pacing ? clock.elapsed >= pacing.duration : state.enemies.length === 0)) {
 			state.arsenal.pending = 0; state.arsenal.offers = [];
-		} else if (p.hp > 0) prepareDraft(state);
+		} else if (p.hp > 0) {
+			queueSalvageDraft(state);
+			prepareDraft(state);
+		}
 	}
 	if (!state.enemies.some(function (enemy) { return enemy.id === state.priorityTarget; })) state.priorityTarget = undefined;
 	state.effects = state.effects.filter(function (fx) { fx.life -= dt; return fx.life > 0; });

@@ -410,12 +410,20 @@ const shutdown = await mountGame('game', async function (container) {
 
 		const capped = arsenal.rewards >= MAX_DRAFTS;
 		const cost = draftCost(arsenal.rewards);
-		const budget = MISSION_PACING[state.wave - 1]?.salvageBudget ?? Infinity;
-		const sectorRecovered = (state.campaign?.clock?.salvageEarned ?? 0) >= budget;
-		element('salvage-value').textContent = training ? 'PRACTICE' : capped ? 'COMPLETE' : `${Math.floor(arsenal.salvage)}/${cost}`;
+		const pacing = MISSION_PACING[state.wave - 1];
+		const clock = state.campaign?.clock;
+		const sectorRecovered = clock && pacing && clock.salvageEarned >= pacing.salvageBudget;
+		const banked = !capped && arsenal.salvage >= cost && clock && pacing;
+		const delay = banked ? Math.max(0, Math.ceil(clock.nextDraftAt - clock.elapsed)) : 0;
+		const finalSector = state.wave === CAMPAIGN_MISSIONS.length;
+		const transitFirst = banked && (clock.nextDraftAt > pacing.duration || (finalSector && clock.nextDraftAt === pacing.duration));
+		element('salvage-value').textContent = training ? 'PRACTICE' : capped ? 'COMPLETE'
+			: transitFirst ? finalSector ? 'TRANSIT' : 'BANKED'
+			: delay > 0 ? `READY · ${delay}s` : `${Math.floor(arsenal.salvage)}/${cost}`;
 		element('salvage-fill').style.width = training ? '0%' : `${capped ? 100 : Math.min(100, arsenal.salvage / cost * 100)}%`;
 		element('salvage-hint').textContent = training ? 'No campaign changes' : capped ? 'All choices earned'
-			: sectorRecovered ? 'Sector salvage recovered' : 'Next weapon choice';
+			: transitFirst ? finalSector ? 'Campaign ends at transit' : 'Salvage carries to next sector'
+			: !banked && sectorRecovered ? 'Sector salvage recovered' : 'Next weapon choice';
 
 		const engaging = installed.filter(function (mount) {
 			return mount.status === 'FIRING' || mount.status === 'LOCKED' || mount.status === 'CHARGING'

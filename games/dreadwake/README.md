@@ -83,9 +83,10 @@ approved set, numerical baseline and independent panel feedback.
 
 Actual enemy hull damage from fitted weapons earns salvage. Overkill, interceptions,
 ramming and training award none. The first reward costs 180 damage, with the next
-cost increasing by 100 each time, up to fourteen rewards. Excess salvage carries
-forward; queued choices resolve before the next mission. Final victory does not
-interrupt the ending with unusable weapon rewards.
+cost increasing by 100 each time, up to fourteen rewards. The first draft in a
+sector can open after 12 combat seconds. Each subsequent draft requires another
+12 combat seconds. Excess salvage is banked and carries forward between sectors.
+Final victory does not interrupt the ending with unusable weapon rewards.
 
 Each three-card draft includes an installation and an upgrade for an eligible
 fitted socket when one exists, plus a flex choice. Upgrades favor an already
@@ -104,9 +105,9 @@ The final mission also ends on survival; killing its commander is optional.
 
 Salvage per sector is capped at the old roster's damage budget: 720, 2,160, 2,840,
 2,800 and 5,240. Reinforcements cannot accelerate the economy without limit. The
-HUD reports when a sector's salvage is exhausted. Unused sector budget does not
-carry forward; earned salvage does. Drafts still pause combat and the timer;
-last-tick choices resolve before refit, and final extraction discards unusable drafts.
+HUD shows the countdown when a draft is funded and reports when a sector's salvage
+is exhausted. Unused sector budget expires at transit. A draft that becomes
+available on the last tick resolves before refit, with no draft at final extraction.
 
 The five encounters introduce flankers, missile cruisers, close brawlers and a
 beam-armed command ship. Violet charge tells announce enemy beams that flak cannot

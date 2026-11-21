@@ -68,11 +68,15 @@ at most fourteen rewards. Incremental costs are `180 + 100 × rewardsAlreadyEarn
 180, 280, 380, ..., 1,480; total 11,620. Initial patrol hull is 360 per ship so it
 provides two rewards; the remaining encounters retain a useful late-game HP pool.
 The full campaign supplies approximately 13,760 damage salvage, leaving roughly
-2,140 HP after the final threshold. Timed missions now bound salvage to these original per-sector budgets. Never open a draft after final timed extraction. Earlier last-tick rewards still resolve before refit. Destroying the roster does not end a timed sector.
+2,140 HP after the final threshold. Timed missions bound salvage to these original
+per-sector budgets. Destroying the roster does not end a timed sector.
 
-Crossing a threshold queues a fully paused three-card draft, including incoming
-shots, timers and momentum. Resolve queued drafts before a mission transition;
-never double-charge or discard excess progress. Each draft guarantees an install
+Each sector starts with 12 seconds of combat before the first draft can open,
+and drafts are spaced at least 12 combat seconds apart. Damage continues earning
+salvage during that interval. A funded draft opens once the interval has elapsed,
+freezing incoming shots, timers and momentum. At transit, banked salvage carries
+to the next sector. A draft available on the last tick resolves before refit.
+Final extraction takes precedence over drafts. Each draft guarantees an install
 and an upgrade for an installed, nonmaxed socket where valid, plus a flex choice.
 The upgrade prefers the most-invested eligible mount. One free reroll changes the
 install/flex choices while preserving the upgrade guarantee. A repair alternative

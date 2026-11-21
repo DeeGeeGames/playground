@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { applyDraft, awardSalvage, createArsenal, draftCost, installStarter, prepareDraft, rerollDraft, resolveDraft } from '../src/arsenal';
+import { applyDraft, awardSalvage, createArsenal, draftCost, installStarter, rerollDraft, resolveDraft } from '../src/arsenal';
 import { captureCampaign, restoreCampaign } from '../src/campaign-save';
 import { createArsenalCampaign, createCampaignState, step, type Controls } from '../src/simulation';
 
@@ -7,7 +7,14 @@ const idle: Controls = { drive: 0, turn: 0, neutral: false, port: false, starboa
 const fitted = function () {
 	const state = createArsenalCampaign(); state.arsenal = createArsenal(417);
 	expect(installStarter(state, 'rail', 1)).toBe(true);
+	state.fireControl.automatic = false;
 	return state;
+};
+const advanceToDraft = function (state: ReturnType<typeof fitted>) {
+	const clock = state.campaign?.clock;
+	if (!clock) throw new Error('Missing clock');
+	clock.elapsed = clock.nextDraftAt - 1 / 120;
+	step(state, idle, 1 / 60);
 };
 
 test('empty ship cannot fight and exactly one explicitly placed starter is installed', function () {
@@ -21,18 +28,25 @@ test('empty ship cannot fight and exactly one explicitly placed starter is insta
 	expect(state.arsenal?.mounts[6]?.weapon).toBe('spark');
 });
 
-test('damage reward overflow queues frozen drafts and invalid choices cannot consume them', function () {
+test('damage overflow spaces frozen drafts and invalid choices cannot consume them', function () {
 	const state = fitted(); const arsenal = state.arsenal; if (!arsenal) throw new Error('Missing arsenal');
 	state.player.vx = 42;
 	state.shells.push({ x: 0, y: 0, vx: 10, vy: 0, life: 4, hostile: true, damage: 20 });
-	awardSalvage(state, draftCost(0) + draftCost(1) + 17); prepareDraft(state);
-	expect(arsenal.pending).toBe(2); expect(arsenal.salvage).toBe(17);
+	awardSalvage(state, draftCost(0) + draftCost(1) + 17);
+	step(state, idle, 1 / 60);
+	expect(arsenal.pending).toBe(0);
+	advanceToDraft(state);
+	expect(arsenal.pending).toBe(1); expect(arsenal.salvage).toBe(draftCost(1) + 17);
 	const before = structuredClone(state);
 	step(state, { ...idle, autoFire: true, drive: 1 }, 1 / 60);
 	expect(state.player).toEqual(before.player); expect(state.shells).toEqual(before.shells); expect(state.time).toBe(before.time);
 	expect(applyDraft(state, -1)).toBe(false); expect(applyDraft(state, 0, 99)).toBe(false);
-	expect(arsenal.pending).toBe(2);
-	expect(resolveDraft(state, 'skip')).toBe(true); expect(arsenal.pending).toBe(1);
+	expect(arsenal.pending).toBe(1);
+	expect(resolveDraft(state, 'skip')).toBe(true); expect(arsenal.pending).toBe(0);
+	step(state, idle, 1 / 60);
+	expect(arsenal.pending).toBe(0);
+	advanceToDraft(state);
+	expect(arsenal.pending).toBe(1);
 	state.player.hp = 1390;
 	expect(resolveDraft(state, 'repair')).toBe(true); expect(state.player.hp).toBe(1400);
 	expect(resolveDraft(state, 'repair')).toBe(false); expect(arsenal.pending).toBe(0);
@@ -43,7 +57,7 @@ test('reroll preserves the invested upgrade and future offers are deterministic 
 	const state = fitted(); const snapshot = captureCampaign(state);
 	expect(snapshot).toBeDefined(); const retry = restoreCampaign(snapshot);
 	if (!retry) throw new Error('Missing retry');
-	for (const run of [state, retry]) { awardSalvage(run, 180); prepareDraft(run); }
+	for (const run of [state, retry]) { awardSalvage(run, 180); advanceToDraft(run); }
 	expect(state.arsenal?.offers).toEqual(retry.arsenal?.offers);
 	const arsenal = state.arsenal; if (!arsenal) throw new Error('Missing arsenal');
 	const upgrade = arsenal.offers.find(function (offer) { return offer.kind === 'upgrade'; });
@@ -60,7 +74,7 @@ test('reroll preserves the invested upgrade and future offers are deterministic 
 
 test('installation requires a socket and replaces only that socket at rank I', function () {
 	const state = fitted(); const arsenal = state.arsenal; if (!arsenal) throw new Error('Missing arsenal');
-	awardSalvage(state, 180); prepareDraft(state);
+	awardSalvage(state, 180); advanceToDraft(state);
 	const at = arsenal.offers.findIndex(function (offer) { return offer.kind === 'install'; });
 	const offer = arsenal.offers[at]; if (!offer) throw new Error('Missing install');
 	expect(applyDraft(state, at)).toBe(false); expect(arsenal.pending).toBe(1);
@@ -71,7 +85,7 @@ test('installation requires a socket and replaces only that socket at rank I', f
 
 test('checkpoint retry rolls back draft investments, salvage and RNG atomically', function () {
 	const state = fitted(); const launch = captureCampaign(state);
-	awardSalvage(state, 180); prepareDraft(state);
+	awardSalvage(state, 180); advanceToDraft(state);
 	expect(captureCampaign(state)).toBeUndefined();
 	const at = state.arsenal?.offers.findIndex(function (offer) { return offer.kind === 'upgrade'; }) ?? -1;
 	expect(applyDraft(state, at)).toBe(true); expect(state.arsenal?.mounts[1]?.rank).toBe(2);

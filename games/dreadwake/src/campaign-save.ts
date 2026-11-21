@@ -35,11 +35,16 @@ const number = function (value: unknown, min: number, max: number): value is num
 const integer = function (value: unknown, min: number, max: number): value is number {
 	return number(value, min, max) && Number.isInteger(value);
 };
-const parseArsenal = function (value: unknown): ArsenalSave | undefined {
+const parseArsenal = function (value: unknown, completedSalvageBudget: number): ArsenalSave | undefined {
 	if (!record(value) || value['version'] !== 1 || !Array.isArray(value['mounts']) || value['mounts'].length !== MOUNT_SOCKETS.length
 		|| !integer(value['rewards'], 0, MAX_DRAFTS) || !integer(value['seed'], 0, 0xffffffff)
 		|| !number(value['salvage'], 0, 1000000) || typeof value['legacy'] !== 'boolean') return undefined;
-	if (value['rewards'] < MAX_DRAFTS && value['salvage'] >= draftCost(value['rewards'])) return undefined;
+	if (value['rewards'] < MAX_DRAFTS && value['salvage'] >= draftCost(value['rewards'])) {
+		// A cooldown can leave enough salvage for a choice banked at extraction.
+		const spent = Array.from({ length: value['rewards'] }, function (_, index) { return draftCost(index); })
+			.reduce(function (total, cost) { return total + cost; }, 0);
+		if (spent + value['salvage'] > completedSalvageBudget + 1e-8) return undefined;
+	}
 	const mounts: ArsenalSave['mounts'] = [];
 	for (const entry of value['mounts']) {
 		if (entry === null) { mounts.push(null); continue; }
@@ -61,14 +66,16 @@ const parseSave = function (value: unknown): CampaignSave | undefined {
 		.reduce(function (total, mission) { return total + mission.enemies.length; }, 0);
 	if (value['version'] === 1 && value['kills'] !== completed) return undefined;
 	const completedCount = value['wave'] - (value['phase'] === 'combat' ? 1 : 0);
-	const maxTimedKills = completed + MISSION_PACING.slice(0, completedCount)
+	const completedSectors = MISSION_PACING.slice(0, completedCount);
+	const maxTimedKills = completed + completedSectors
 		.reduce(function (sum, pacing) { return sum + Math.ceil(pacing.duration / pacing.interval) - 1; }, 0);
 	if (value['version'] === 2 && value['kills'] > maxTimedKills) return undefined;
 	const stats = value['stats'];
 	if (!integer(stats['salvos'], 0, 1000000) || !integer(stats['torpedoSalvos'], 0, 1000000)
 		|| !integer(stats['interceptions'], 0, 1000000) || !integer(stats['hits'], 0, 10000000)
 		|| !number(stats['damageBlocked'], 0, 100000000)) return undefined;
-	const arsenal = value['arsenal'] === undefined ? undefined : parseArsenal(value['arsenal']);
+	const salvageBudget = completedSectors.reduce(function (total, pacing) { return total + pacing.salvageBudget; }, 0);
+	const arsenal = value['arsenal'] === undefined ? undefined : parseArsenal(value['arsenal'], salvageBudget);
 	if (value['arsenal'] !== undefined && !arsenal) return undefined;
 	return { version: value['version'], wave: value['wave'], phase: value['phase'], hull: value['hull'], rails: value['rails'],
 		capacitor: value['capacitor'], time: value['time'], kills: value['kills'], automatic: value['automatic'],

@@ -34,16 +34,30 @@ test('empty screens do not end missions; arrivals are bounded and extraction rem
 	expect(state.campaign?.clock?.salvageEarned).toBe(0);
 });
 
-test('drafts freeze the timer, sector salvage is finite, and retry restores the launch budget', function () {
-	const state = fitted(); const launch = captureCampaign(state);
+test('sector salvage is finite and banked choices survive refit, launch and retry', function () {
+	const state = fitted(); const launch = captureCampaign(state); const clock = state.campaign?.clock;
+	if (!clock) throw new Error('Missing clock');
+	clock.elapsed = 60 - 1 / 120;
 	awardSalvage(state, 100000);
-	expect(state.campaign?.clock?.salvageEarned).toBe(720);
-	expect(state.arsenal?.rewards).toBe(2);
+	awardSalvage(state, 100000);
+	expect(clock.salvageEarned).toBe(720);
 	step(state, idle, 1 / 60);
-	expect(state.campaign?.clock?.elapsed).toBe(0);
-	while ((state.arsenal?.pending ?? 0) > 0) resolveDraft(state, 'skip');
-	awardSalvage(state, 100000); expect(state.arsenal?.rewards).toBe(2);
-	step(state, idle, 1 / 60); expect(captureCampaign(state)).toBeUndefined();
+	expect(state.arsenal?.rewards).toBe(1);
+	expect(resolveDraft(state, 'skip')).toBe(true);
+	step(state, idle, 1 / 60);
+	expect(state.campaign?.phase).toBe('refit');
+	const refit = restoreCampaign(captureCampaign(state));
+	if (!refit) throw new Error('Missing refit');
+	expect(refit.arsenal?.salvage).toBe(540);
+	expect(chooseRefit(refit, 'repair')).toBe(true);
+	const next = restoreCampaign(captureCampaign(refit)); const nextClock = next?.campaign?.clock;
+	if (!next || !nextClock) throw new Error('Missing next launch');
+	step(next, idle, 1 / 60);
+	expect(next.arsenal?.pending).toBe(0);
+	nextClock.elapsed = nextClock.nextDraftAt - 1 / 120;
+	step(next, idle, 1 / 60);
+	expect(next.arsenal?.pending).toBe(1);
+	expect(next.arsenal?.salvage).toBe(260);
 	const restored = restoreCampaign(launch);
 	expect(restored?.campaign?.clock?.salvageEarned).toBe(0);
 	expect(restored?.arsenal?.rewards).toBe(0);
