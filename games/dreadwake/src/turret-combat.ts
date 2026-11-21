@@ -1,5 +1,4 @@
 import { muzzlePoint } from './effect-motion';
-import { awardSalvage } from './arsenal';
 import { angleDelta, clamp, distance, hitFraction, localPoint, sideAngle, type Enemy, type Point, type Shell, type State } from './simulation';
 import { MOUNT_SOCKETS, weaponStats, type MountState, type WeaponId } from './weapons';
 
@@ -56,7 +55,6 @@ const damageEnemy = function (state: State, enemy: Enemy, damage: number, weapon
 	const actual = Math.min(Math.max(0, enemy.hp), Math.max(0, damage));
 	if (actual <= 0) return;
 	enemy.hp -= actual; state.stats.hits++;
-	if (!enemy.training) awardSalvage(state, actual);
 	state.effects.push({ x: at.x, y: at.y, kind: 'impact', duration: 0.25, life: 0.25, weaponId, elevation });
 	state.events.push('hit');
 };

@@ -1,6 +1,6 @@
 import { MISSION_PACING, createMissionClock, type MissionClock } from './pacing';
 import { hullMuzzle } from './effect-motion';
-import { createArsenal, prepareDraft, queueSalvageDraft, type Arsenal } from './arsenal';
+import { createArsenal, dropSalvage, prepareDraft, queueSalvageDrafts, recoverSalvage, type Arsenal, type SalvageCache } from './arsenal';
 import { resetTurrets, updateTurretProjectiles, updateTurrets } from './turret-combat';
 import type { WeaponId } from './weapons';
 
@@ -28,7 +28,7 @@ export interface BeamTrace { from: Point; to: Point; hostile: boolean; life: num
 export interface DefenseTrace { from: Point; to: Point; life: number }
 export interface Wreck extends Point { angle: number; length: number; width: number; life: number }
 export const CAMPAIGN_MISSIONS = [
-	{ name: 'Outer picket', location: 'Lyra outskirts', briefing: 'Survive until the transit window opens. Reinforcements arrive during combat. Bring your fitted flank toward a contact. Damage earns salvage choices to grow the battery.', enemies: ['frigate', 'frigate'], bearings: [-1.55, 1.45], tactics: [] },
+	{ name: 'Outer picket', location: 'Lyra outskirts', briefing: 'Survive until the transit window opens. Bring your fitted flank toward a contact. Steer toward gold salvage markers after destroying ships to recover resources for your next weapon choice.', enemies: ['frigate', 'frigate'], bearings: [-1.55, 1.45], tactics: [] },
 	{ name: 'Crossfire', location: 'The broken relay', briefing: 'Flanking frigates cross your bow and stern. Turn to keep contacts inside your fitted weapons’ range and coverage. The close screen rewards area fire.', enemies: ['frigate', 'frigate', 'frigate'], bearings: [-1.9, 0.9, 2.1], tactics: ['flanker', 'flanker', 'flanker'] },
 	{ name: 'Heavy escort', location: 'Ash corridor', briefing: 'A missile cruiser holds behind a frigate screen. Line up the screen for piercing or area fire, and close if your battery needs range. Fitted flak can thin guided salvos; evasive movement and Aegis remain available to every build.', enemies: ['frigate', 'frigate', 'cruiser'], bearings: [-1.4, 1.5, 3], tactics: ['flanker', 'flanker', 'standoff'] },
 	{ name: 'The hammer', location: 'Inner passage', briefing: 'Two brawlers drive into close range with rapid volleys. Keep thrust available: a stationary armor lock invites a collision.', enemies: ['cruiser', 'cruiser'], bearings: [-1.2, 1.6], tactics: ['brawler', 'brawler'] },
@@ -46,6 +46,7 @@ export interface State {
 	arsenal?: Arsenal;
 	player: Ship & { throttle: number; yaw: number; braced: boolean };
 	batteries: Record<Side, Battery>; enemies: Enemy[]; shells: Shell[]; effects: Effect[]; wrecks: Wreck[];
+	salvageCaches: SalvageCache[];
 	time: number; wave: number; intermission: number; kills: number; nextId: number;
 	outcome: 'playing' | 'won' | 'lost'; events: CombatEvent[]; shake: number;
 	stats: { salvos: number; torpedoSalvos: number; interceptions: number; hits: number; damageBlocked: number };
@@ -156,7 +157,7 @@ export const createState = function (): State {
 		player: { id: 0, x: 0, y: 0, angle: -Math.PI / 2, vx: 0, vy: 0, hp: MAX_HULL, maxHp: MAX_HULL,
 			length: 220, width: 90, throttle: 0, yaw: 0, braced: false },
 		batteries: { port: { reload: 0, remaining: 0, next: 0, target: undefined }, starboard: { reload: 0, remaining: 0, next: 0, target: undefined } },
-		enemies: [], shells: [], effects: [], wrecks: [], time: 0, wave: 1, intermission: 0, kills: 0, nextId: 1,
+		enemies: [], shells: [], effects: [], wrecks: [], salvageCaches: [], time: 0, wave: 1, intermission: 0, kills: 0, nextId: 1,
 		outcome: 'playing', events: [], shake: 0, stats: { salvos: 0, torpedoSalvos: 0, interceptions: 0, hits: 0, damageBlocked: 0 },
 		shield: { active: 0, cooldown: 0, held: false }, priorityTarget: undefined,
 		torpedoes: { reload: 0, remaining: 0, next: 0, target: undefined, held: false },
@@ -192,7 +193,7 @@ export const chooseRefit = function (state: State, choice: RefitChoice): boolean
 	if (campaign.clock) campaign.clock = createMissionClock();
 	state.enemies = [];
 	state.player.vx = 0; state.player.vy = 0; state.player.yaw = 0; state.player.throttle = 0; state.player.braced = false;
-	state.shells = []; state.effects = []; state.wrecks = []; state.priorityTarget = undefined;
+	state.shells = []; state.effects = []; state.wrecks = []; state.salvageCaches = []; state.priorityTarget = undefined;
 	for (const battery of [state.batteries.port, state.batteries.starboard, state.torpedoes, state.missiles]) {
 		battery.reload = 0; battery.remaining = 0; battery.next = 0; battery.target = undefined;
 	}
@@ -476,13 +477,15 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	for (const enemy of state.enemies) if (enemy.hp <= 0) {
 		state.kills++; effect(state, enemy, 'explosion'); state.events.push('explosion'); state.shake = 7;
 		state.wrecks.push({ x: enemy.x, y: enemy.y, angle: enemy.angle, length: enemy.length, width: enemy.width, life: 35 });
+		dropSalvage(state, enemy);
 	}
 	state.enemies = state.enemies.filter(function (enemy) { return enemy.hp > 0; });
 	if (state.arsenal) {
 		if (state.campaign && state.wave === CAMPAIGN_MISSIONS.length && (clock && pacing ? clock.elapsed >= pacing.duration : state.enemies.length === 0)) {
 			state.arsenal.pending = 0; state.arsenal.offers = [];
 		} else if (p.hp > 0) {
-			queueSalvageDraft(state);
+			recoverSalvage(state);
+			queueSalvageDrafts(state);
 			prepareDraft(state);
 		}
 	}
@@ -495,7 +498,7 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	} else if (clock && pacing) {
 		if (clock.elapsed >= pacing.duration) {
 			// Extraction is atomic: no surviving volley can damage the refit screen.
-			state.enemies = []; state.shells = []; state.beams = [];
+			state.enemies = []; state.shells = []; state.beams = []; state.salvageCaches = [];
 			if (state.campaign && (state.arsenal?.pending ?? 0) === 0) {
 				state.campaign.completedMissions = state.wave;
 				if (state.wave === CAMPAIGN_MISSIONS.length) state.outcome = 'won';

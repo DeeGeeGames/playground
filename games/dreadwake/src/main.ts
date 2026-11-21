@@ -2,7 +2,7 @@ import { MISSION_PACING } from './pacing';
 import { mountGame } from '../../../shared/lifecycle';
 import { createArsenalCampaign, CAMPAIGN_MISSIONS, REFIT_CHOICES, chooseRefit, SHIELD_COOLDOWN, step, type Controls, type State } from './simulation';
 import { WEAPONS, WEAPON_IDS, MOUNT_SOCKETS, type WeaponId, type WeaponRank } from './weapons';
-import { installStarter, draftCost, prepareDraft, applyDraft, rerollDraft, resolveDraft, weaponSummary, MAX_DRAFTS, type DraftOffer } from './arsenal';
+import { installStarter, draftCost, prepareDraft, applyDraft, rerollDraft, resolveDraft, weaponSummary, MAX_DRAFTS, SALVAGE_RECOVERY_RANGE, type DraftOffer } from './arsenal';
 import { createRenderer } from './render';
 import { cameraFor, screenToWorld, worldToScreen, zoomForWheel } from './projection';
 import { createAudio } from './audio';
@@ -262,7 +262,7 @@ const shutdown = await mountGame('game', async function (container) {
 			: upgrade ? 'Review upgrade' : 'Choose a socket';
 		const copy = element('fitting-copy');
 		copy.hidden = step === 'review';
-		copy.textContent = step === 'recommended' ? `Survive ${MISSION_PACING[0].duration} seconds in Outer Picket. Damage enemies to earn salvage for your next fit.`
+		copy.textContent = step === 'recommended' ? `Survive ${MISSION_PACING[0].duration} seconds in Outer Picket. Steer within ${SALVAGE_RECOVERY_RANGE} m of gold salvage markers to recover resources for your next fit.`
 			: starter ? 'Pick a weapon to see its stats and place it on your ship.' : 'Combat is paused while you choose. Your ship keeps its momentum.';
 		element('fitting-panel').scrollTop = 0;
 		updateFittingSelection();
@@ -410,20 +410,10 @@ const shutdown = await mountGame('game', async function (container) {
 
 		const capped = arsenal.rewards >= MAX_DRAFTS;
 		const cost = draftCost(arsenal.rewards);
-		const pacing = MISSION_PACING[state.wave - 1];
-		const clock = state.campaign?.clock;
-		const sectorRecovered = clock && pacing && clock.salvageEarned >= pacing.salvageBudget;
-		const banked = !capped && arsenal.salvage >= cost && clock && pacing;
-		const delay = banked ? Math.max(0, Math.ceil(clock.nextDraftAt - clock.elapsed)) : 0;
-		const finalSector = state.wave === CAMPAIGN_MISSIONS.length;
-		const transitFirst = banked && (clock.nextDraftAt > pacing.duration || (finalSector && clock.nextDraftAt === pacing.duration));
-		element('salvage-value').textContent = training ? 'PRACTICE' : capped ? 'COMPLETE'
-			: transitFirst ? finalSector ? 'TRANSIT' : 'BANKED'
-			: delay > 0 ? `READY · ${delay}s` : `${Math.floor(arsenal.salvage)}/${cost}`;
+		element('salvage-value').textContent = training ? 'PRACTICE' : capped ? 'COMPLETE' : `${Math.floor(arsenal.salvage)}/${cost}`;
 		element('salvage-fill').style.width = training ? '0%' : `${capped ? 100 : Math.min(100, arsenal.salvage / cost * 100)}%`;
 		element('salvage-hint').textContent = training ? 'No campaign changes' : capped ? 'All choices earned'
-			: transitFirst ? finalSector ? 'Campaign ends at transit' : 'Salvage carries to next sector'
-			: !banked && sectorRecovered ? 'Sector salvage recovered' : 'Next weapon choice';
+			: state.salvageCaches.length > 0 ? 'Steer toward gold markers' : 'Recover salvage from wrecks';
 
 		const engaging = installed.filter(function (mount) {
 			return mount.status === 'FIRING' || mount.status === 'LOCKED' || mount.status === 'CHARGING'

@@ -1,7 +1,7 @@
 import { createDriveAnimator, shieldEnvelope } from './effect-motion';
 import * as THREE from 'three';
 import { createShipModels, type HullKind } from './ship-model';
-import { hudObstacles, clearLabelPosition, projectBearing, type LabelObstacle } from './tactical-labels';
+import { hudObstacles, clearLabelPosition, drawSalvageMarkers, projectBearing, type LabelObstacle } from './tactical-labels';
 import { CEL } from './visual-theme';
 import { createCombatEffectsRenderer } from './combat-effects';
 import { cameraFor, worldToScreen, type Camera } from './projection';
@@ -133,6 +133,7 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 		occupied = [...hud];
 		const p = state.player; const compact = width < 700; const font = compact ? 10 : 12;
 		const center = worldToScreen(p, view, 20);
+		drawSalvageMarkers(ink, view, state, hud, function (value, at) { text(value, at.x, at.y, GOLD, font - 1); });
 		// Short arc sectors explain the broadside orientation without filling the field.
 		for (const side of state.arsenal ? [] : ['port', 'starboard'] as const) {
 			const target = targetFor(state, side); const ready = state.batteries[side].reload === 0 && !p.braced;

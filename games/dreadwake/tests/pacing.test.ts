@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { awardSalvage, installStarter, resolveDraft } from '../src/arsenal';
+import { installStarter, resolveDraft, SALVAGE_RECOVERY_RANGE } from '../src/arsenal';
 import { captureCampaign, restoreCampaign } from '../src/campaign-save';
 import { MISSION_PACING } from '../src/pacing';
 import { chooseRefit, createArsenalCampaign, step, type Controls } from '../src/simulation';
@@ -31,36 +31,44 @@ test('empty screens do not end missions; arrivals are bounded and extraction rem
 	expect(restored?.campaign?.phase).toBe('refit');
 	expect(chooseRefit(state, 'repair')).toBe(true);
 	expect(state.campaign?.clock?.elapsed).toBe(0);
-	expect(state.campaign?.clock?.salvageEarned).toBe(0);
 });
 
-test('sector salvage is finite and banked choices survive refit, launch and retry', function () {
+test('destroyed ships leave salvage for the helm to recover once before transit', function () {
 	const state = fitted(); const launch = captureCampaign(state); const clock = state.campaign?.clock;
-	if (!clock) throw new Error('Missing clock');
-	clock.elapsed = 60 - 1 / 120;
-	awardSalvage(state, 100000);
-	awardSalvage(state, 100000);
-	expect(clock.salvageEarned).toBe(720);
+	const enemy = state.enemies[0];
+	if (!clock || !enemy) throw new Error('Missing mission fixture');
+	enemy.x = SALVAGE_RECOVERY_RANGE + 1; enemy.y = 0; enemy.hp = 0;
 	step(state, idle, 1 / 60);
-	expect(state.arsenal?.rewards).toBe(1);
+	expect(state.salvageCaches).toEqual([{ x: enemy.x, y: enemy.y, amount: 240 }]);
+	expect(state.arsenal?.salvage).toBe(0);
+	expect(state.arsenal?.pending).toBe(0);
+	state.player.x = 1;
+	step(state, idle, 1 / 60);
+	expect(state.salvageCaches).toHaveLength(0);
+	expect(state.arsenal?.salvage).toBe(60);
+	expect(state.arsenal?.pending).toBe(1);
 	expect(resolveDraft(state, 'skip')).toBe(true);
+	state.salvageCaches.push({ x: 800, y: 800, amount: 240 });
+	clock.elapsed = 60 - 1 / 120;
 	step(state, idle, 1 / 60);
 	expect(state.campaign?.phase).toBe('refit');
-	const refit = restoreCampaign(captureCampaign(state));
-	if (!refit) throw new Error('Missing refit');
-	expect(refit.arsenal?.salvage).toBe(540);
-	expect(chooseRefit(refit, 'repair')).toBe(true);
-	const next = restoreCampaign(captureCampaign(refit)); const nextClock = next?.campaign?.clock;
-	if (!next || !nextClock) throw new Error('Missing next launch');
-	step(next, idle, 1 / 60);
-	expect(next.arsenal?.pending).toBe(0);
-	nextClock.elapsed = nextClock.nextDraftAt - 1 / 120;
-	step(next, idle, 1 / 60);
-	expect(next.arsenal?.pending).toBe(1);
-	expect(next.arsenal?.salvage).toBe(260);
-	const restored = restoreCampaign(launch);
-	expect(restored?.campaign?.clock?.salvageEarned).toBe(0);
-	expect(restored?.arsenal?.rewards).toBe(0);
+	expect(state.salvageCaches).toHaveLength(0);
+	expect(restoreCampaign(captureCampaign(state))?.arsenal?.salvage).toBe(60);
+	const retry = restoreCampaign(launch);
+	expect(retry?.salvageCaches).toHaveLength(0);
+	expect(retry?.arsenal?.salvage).toBe(0);
+	expect(retry?.arsenal?.rewards).toBe(0);
+});
+
+test('a legacy checkpoint with a funded choice restores and opens the choice in combat', function () {
+	const state = fitted();
+	const launch = captureCampaign(state);
+	if (!launch?.arsenal) throw new Error('Missing launch checkpoint');
+	const restored = restoreCampaign({ ...launch, wave: 2, arsenal: { ...launch.arsenal, salvage: 540, rewards: 1 } });
+	if (!restored) throw new Error('Missing restored checkpoint');
+	step(restored, idle, 1 / 60);
+	expect(restored.arsenal?.pending).toBe(1);
+	expect(restored.arsenal?.salvage).toBe(260);
 });
 
 test('last-frame drafts resolve before refit and lethal damage wins over extraction', function () {
@@ -69,7 +77,7 @@ test('last-frame drafts resolve before refit and lethal damage wins over extract
 		if (!clock) throw new Error('Missing clock');
 		clock.elapsed = 60 - 1 / 120;
 		if (lethal) state.player.hp = 0;
-		else { awardSalvage(state, 180); }
+		else { state.salvageCaches.push({ x: state.player.x, y: state.player.y, amount: 240 }); }
 		step(state, idle, 1 / 60);
 		if (lethal) expect(state.outcome).toBe('lost');
 		else {
