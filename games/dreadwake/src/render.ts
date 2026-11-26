@@ -4,16 +4,18 @@ import { cameraFor, worldToScreen, type Camera } from './projection';
 import { drawStarship, polygon, line } from './ship-art';
 import { createBackdrop } from './backdrop';
 import { createCombatEffectsRenderer } from './combat-effects';
+import { drawPassageBearings, drawPassageChart, drawPassageGeography, passageChartBounds } from './passage-render';
 import { hudObstacles, clearLabelPosition, drawSalvageMarkers, projectBearing, type LabelObstacle } from './tactical-labels';
 import { CEL } from './visual-theme';
 
 const ring = function (ctx: CanvasRenderingContext2D, at: Point, radius: number, color: string) {
 	ctx.beginPath(); ctx.ellipse(at.x, at.y, radius, radius * 0.58, 0, 0, Math.PI * 2); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.stroke();
 };
-const label = function (ctx: CanvasRenderingContext2D, value: string, at: Point, color: string, size = 10) {
+const label = function (ctx: CanvasRenderingContext2D, value: string, at: Point, color: string, size = 10, occupied?: LabelObstacle[]) {
 	ctx.font = `700 ${size}px Arial, sans-serif`; ctx.textAlign = 'center';
 	const width = ctx.measureText(value).width; const view = ctx.canvas.getBoundingClientRect();
-	const position = clearLabelPosition({ x: at.x, y: at.y - size / 2 }, width + 8, size + 6, hudObstacles(ctx.canvas), view.width, view.height); if (!position) return;
+	const position = clearLabelPosition({ x: at.x, y: at.y - size / 2 }, width + 8, size + 6, occupied ?? hudObstacles(ctx.canvas), view.width, view.height); if (!position) return;
+	occupied?.push({ left: position.x - width / 2 - 6, right: position.x + width / 2 + 6, top: position.y - size / 2 - 4, bottom: position.y + size / 2 + 4 });
 	ctx.fillStyle = CEL.hud; ctx.fillRect(position.x - width / 2 - 4, position.y - size / 2 - 2, width + 8, size + 6);
 	ctx.fillStyle = color; ctx.fillText(value, position.x, position.y + size / 2);
 };
@@ -23,9 +25,9 @@ const drawFiringSolution = function (ctx: CanvasRenderingContext2D, camera: Came
 	const at = worldToScreen(target, camera); const r = target.length * camera.scale * 0.7;
 	ring(ctx, at, r, ready ? '#eacb8980' : '#85a9ae50');
 };
-const drawRadar = function (ctx: CanvasRenderingContext2D, width: number, state: State) {
-	if (width < 720) return;
-	const x = width - 92; const y = 165; const radius = 59;
+const radarY = 165;
+const drawRadar = function (ctx: CanvasRenderingContext2D, width: number, state: State, occupied?: LabelObstacle[]) {
+	const x = width - 92; const y = radarY; const radius = 59;
 	ctx.fillStyle = CEL.hud; ctx.beginPath(); ctx.arc(x, y, radius + 12, 0, Math.PI * 2); ctx.fill();
 	for (const r of [30, 60]) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.strokeStyle = CEL.dark; ctx.stroke(); }
 	line(ctx, { x: x - radius, y }, { x: x + radius, y }, CEL.dark); line(ctx, { x, y: y - radius }, { x, y: y + radius }, CEL.dark);
@@ -38,9 +40,9 @@ const drawRadar = function (ctx: CanvasRenderingContext2D, width: number, state:
 	polygon(ctx, [{ x: x + Math.cos(direction) * 8, y: y + Math.sin(direction) * 8 },
 		{ x: x + Math.cos(direction + 2.5) * 5, y: y + Math.sin(direction + 2.5) * 5 },
 		{ x: x + Math.cos(direction - 2.5) * 5, y: y + Math.sin(direction - 2.5) * 5 }], CEL.mint);
-	label(ctx, 'TACTICAL / 900 M', { x, y: y + 85 }, CEL.muted, 8);
+	label(ctx, 'TACTICAL / 900 M', { x, y: y + 85 }, CEL.muted, 8, occupied);
 };
-const drawHeading = function (ctx: CanvasRenderingContext2D, camera: Camera, player: Ship, heading: number, hud: readonly LabelObstacle[]) {
+const drawHeading = function (ctx: CanvasRenderingContext2D, camera: Camera, player: Ship, heading: number, hud: readonly LabelObstacle[], occupied?: LabelObstacle[]) {
 	const origin = worldToScreen(player, camera, 20);
 	const projected = worldToScreen({ x: player.x + Math.cos(heading), y: player.y + Math.sin(heading) }, camera, 20);
 	const direction = Math.atan2(projected.y - origin.y, projected.x - origin.x);
@@ -54,7 +56,7 @@ const drawHeading = function (ctx: CanvasRenderingContext2D, camera: Camera, pla
 	polygon(ctx, [0, 2.5, -2.5].map(function (offset) {
 		return { x: at.x + Math.cos(direction + offset) * 10, y: at.y + Math.sin(direction + offset) * 10 };
 	}), CEL.mint, CEL.ink);
-	label(ctx, 'SET HEADING', { x: at.x, y: at.y - 18 }, CEL.mint, 9);
+	label(ctx, 'SET HEADING', { x: at.x, y: at.y - 18 }, CEL.mint, 9, occupied);
 	ctx.restore();
 };
 export const createRenderer = function () {
@@ -74,6 +76,11 @@ export const createRenderer = function () {
 			}
 			return;
 		}
+		const hud = hudObstacles(ctx.canvas);
+		const radar = height > 520 && width >= 720 ? { left: width - 169, right: width - 15, top: radarY - 77, bottom: radarY + 93 } : undefined;
+		const chart = state.passage ? passageChartBounds(camera, hud, radar) : undefined;
+		if (chart) hud.push({ left: chart.left - 7, right: chart.right + 7, top: chart.top - 7, bottom: chart.bottom + 7 });
+		const occupied = state.passage ? [...hud] : undefined;
 		ctx.save();
 		if (!reducedMotion) ctx.translate(Math.sin(state.time * 83) * state.shake, Math.cos(state.time * 71) * state.shake * 0.6);
 		const p = state.player; const grid = 200;
@@ -87,12 +94,13 @@ export const createRenderer = function () {
 			const r = (8 + i % 4 * 8) * camera.scale;
 			polygon(ctx, [{ x: at.x - r, y: at.y }, { x: at.x, y: at.y - r * 0.4 }, { x: at.x + r * 0.7, y: at.y + r * 0.3 }, { x: at.x, y: at.y + r * 0.6 }], CEL.planet, CEL.ink);
 		}
+		if (state.passage) drawPassageGeography(ctx, camera, state, state.passage);
 		if (!state.arsenal) { drawFiringSolution(ctx, camera, state, 'port'); drawFiringSolution(ctx, camera, state, 'starboard'); }
 		const torpedoTarget = state.arsenal ? undefined : torpedoTargetFor(state);
 		if (torpedoTarget && state.torpedoes.reload === 0 && !p.braced) {
 			const at = worldToScreen(torpedoTarget, camera);
 			ring(ctx, at, torpedoTarget.length * camera.scale * 0.82, `${CEL.amber}99`);
-			label(ctx, 'T / TORPEDO LOCK', { x: at.x, y: at.y + torpedoTarget.length * camera.scale * 0.55 + 14 }, CEL.amber, 9);
+			label(ctx, 'T / TORPEDO LOCK', { x: at.x, y: at.y + torpedoTarget.length * camera.scale * 0.55 + 14 }, CEL.amber, 9, occupied);
 		}
 		// Course prediction deliberately preserves current velocity instead of snapping to the bow.
 		for (let i = 1; i < 10; i++) {
@@ -113,14 +121,13 @@ export const createRenderer = function () {
 		const ships: Ship[] = [...state.enemies, p];
 		ships.sort(function (a, b) { return a.x + a.y - b.x - b.y; });
 		for (const ship of ships) drawStarship(ctx, camera, ship, state, reducedMotion, driveLength(ship, state, reducedMotion));
-		const hud = hudObstacles(ctx.canvas);
 		const origin = worldToScreen(p, camera, 20);
-		drawSalvageMarkers(ctx, camera, state, hud, function (value, at) { label(ctx, value, at, CEL.amber); });
+		drawSalvageMarkers(ctx, camera, state, hud, function (value, at) { label(ctx, value, at, CEL.amber, 10, occupied); });
 		for (const ship of ships) {
 			const hull = worldToScreen(ship, camera, 20);
 			const at = { x: hull.x, y: hull.y - Math.max(34, ship.length * camera.scale * 0.54) - 12 };
 			if (ship.id === 0) {
-				label(ctx, state.shield.active > 0 ? 'AEGIS FIELD ACTIVE' : p.braced ? 'ARMOR LOCK / −65%' : 'DREADWAKE', at, p.braced ? CEL.amber : CEL.mint, 9);
+				label(ctx, state.shield.active > 0 ? 'AEGIS FIELD ACTIVE' : p.braced ? 'ARMOR LOCK / −65%' : 'DREADWAKE', at, p.braced ? CEL.amber : CEL.mint, 9, occupied);
 			} else {
 				const bearing = projectBearing(origin, hull, width, height, hud);
 				if (!bearing) continue;
@@ -130,14 +137,14 @@ export const createRenderer = function () {
 					polygon(ctx, [0, 2.5, -2.5].map(function (offset) {
 						return { x: edge.x + Math.cos(angle + offset) * 8, y: edge.y + Math.sin(angle + offset) * 8 };
 					}), CEL.hostile);
-					label(ctx, `${Math.round(distance(p, ship))} M`, { x: edge.x, y: edge.y + 20 }, CEL.muted, 8);
+					label(ctx, `${Math.round(distance(p, ship))} M`, { x: edge.x, y: edge.y + 20 }, CEL.muted, 8, occupied);
 					continue;
 				}
 				const priority = state.arsenal ? state.arsenal.mounts.some(function (mount) { return mount?.target === ship.id; }) : ship.id === state.priorityTarget;
 				const contact = state.enemies.find(function (enemy) { return enemy.id === ship.id; });
 				const designation = contact?.command ? 'COMMAND CRUISER' : ship.length > 150 ? 'CRUISER' : 'FRIGATE';
-				label(ctx, `${priority ? '◆ ' : ''}${designation} ${String(ship.id).padStart(2, '0')}`, at, contact?.command || priority ? CEL.amber : CEL.hostile, 11);
-				if (contact?.tactic) label(ctx, contact.tactic.toUpperCase(), { x: at.x, y: at.y - 17 }, CEL.muted, 10);
+				label(ctx, `${priority ? '◆ ' : ''}${designation} ${String(ship.id).padStart(2, '0')}`, at, contact?.command || priority ? CEL.amber : CEL.hostile, 11, occupied);
+				if (contact?.tactic) label(ctx, contact.tactic.toUpperCase(), { x: at.x, y: at.y - 17 }, CEL.muted, 10, occupied);
 				line(ctx, { x: at.x - 23, y: at.y + 9 }, { x: at.x + 23, y: at.y + 9 }, '#473547', 2);
 				line(ctx, { x: at.x - 23, y: at.y + 9 }, { x: at.x - 23 + ship.hp / ship.maxHp * 46, y: at.y + 9 }, CEL.hostile, 2);
 				if (priority) {
@@ -149,13 +156,15 @@ export const createRenderer = function () {
 				}
 			}
 		}
-		if (heading !== undefined) drawHeading(ctx, camera, p, heading, hud);
+		if (heading !== undefined) drawHeading(ctx, camera, p, heading, hud, occupied);
 		drawCombatEffects(ctx, camera, state, reducedMotion);
 		for (const enemy of state.enemies) if (enemy.warning > 0) {
 			const aim = worldToScreen(enemy.aim, camera);
-			label(ctx, enemy.weapon === 'beam' ? 'LANCE CHARGING' : enemy.weapon === 'missile' ? 'MISSILE SALVO' : 'INCOMING', { x: aim.x, y: aim.y + Math.max(40, p.length * camera.scale * 0.5) }, enemy.weapon === 'beam' ? CEL.violet : CEL.hostile, 11);
+			label(ctx, enemy.weapon === 'beam' ? 'LANCE CHARGING' : enemy.weapon === 'missile' ? 'MISSILE SALVO' : 'INCOMING', { x: aim.x, y: aim.y + Math.max(40, p.length * camera.scale * 0.5) }, enemy.weapon === 'beam' ? CEL.violet : CEL.hostile, 11, occupied);
 		}
+		if (state.passage && occupied) drawPassageBearings(ctx, camera, state, state.passage, radar ? [...occupied, radar] : occupied);
 		ctx.restore();
-		if (height > 520) drawRadar(ctx, width, state);
+		if (radar) drawRadar(ctx, width, state, occupied);
+		if (state.passage && chart) drawPassageChart(ctx, chart, state, state.passage);
 	};
 };

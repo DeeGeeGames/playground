@@ -1,4 +1,5 @@
 import { MISSION_PACING, createMissionClock, type MissionClock } from './pacing';
+import type { PassageView } from './passage-layout';
 import { hullMuzzle } from './effect-motion';
 import { createArsenal, dropSalvage, prepareDraft, queueSalvageDrafts, recoverSalvage, type Arsenal, type SalvageCache } from './arsenal';
 import { resetTurrets, updateTurretProjectiles, updateTurrets } from './turret-combat';
@@ -12,6 +13,7 @@ export interface Ship extends Point {
 	length: number; width: number;
 }
 export interface Enemy extends Ship {
+	holdingStation?: boolean;
 	kind: 'frigate' | 'cruiser'; tactic?: 'flanker' | 'brawler' | 'standoff'; command?: boolean; cooldown: number; warning: number; aim: Point; orbit: number;
 	training?: boolean; weapon?: 'rail' | 'beam' | 'missile'; beamRemaining?: number; beamHeading?: number;
 	slowRemaining?: number; slowFactor?: number;
@@ -42,6 +44,7 @@ export const REFIT_CHOICES: readonly { id: RefitChoice; name: string; descriptio
 ];
 export interface Campaign { clock?: MissionClock; phase: 'combat' | 'refit'; completedMissions: number; upgrades: { rails: number; capacitor: number } }
 export interface State {
+	passage?: PassageView;
 	campaign?: Campaign;
 	arsenal?: Arsenal;
 	player: Ship & { throttle: number; yaw: number; braced: boolean };
@@ -152,8 +155,8 @@ const spawnWave = function (state: State, reinforcement?: number) {
 	}
 	state.events.push('wave');
 };
-export const createState = function (): State {
-	const state: State = {
+export const createEmptyState = function (): State {
+	return {
 		player: { id: 0, x: 0, y: 0, angle: -Math.PI / 2, vx: 0, vy: 0, hp: MAX_HULL, maxHp: MAX_HULL,
 			length: 220, width: 90, throttle: 0, yaw: 0, braced: false },
 		batteries: { port: { reload: 0, remaining: 0, next: 0, target: undefined }, starboard: { reload: 0, remaining: 0, next: 0, target: undefined } },
@@ -165,6 +168,9 @@ export const createState = function (): State {
 		beam: { charge: BEAM_DURATION, cooldown: 0, firing: false, target: undefined }, beams: [],
 		fireControl: { automatic: false, held: false }, pointDefense: { reload: 0, traces: [] },
 	};
+};
+export const createState = function (): State {
+	const state = createEmptyState();
 	spawnWave(state); state.events = [];
 	return state;
 };
@@ -353,7 +359,7 @@ const updateEnemy = function (state: State, enemy: Enemy, dt: number) {
 		: bearing + enemy.orbit * (range > 680 ? 0.3 : range < 330 ? 2.2 : 1.4);
 	const turnRate = (enemy.tactic === 'flanker' ? 0.65 : 0.42) * movementFactor;
 	enemy.angle += clamp(angleDelta(enemy.angle, desired), -dt * turnRate, dt * turnRate);
-	const speed = (enemy.tactic === 'flanker' ? 66 : enemy.tactic === 'brawler' ? 44 : enemy.kind === 'cruiser' ? 30 : 48) * movementFactor;
+	const speed = enemy.holdingStation ? 0 : (enemy.tactic === 'flanker' ? 66 : enemy.tactic === 'brawler' ? 44 : enemy.kind === 'cruiser' ? 30 : 48) * movementFactor;
 	enemy.vx = Math.cos(enemy.angle) * speed; enemy.vy = Math.sin(enemy.angle) * speed;
 	enemy.x += enemy.vx * dt; enemy.y += enemy.vy * dt;
 	if ((enemy.beamRemaining ?? 0) > 0) {
@@ -495,6 +501,9 @@ export const step = function (state: State, input: Controls, elapsed: number) {
 	p.hp = Math.max(0, p.hp);
 	if (p.hp <= 0) {
 		state.outcome = 'lost'; effect(state, p, 'explosion'); state.events.push('explosion');
+	} else if (state.passage) {
+		// The tender decides the outcome after this tick's combat resolves.
+		return;
 	} else if (clock && pacing) {
 		if (clock.elapsed >= pacing.duration) {
 			// Extraction is atomic: no surviving volley can damage the refit screen.

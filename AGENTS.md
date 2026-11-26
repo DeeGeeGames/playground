@@ -10,6 +10,8 @@
   a shared singleton ECS world or force physics/rendering choices on all games.
 - Use the ECSpresso skill for ECS changes. Prefer published plugin APIs and
   preserve the ported Power Up behavior unless a task explicitly changes it.
+- Always use ECSpresso for Dreadwake gameplay development. Run its simulation
+  through its own ECSpresso world and add gameplay mechanics as typed systems.
 - Use strict TypeScript without `any`, non-null assertions, or unchecked casts.
   Prefer function expressions and tabs. Preserve unrelated edits.
 - Run `bun run check` for delivery and validate browser-visible behavior in a
