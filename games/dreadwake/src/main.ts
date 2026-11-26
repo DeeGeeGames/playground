@@ -1,6 +1,9 @@
 import { MISSION_PACING } from './pacing';
 import { mountGame } from '../../../shared/lifecycle';
-import { createArsenalCampaign, CAMPAIGN_MISSIONS, REFIT_CHOICES, chooseRefit, SHIELD_COOLDOWN, step, type Controls, type State } from './simulation';
+import { createArsenalCampaign, CAMPAIGN_MISSIONS, REFIT_CHOICES, chooseRefit, distance, SHIELD_COOLDOWN, type Controls, type State } from './simulation';
+import { createBridgeWorld } from './bridge-world';
+import { createPassage } from './passage';
+import { DOCKING_SPEED, PASSAGE, RELAY_RANGE, TENDER_SPEED, YARD_RANGE, tenderOrders } from './passage-layout';
 import { WEAPONS, WEAPON_IDS, MOUNT_SOCKETS, type WeaponId, type WeaponRank } from './weapons';
 import { installStarter, draftCost, prepareDraft, applyDraft, rerollDraft, resolveDraft, weaponSummary, MAX_DRAFTS, SALVAGE_RECOVERY_RANGE, type DraftOffer } from './arsenal';
 import { createRenderer } from './render';
@@ -105,6 +108,8 @@ const shutdown = await mountGame('game', async function (container) {
 
 	let heading: number | undefined;
 	let state = createArsenalCampaign(); let running = false; let paused = false; let muted = false;
+	const bridge = await createBridgeWorld(state);
+	let passageBriefing = false;
 	let fitting: 'starter' | 'draft' | undefined;
 	let fittingStep: 'recommended' | 'weapons' | 'review' = 'recommended';
 	let starterState: State | undefined;
@@ -120,7 +125,7 @@ const shutdown = await mountGame('game', async function (container) {
 		const notice = element('save-notice'); notice.hidden = !failed; notice.textContent = failed ? message : '';
 	};
 	const saveCheckpoint = function () {
-		if (training) return;
+		if (training || state.passage) return;
 		const snapshot = captureCampaign(state);
 		if (snapshot) savedCampaign = restoreCampaign(snapshot);
 		if (writeCampaign(state)) {
@@ -188,7 +193,14 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const syncPanels = function () {
 		container.dataset['mode'] = running ? 'playing' : 'briefing';
-		ui.brief.hidden = running || confirmingRestart || settingsOpen || !!fitting; ui.pausePanel.hidden = !paused || confirmingRestart || settingsOpen || !!fitting; ui.result.hidden = !running || state.outcome === 'playing' || confirmingRestart || settingsOpen || !!fitting;
+		container.toggleAttribute('data-passage', !!state.passage);
+		element('resource-heading').textContent = state.passage ? 'RECEIVING YARD' : 'SALVAGE RECOVERED';
+		container.querySelector('.salvage')?.setAttribute('aria-label', state.passage ? 'Receiving yard status' : 'Salvage progress');
+		container.querySelector('.mission')?.setAttribute('aria-label', state.passage ? 'Repair tender order' : 'Transit status');
+		element('passage-orders').hidden = !passageBriefing;
+		element('reset').hidden = !!state.passage;
+		element('restart').textContent = state.passage ? 'Return to title' : 'START A NEW CAMPAIGN';
+		ui.brief.hidden = running || passageBriefing || confirmingRestart || settingsOpen || !!fitting; ui.pausePanel.hidden = !paused || confirmingRestart || settingsOpen || !!fitting; ui.result.hidden = !running || state.outcome === 'playing' || confirmingRestart || settingsOpen || !!fitting;
 		element('settings-panel').hidden = !settingsOpen;
 		element('training-guide').hidden = !training || !playable();
 		element('confirm-reset').hidden = !confirmingRestart || settingsOpen || !!fitting;
@@ -201,7 +213,7 @@ const shutdown = await mountGame('game', async function (container) {
 		for (const button of buttons) button.disabled = !playable();
 		for (const lever of levers) lever.disabled = !playable();
 		throttleNeutral.disabled = !playable();
-		for (const id of ['start', 'continue', 'training', 'restart', 'retry', 'confirm-start', 'resume']) { const button = element(id); if (button instanceof HTMLButtonElement) button.disabled = graphicsLost; }
+		for (const id of ['start', 'continue', 'training', 'restart', 'retry', 'confirm-start', 'resume', 'passage-orders-open', 'passage-launch']) { const button = element(id); if (button instanceof HTMLButtonElement) button.disabled = graphicsLost; }
 		const deploy = element('deploy'); if (deploy instanceof HTMLButtonElement) deploy.disabled = graphicsLost || !refitChoice;
 		if (fitting) updateFittingSelection();
 		const inspect = element('inspect-battery'); if (inspect instanceof HTMLButtonElement) inspect.disabled = !playable();
@@ -383,7 +395,7 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	const deployStarter = function (weapon: WeaponId, socket: number) {
 		if (graphicsLost || fitting !== 'starter' || !starterState || !installStarter(starterState, weapon, socket)) return;
-		state = starterState; starterState = undefined; fitting = undefined; clearFitSelection();
+		state = bridge.enter(starterState); starterState = undefined; fitting = undefined; clearFitSelection();
 		training = undefined; trainingCompleted = false; running = true; paused = false; accumulator = 0; zoom = 1;
 		clearInput(); saveCheckpoint(); syncPanels(); canvas.focus({ preventScroll: true }); unlock();
 	};
@@ -408,12 +420,17 @@ const shutdown = await mountGame('game', async function (container) {
 		const installed = arsenal.mounts.filter(function (mount) { return mount !== null; });
 		element('battery-count').textContent = `${installed.length} / ${MOUNT_SOCKETS.length}`;
 
-		const capped = arsenal.rewards >= MAX_DRAFTS;
-		const cost = draftCost(arsenal.rewards);
-		element('salvage-value').textContent = training ? 'PRACTICE' : capped ? 'COMPLETE' : `${Math.floor(arsenal.salvage)}/${cost}`;
-		element('salvage-fill').style.width = training ? '0%' : `${capped ? 100 : Math.min(100, arsenal.salvage / cost * 100)}%`;
-		element('salvage-hint').textContent = training ? 'No campaign changes' : capped ? 'All choices earned'
-			: state.salvageCaches.length > 0 ? 'Steer toward gold markers' : 'Recover salvage from wrecks';
+		if (state.passage) {
+			element('salvage-value').textContent = state.passage.yardOpen ? 'OPEN' : 'CLOSED';
+			element('salvage-hint').textContent = state.passage.yardOpen ? `${Math.round(distance(state.player, PASSAGE.yard))} m to dock` : 'Awaiting repair tender';
+		} else {
+			const capped = arsenal.rewards >= MAX_DRAFTS;
+			const cost = draftCost(arsenal.rewards);
+			element('salvage-value').textContent = training ? 'PRACTICE' : capped ? 'COMPLETE' : `${Math.floor(arsenal.salvage)}/${cost}`;
+			element('salvage-fill').style.width = training ? '0%' : `${capped ? 100 : Math.min(100, arsenal.salvage / cost * 100)}%`;
+			element('salvage-hint').textContent = training ? 'No campaign changes' : capped ? 'All choices earned'
+				: state.salvageCaches.length > 0 ? 'Steer toward gold markers' : 'Recover salvage from wrecks';
+		}
 
 		const engaging = installed.filter(function (mount) {
 			return mount.status === 'FIRING' || mount.status === 'LOCKED' || mount.status === 'CHARGING'
@@ -522,6 +539,7 @@ const shutdown = await mountGame('game', async function (container) {
 	}, options);
 	const cancelRestart = function () { confirmingRestart = false; syncPanels(); restartSource.focus({ preventScroll: true }); };
 	for (const id of ['start', 'restart', 'reset']) element(id).addEventListener('click', function () {
+		if (id === 'restart' && state.passage) { returnToTitle(); return; }
 		restartSource = element(id);
 		if (!savedCampaign && !(running && state.outcome === 'playing')) { start(); return; }
 		restartSource = element(id); confirmingRestart = true; clearInput(); syncPanels(); element('cancel-reset').focus({ preventScroll: true });
@@ -532,7 +550,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (!savedCampaign) return;
 		const snapshot = captureCampaign(savedCampaign); const restored = snapshot ? restoreCampaign(snapshot) : undefined;
 		if (!restored) return;
-		state = restored; training = undefined; running = true; paused = false; accumulator = 0; zoom = 1; clearInput();
+		state = bridge.enter(restored); training = undefined; running = true; paused = false; accumulator = 0; zoom = 1; clearInput();
 		if (state.campaign?.phase === 'refit') showRefit();
 		else { syncPanels(); canvas.focus({ preventScroll: true }); unlock(); }
 		setSaveStatus(state.campaign?.phase === 'refit' ? 'Resumed the saved refit. Choose your next upgrade or repair.' : 'Resumed the mission-start checkpoint. Your next checkpoint is after this engagement.');
@@ -617,23 +635,37 @@ const shutdown = await mountGame('game', async function (container) {
 		next?.focus({ preventScroll: true }); next?.scrollIntoView({ block: 'nearest', behavior: 'instant' }); audio.cue('focus');
 	};
 	const returnToTitle = function () {
+		const fromPassage = passageBriefing || !!state.passage;
+		passageBriefing = false;
 		training = undefined; trainingCompleted = false; running = false; paused = false; settingsOpen = false; fitting = undefined; starterState = undefined; clearInput();
-		state = createArsenalCampaign();
+		state = bridge.enter(createArsenalCampaign());
 		element('continue-campaign').hidden = !savedCampaign;
 		if (savedCampaign) element('continue-summary').textContent = `${CAMPAIGN_MISSIONS[savedCampaign.wave - 1]?.name ?? 'Lyra Passage'} · ${savedCampaign.campaign?.phase === 'refit' ? 'field refit' : 'mission checkpoint'} · ${Math.ceil(savedCampaign.player.hp / savedCampaign.player.maxHp * 100)}% hull`;
-		syncPanels(); element(savedCampaign ? 'continue' : 'start').focus();
+		syncPanels(); element(fromPassage ? 'passage-orders-open' : savedCampaign ? 'continue' : 'start').focus();
 	};
+	const launchPassage = function () {
+		if (graphicsLost) return;
+		state = bridge.enter(createPassage()); passageBriefing = false; training = undefined; trainingCompleted = false;
+		running = true; paused = false; accumulator = 0; zoom = 0.75;
+		clearInput(); syncPanels(); canvas.focus({ preventScroll: true }); unlock();
+	};
+	element('passage-orders-open').addEventListener('click', function () {
+		passageBriefing = true; syncPanels(); element('passage-launch').focus({ preventScroll: true });
+	}, options);
+	element('passage-back').addEventListener('click', returnToTitle, options);
+	element('passage-launch').addEventListener('click', launchPassage, options);
 	const titleButton = document.createElement('button'); titleButton.className = 'secondary'; titleButton.textContent = 'Return to title'; titleButton.id = 'return-title';
 	element('reset').after(titleButton); titleButton.addEventListener('click', returnToTitle, options);
 	element('training').addEventListener('click', function () {
-		const flight = createTraining(); state = flight.state; training = flight.training; trainingCompleted = false;
+		const flight = createTraining(); state = bridge.enter(flight.state); training = flight.training; trainingCompleted = false;
 		running = true; paused = false; zoom = 1; accumulator = 0; clearInput(); syncPanels(); canvas.focus(); unlock();
 	}, options);
 	element('training-skip').addEventListener('click', returnToTitle, options);
 	const retry = function () {
+		if (state.passage) { launchPassage(); return; }
 		if (!savedCampaign) return;
 		const snapshot = captureCampaign(savedCampaign); const restored = snapshot ? restoreCampaign(snapshot) : undefined; if (!restored) return;
-		state = restored; training = undefined; trainingCompleted = false; running = true; paused = false; clearInput(); accumulator = 0;
+		state = bridge.enter(restored); training = undefined; trainingCompleted = false; running = true; paused = false; clearInput(); accumulator = 0;
 		if (state.campaign?.phase === 'refit') showRefit(); else { syncPanels(); canvas.focus(); }
 		unlock();
 	};
@@ -653,6 +685,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (modal) {
 			if (padFrame.direction) moveMenu(padFrame.direction);
 			if (padFrame.cancel || padFrame.pause) {
+				if (passageBriefing) { returnToTitle(); return; }
 				if (settingsOpen) closeSettings(); else if (fitting) backFitting(); else if (confirmingRestart) cancelRestart(); else if (paused) pause(false); else if (state.outcome !== 'playing') returnToTitle();
 				return;
 			}
@@ -703,7 +736,7 @@ const shutdown = await mountGame('game', async function (container) {
 			event.preventDefault(); event.target.click(); return;
 		}
 		if (modalNow() && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) { event.preventDefault(); moveMenu(event.code === 'ArrowUp' ? 'up' : event.code === 'ArrowDown' ? 'down' : event.code === 'ArrowLeft' ? 'left' : 'right'); return; }
-		if (event.code === 'Escape') { if (settingsOpen) { event.preventDefault(); closeSettings(); return; } event.preventDefault(); if (!event.repeat) { if (fitting) backFitting(); else if (confirmingRestart) cancelRestart(); else if (running && state.outcome !== 'playing') returnToTitle(); else pause(!paused); } return; }
+		if (event.code === 'Escape') { if (settingsOpen) { event.preventDefault(); closeSettings(); return; } event.preventDefault(); if (!event.repeat) { if (passageBriefing) returnToTitle(); else if (fitting) backFitting(); else if (confirmingRestart) cancelRestart(); else if (running && state.outcome !== 'playing') returnToTitle(); else pause(!paused); } return; }
 		if (playable() && rangeKeys.has(event.code)) {
 			if (event.target === throttleLever) {
 				releaseLever(throttleLever);
@@ -919,9 +952,19 @@ const shutdown = await mountGame('game', async function (container) {
 		const transitSeconds = Math.max(0, Math.ceil((MISSION_PACING[state.wave - 1]?.duration ?? 0) - (state.campaign?.clock?.elapsed ?? 0)));
 		const minutes = String(Math.floor(transitSeconds / 60)).padStart(2, '0');
 		const seconds = String(transitSeconds % 60).padStart(2, '0');
-		ui.phase.textContent = training ? 'FLIGHT SCHOOL' : `${String(state.wave).padStart(2, '0')} / ${String(CAMPAIGN_MISSIONS.length).padStart(2, '0')} · ${mission?.name.toUpperCase() ?? ''}`;
-		ui.objective.textContent = training ? 'DRILL' : transitSeconds > 0 ? `${minutes}:${seconds}` : 'OPEN';
-		element('transit-order').textContent = training ? 'Live practice' : transitSeconds > 0 ? 'Survive to transit' : 'Transit window';
+		const passage = state.passage;
+		if (passage) {
+			ui.phase.textContent = 'REPAIR TENDER';
+			if (passage.route === 'inbound') ui.objective.textContent = `${Math.ceil(distance(passage.tender, PASSAGE.fork) / TENDER_SPEED)} s`;
+			else if (passage.yardOpen) ui.objective.textContent = 'DOCKED';
+			else if (passage.route === 'returning' || passage.route === 'returned') ui.objective.textContent = 'ABORT';
+			else ui.objective.textContent = 'EN ROUTE';
+			element('transit-order').textContent = tenderOrders[passage.route];
+		} else {
+			ui.phase.textContent = training ? 'FLIGHT SCHOOL' : `${String(state.wave).padStart(2, '0')} / ${String(CAMPAIGN_MISSIONS.length).padStart(2, '0')} · ${mission?.name.toUpperCase() ?? ''}`;
+			ui.objective.textContent = training ? 'DRILL' : transitSeconds > 0 ? `${minutes}:${seconds}` : 'OPEN';
+			element('transit-order').textContent = training ? 'Live practice' : transitSeconds > 0 ? 'Survive to transit' : 'Transit window';
+		}
 		const hullFraction = Math.max(0, p.hp / p.maxHp);
 		ui.hull.textContent = String(Math.ceil(hullFraction * 100));
 		ui.hullFill.style.width = `${hullFraction * 100}%`;
@@ -936,7 +979,7 @@ const shutdown = await mountGame('game', async function (container) {
 		if (rudderLever.valueAsNumber !== rudderPercent) rudderLever.valueAsNumber = rudderPercent;
 		if (ui.throttle.textContent !== throttleText) ui.throttle.textContent = throttleText;
 		if (ui.rudder.textContent !== rudderText) ui.rudder.textContent = rudderText;
-		ui.speed.textContent = `${Math.round(p.vx * Math.cos(p.angle) + p.vy * Math.sin(p.angle))} M/S`;
+		ui.speed.textContent = passage?.yardOpen ? `DRIFT ${Math.ceil(speed)} M/S` : `${Math.round(p.vx * Math.cos(p.angle) + p.vy * Math.sin(p.angle))} M/S`;
 		ui.motion.textContent = Math.abs(p.yaw) >= 0.015 ? `TURN ${p.yaw < 0 ? 'PORT' : 'STBD'} ${Math.abs(p.yaw * 180 / Math.PI).toFixed(0)}°/S`
 			: speed < 1 ? 'DRIVE IDLE' : Math.abs(p.throttle) < 0.001 ? 'COASTING' : 'UNDER THRUST';
 
@@ -949,9 +992,31 @@ const shutdown = await mountGame('game', async function (container) {
 		const alert = !playable() ? '' : state.intermission > 0
 			? state.wave === CAMPAIGN_MISSIONS.length ? 'Final contact clear · passage secured' : `Contact clear · refit in ${Math.max(0, Math.ceil(6 - state.intermission))} s`
 			: volley ? `Incoming volley · ${shieldActive ? 'Aegis active' : p.braced ? 'armor locked' : 'turn, lock armor or use Aegis'}` : '';
-		if (ui.message.textContent !== alert) ui.message.textContent = alert;
+		let message = alert;
+		if (passage && playable() && !volley) {
+			if (passage.yardOpen) message = distance(p, PASSAGE.yard) <= YARD_RANGE
+				? `In berth · reduce drift to ${DOCKING_SPEED} m/s for repairs`
+				: `Yard open · come within ${YARD_RANGE} m at ${DOCKING_SPEED} m/s or less for repairs`;
+			else if (passage.route === 'returning') message = 'Tender turning home · clear the picket or link the relay to recall it';
+			else if (passage.route === 'outer') message = 'Detour accepted · rendezvous at the receiving yard';
+			else if (passage.route === 'direct' || state.enemies.length === 0) message = 'Picket clear · rendezvous at the receiving yard';
+			else if (passage.relayOnline) message = 'Relay online · detour transmitted';
+			else message = `Close within ${RELAY_RANGE} m of the relay or break the picket`;
+		}
+		if (ui.message.textContent !== message) ui.message.textContent = message;
 	};
 	const showResult = function () {
+		if (state.passage) {
+			const repaired = state.outcome === 'won';
+			element('result-title').textContent = repaired ? 'YARD BACK ONLINE.' : state.player.hp <= 0 ? 'CRUISER LOST.' : 'TENDER TURNED BACK.';
+			element('result-copy').textContent = repaired ? 'The tender delivered its parts. The receiving yard serviced your cruiser and restored its hull.'
+				: state.player.hp <= 0 ? 'Your cruiser was lost during the crossing.' : 'Both routes were closed at the fork. The tender returned to its departure berth with the repair parts.';
+			element('result-stats').textContent = `${state.passage.relayOnline ? 'Relay linked' : 'Relay offline'} · ${state.enemies.length ? 'Picket on station' : 'Picket destroyed'} · ${state.passage.yardOpen ? 'Yard operating' : 'Yard closed'}`;
+			element('retry').textContent = 'Replay crossing'; element('retry').hidden = false;
+			clearInput(); syncPanels(); audio.update(0, false, []); element('retry').focus();
+			return;
+		}
+		element('retry').textContent = 'RETRY MISSION ↗';
 		if (state.outcome === 'won') { savedCampaign = undefined; if (clearCampaign()) setSaveStatus('Campaign complete. Start a new run when ready.'); else setSaveStatus('Campaign complete. Browser could not clear the old checkpoint.', true); }
 		else setSaveStatus('Your mission checkpoint is preserved. Retry with a different approach.');
 		element('retry').hidden = state.outcome !== 'lost' || !savedCampaign;
@@ -976,7 +1041,7 @@ const shutdown = await mountGame('game', async function (container) {
 				const input: Controls = { drive, turn,
 					...(heading === undefined ? {} : { heading }), neutral: active('neutral'), port: false, starboard: false, brace: active('brace'),
 					pulse: pending.has('pulse'), torpedo: false, autoFire: pending.has('autoFire'), beam: false, missile: false };
-				step(state, input, 1 / 60); pending.clear(); accumulator -= 1 / 60;
+				bridge.tick(input); pending.clear(); accumulator -= 1 / 60;
 				audio.update(Math.hypot(state.player.vx, state.player.vy), true, state.events); audio.setBeam(false);
 				if (preferences.vibration && pad && now - lastHaptic > 180 && state.events.some(function (event) { return event === 'damage' || event === 'cannon' || event === 'explosion'; })) {
 					lastHaptic = now; const strong = state.events.includes('damage') ? 0.55 : 0.2;
@@ -1001,6 +1066,6 @@ const shutdown = await mountGame('game', async function (container) {
 	};
 	syncPanels(); element(savedCampaign ? 'continue' : 'start').focus({ preventScroll: true }); frame = requestAnimationFrame(tick);
 	const controllerTimer = window.setInterval(function () { updateController(performance.now(), 1 / 60); }, 1000 / 60);
-	return async function () { clearInterval(controllerTimer); cancelAnimationFrame(frame); clearInput(); abort.abort(); draw.dispose(); await audio.dispose(); };
+	return async function () { clearInterval(controllerTimer); cancelAnimationFrame(frame); clearInput(); abort.abort(); draw.dispose(); await Promise.all([bridge.dispose(), audio.dispose()]); };
 });
 if (import.meta.hot) import.meta.hot.dispose(shutdown);

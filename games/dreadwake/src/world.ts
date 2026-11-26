@@ -4,6 +4,7 @@ import { createShipModels, type HullKind } from './ship-model';
 import { hudObstacles, clearLabelPosition, drawSalvageMarkers, projectBearing, type LabelObstacle } from './tactical-labels';
 import { CEL } from './visual-theme';
 import { createCombatEffectsRenderer } from './combat-effects';
+import { drawPassageBearings, drawPassageChart, drawPassageGeography, passageChartBounds } from './passage-render';
 import { cameraFor, worldToScreen, type Camera } from './projection';
 import { ARC, distance, sideAngle, targetFor, torpedoTargetFor, type Point, type Ship, type State, type Wreck } from './simulation';
 import { createBackdrop } from './backdrop';
@@ -63,7 +64,7 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 		}
 		scene.add(group); return { group, exhaust, scars, sockets };
 	};
-	const ships = new Map<number, ShipVisual>();
+	const ships = new Map<Ship, ShipVisual>();
 	const wrecks = new Map<Wreck, ShipVisual>();
 	const shieldMaterial = ownMaterial(new THREE.MeshBasicMaterial({ color: CEL.mint, transparent: true, opacity: 0.05, depthWrite: false }));
 	const shield = new THREE.Mesh(ownGeometry(new THREE.SphereGeometry(1, 40, 24)), shieldMaterial); shield.scale.set(155, 65, 94); scene.add(shield);
@@ -130,6 +131,9 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 	};
 	const drawTactical = function (view: Camera, state: State, width: number, height: number, heading: number | undefined) {
 		const hud = hudObstacles(canvas);
+		const radar = width > 1050 && height > 800 ? { left: width - 160, right: width - 24, top: 297, bottom: 454 } : undefined;
+		const chart = state.passage ? passageChartBounds(view, hud, radar) : undefined;
+		if (chart) hud.push(chart);
 		occupied = [...hud];
 		const p = state.player; const compact = width < 700; const font = compact ? 10 : 12;
 		const center = worldToScreen(p, view, 20);
@@ -212,7 +216,7 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 		}
 
 		if (p.braced || state.shield.active > 0) text(state.shield.active > 0 ? 'AEGIS ACTIVE' : 'ARMOR LOCK', center.x, center.y + (p.length * 0.4 + 34) * view.scale, state.shield.active > 0 ? CYAN : GOLD, font);
-		if (width > 1050 && height > 800) {
+		if (radar) {
 			const x = width - 92; const y = 365; const radius = 53;
 			ink.fillStyle = '#07121c9c'; ink.beginPath(); ink.arc(x, y, radius + 9, 0, Math.PI * 2); ink.fill();
 			for (const r of [26, 53]) { ink.beginPath(); ink.arc(x, y, r, 0, Math.PI * 2); ink.strokeStyle = '#7897a43b'; ink.lineWidth = 1; ink.stroke(); }
@@ -223,6 +227,10 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 				ink.fillStyle = enemy.id === state.priorityTarget ? GOLD : CORAL; ink.fillRect(x + dx * factor - 2, y + dy * factor - 2, 4, 4);
 			}
 			text('TACTICAL · 950 m', x, y + 76, '#8ea5b3', 10);
+		}
+		if (state.passage) {
+			drawPassageBearings(ink, view, state, state.passage, radar ? [...occupied, radar] : occupied);
+			if (chart) drawPassageChart(ink, chart, state, state.passage);
 		}
 	};
 
@@ -269,17 +277,17 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 			const shake = reducedMotion || briefing ? 0 : state.shake * 0.45;
 			const px = state.player.x + Math.sin(state.time * 83) * shake; const py = state.player.y + Math.cos(state.time * 71) * shake;
 			camera.position.set(px + 2000, 2000, py + 2000); camera.lookAt(px, 0, py);
-			const live = new Set<number>();
+			const live = new Set<Ship>();
 			for (const ship of [state.player, ...state.enemies]) {
-				live.add(ship.id);
-				let visual = ships.get(ship.id);
+				live.add(ship);
+				let visual = ships.get(ship);
 				if (!visual) {
 					const enemy = state.enemies.find(function (item) { return item.id === ship.id; });
-					visual = instantiate(ship.id === 0 ? 'player' : enemy?.command ? 'command' : ship.length > 150 ? 'cruiser' : 'frigate'); ships.set(ship.id, visual);
+					visual = instantiate(ship.id === 0 ? 'player' : enemy?.command ? 'command' : ship.length > 150 ? 'cruiser' : 'frigate'); ships.set(ship, visual);
 				}
 				updateShip(visual, ship, state, reducedMotion); visual.group.visible = !briefing || ship.id === 0;
 			}
-			for (const [id, visual] of ships) if (!live.has(id)) { scene.remove(visual.group); ships.delete(id); }
+			for (const [ship, visual] of ships) if (!live.has(ship)) { scene.remove(visual.group); ships.delete(ship); }
 			for (const wreck of state.wrecks) {
 				let visual = wrecks.get(wreck);
 				if (!visual) { visual = instantiate(wreck.length > 150 ? 'cruiser' : 'frigate'); wrecks.set(wreck, visual); }
@@ -295,6 +303,7 @@ export const createWorldRenderer = function (canvas: HTMLCanvasElement) {
 			renderer.render(scene, camera);
 			if (briefing) return;
 			const effectsView = cameraFor(width, height, { x: px, y: py }, zoom);
+			if (state.passage) drawPassageGeography(ink, effectsView, state, state.passage, true);
 			drawCombatEffects(ink, effectsView, state, reducedMotion); drawTactical(effectsView, state, width, height, heading);
 		},
 		dispose: function () {

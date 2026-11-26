@@ -8,6 +8,21 @@ weapon, strengthen a fitted turret, or repair the hull.
 Open `games/dreadwake/` through the workspace launcher. The game is self-contained
 and browser-only, without desktop or Steam packaging.
 
+## Independent crossing
+
+Choose **Reopen the passage** on the title screen. One tender carries repair
+parts from the departure berth to a closed yard. Before it reaches the fork,
+bring the picket into your port rail's arc to clear the direct lane, or sail
+within 180 m of the relay to transmit the outer route. If the tender turns
+back, opening either route before it reaches home recalls it. Its arrival
+opens the yard. Come within 220 m at 30 m/s or less to service your cruiser.
+The crossing can be replayed independently of the campaign checkpoint.
+
+Dreadwake's ECSpresso world runs the helm and combat each simulation tick,
+then advances the tender and resolves arrivals against the current crossing.
+See the production-build captures of the [direct approach](../../docs/evidence/dreadwake-crossing/direct-lane.png)
+and the [reopened yard after a detour](../../docs/evidence/dreadwake-crossing/receiving-yard.png).
+
 ## Playing
 
 For a first run, deploy with a Seeker in port socket P1. Its guided missiles cover

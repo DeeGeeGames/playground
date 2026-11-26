@@ -28,7 +28,7 @@
 				<div class="shield-readout"><span>AEGIS</span><b id="shield-readout">READY</b></div>
 			</section>
 			<section class="salvage bridge-instrument" aria-label="Salvage progress">
-			<div class="instrument-heading">SALVAGE RECOVERED</div>
+			<div class="instrument-heading" id="resource-heading">SALVAGE RECOVERED</div>
 				<strong id="salvage-value">0 / 180</strong>
 				<div class="track"><i id="salvage-fill"></i></div>
 			<small id="salvage-hint">Recover salvage from wrecks</small>
@@ -94,12 +94,23 @@
 			<p class="campaign-subtitle">THE LYRA PASSAGE</p>
 			<p class="intro">A capital ship is a commitment.<br>Every turn. Every salvo. Every second.</p>
 			<div class="campaign-premise"><p>Begin with one turret and eleven empty mounts. Recover salvage from destroyed ships to fit more weapons. Survive each sector until transit opens.</p></div>
-			<div class="title-actions"><div class="continue-campaign" id="continue-campaign" hidden><button class="primary" id="continue">CONTINUE CAMPAIGN <span aria-hidden="true">↗</span></button><p id="continue-summary"></p></div><button class="primary" id="start">BEGIN CAMPAIGN <span aria-hidden="true">↗</span></button><div class="menu-pair"><button class="secondary" id="training">Flight school <small>Learn your ship</small></button><button class="secondary" id="settings-open">Settings <small>Sound &amp; accessibility</small></button></div></div>
+			<div class="title-actions"><div class="continue-campaign" id="continue-campaign" hidden><button class="primary" id="continue">CONTINUE CAMPAIGN <span aria-hidden="true">↗</span></button><p id="continue-summary"></p></div><button class="primary" id="start">BEGIN CAMPAIGN <span aria-hidden="true">↗</span></button>
+				<button class="secondary" id="passage-orders-open">Reopen the passage <small>Independent crossing</small></button>
+				<div class="menu-pair"><button class="secondary" id="training">Flight school <small>Learn your ship</small></button><button class="secondary" id="settings-open">Settings <small>Sound &amp; accessibility</small></button></div></div>
 			<p id="controller-status" class="controller-status">Keyboard · Controller · Touch</p><small class="brief-note" data-save-status role="status"></small>
 		</div>
 		<aside class="route-panel" aria-label="Campaign route"><span class="eyebrow">OPERATIONS CHART / 09</span><h2>ONE WAY<br>THROUGH.</h2><ol id="campaign-route" class="campaign-route"></ol><p><b id="mission-count">05</b> linked missions.<br>One ship. Persistent damage.</p></aside>
 		<span class="sector-label">LYRA GATE <span>38.14 / −07.62</span></span>
 	</section>
+	<section class="overlay" id="passage-orders" hidden role="dialog" aria-modal="true" aria-labelledby="passage-title"><div class="panel compact">
+		<span class="eyebrow">REPAIR TENDER / SAILING ORDERS</span><h2 id="passage-title">Reopen the passage.</h2>
+		<p>A tender is carrying parts to the receiving yard. It will reach the fork about 30 seconds after you launch. Give it a way through.</p>
+		<p><b>Direct lane.</b> Bring your port Longspike to bear and destroy the missile picket before the tender reaches the fork.</p>
+		<p><b>Outer passage.</b> Sail within 180 m of the relay to transmit a detour. The tender can then pass with the picket still afloat.</p>
+		<p>Set your throttle and steer freely. Once the tender docks, come alongside the yard for repairs.</p>
+		<button class="primary" id="passage-launch">Take the helm <span aria-hidden="true">↗</span></button>
+		<button class="secondary" id="passage-back">Return to title</button>
+	</div></section>
 	<section class="overlay" id="pause-panel" hidden role="dialog" aria-modal="true" aria-labelledby="pause-title"><div class="panel pause-panel">
 		<div class="pause-main"><span class="eyebrow">ORDERS HELD / SIMULATION PAUSED</span><h2 id="pause-title">STANDING BY.</h2><p id="pause-reason">Take your time. The passage can wait.</p><button class="primary" id="resume">RESUME COMMAND <span aria-hidden="true">↗</span></button><button class="secondary" id="pause-settings">Settings</button><button class="secondary subdued" id="reset">Restart campaign</button><p class="save-status" data-save-status role="status"></p></div>
 		<div class="command-reference"><h3>KNOW YOUR SHIP</h3><p class="reference-intro">Your turrets acquire and fire automatically. Bring the fitted flank toward contacts and hold the range your battery needs. Red tells announce incoming fire.</p><table class="controls-table"><caption>Combat controls</caption>
